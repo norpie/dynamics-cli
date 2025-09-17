@@ -69,6 +69,7 @@ pub enum FilterValue {
     Date(String),
     List(Vec<FilterValue>),
     Range(Box<FilterValue>, Box<FilterValue>),
+    RangeTraditional(Box<FilterValue>, Box<FilterValue>),
     Null,
 }
 

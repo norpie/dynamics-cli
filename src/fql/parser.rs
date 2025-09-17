@@ -1,6 +1,6 @@
 use anyhow::Result;
 use crate::fql::ast::*;
-use crate::fql::lexer::Token;
+use crate::fql::lexer::{Token, LocatedToken, ParseError};
 
 /// Parses a vector of tokens into an FQL AST
 ///
@@ -22,6 +22,70 @@ use crate::fql::lexer::Token;
 pub fn parse(tokens: Vec<Token>) -> Result<Query> {
     let mut parser = Parser::new(tokens);
     parser.parse_query()
+}
+
+/// Parses a vector of located tokens into an FQL AST with position-aware error messages
+///
+/// # Arguments
+/// * `tokens` - Vector of located tokens from lexer
+/// * `input` - Original input string for error formatting
+///
+/// # Returns
+/// * `Ok(Query)` - Parsed query AST on success
+/// * `Err(anyhow::Error)` - Parse error with position information
+pub fn parse_with_positions(tokens: Vec<LocatedToken>, input: &str) -> Result<Query> {
+    // Extract just the tokens for the regular parser
+    let plain_tokens: Vec<Token> = tokens.iter().map(|lt| lt.token.clone()).collect();
+
+    // Try parsing with the regular parser
+    match parse(plain_tokens) {
+        Ok(query) => Ok(query),
+        Err(_) => {
+            // If parsing failed, try to give better error messages
+            if tokens.is_empty() {
+                return Err(anyhow::anyhow!("Empty input"));
+            }
+
+            // Look for common issues and provide position-aware errors
+            let mut error_message = "Parse error".to_string();
+            let mut error_position = tokens[0].position.clone();
+
+            // Check for incomplete expressions (e.g., ".account | .name ==")
+            if let Some(last_token) = tokens.last() {
+                if matches!(last_token.token, Token::Equal | Token::NotEqual | Token::GreaterThan | Token::LessThan) {
+                    error_message = "Incomplete expression: expected value after operator".to_string();
+                    error_position = last_token.position.clone();
+                } else if matches!(last_token.token, Token::And | Token::Or) {
+                    error_message = "Incomplete expression: expected condition after logical operator".to_string();
+                    error_position = last_token.position.clone();
+                }
+            }
+
+            let parse_error = ParseError {
+                message: error_message,
+                position: error_position,
+                input: input.to_string(),
+            };
+
+            Err(anyhow::anyhow!("{}", parse_error))
+        }
+    }
+}
+
+/// Different types of query sections that can appear after pipes
+#[derive(Debug, Clone, PartialEq)]
+enum SectionType {
+    Attributes,
+    Filters,
+    Aggregations,
+    GroupBy,
+    Having,
+    OrderBy,
+    Joins,
+    Limit,
+    Page,
+    Distinct,
+    Options,
 }
 
 /// Parser state for tracking current position and context
@@ -69,60 +133,161 @@ impl Parser {
                 break;
             }
 
-            match self.peek() {
-                Some(Token::Dot) | Some(Token::Wildcard) => {
-                    // Attribute selection
+            // Determine section type by lookahead
+            let section_type = self.determine_section_type()?;
+
+            match section_type {
+                SectionType::Attributes => {
                     let attrs = self.parse_attributes()?;
                     query.attributes.extend(attrs);
                 },
-                Some(Token::Join) | Some(Token::LeftJoin) => {
-                    // Join clause
-                    let joins = self.parse_joins()?;
-                    query.joins.extend(joins);
+                SectionType::Filters => {
+                    let filter = self.parse_filter()?;
+                    query.filters.push(filter);
                 },
-                Some(Token::Order) => {
-                    // Order by clause
-                    query.order = self.parse_order_by()?;
-                },
-                Some(Token::Limit) => {
-                    // Limit clause
-                    query.limit = self.parse_limit()?;
-                },
-                Some(Token::Page) => {
-                    // Page clause
-                    query.page = self.parse_page()?;
-                },
-                Some(Token::Group) => {
-                    // Group by clause
-                    query.group_by = self.parse_group_by()?;
-                },
-                Some(Token::Having) => {
-                    // Having clause
-                    query.having = self.parse_having()?;
-                },
-                Some(Token::Distinct) => {
-                    // Distinct modifier
-                    self.advance();
-                    query.distinct = true;
-                },
-                Some(Token::Options) => {
-                    // Options clause
-                    query.options = self.parse_options()?;
-                },
-                Some(Token::Count) | Some(Token::Sum) | Some(Token::Avg) | Some(Token::Min) | Some(Token::Max) => {
-                    // Aggregation functions
+                SectionType::Aggregations => {
                     let aggs = self.parse_aggregations()?;
                     query.aggregations.extend(aggs);
                 },
-                _ => {
-                    // Filter expression
-                    let filter = self.parse_filter()?;
-                    query.filters.push(filter);
-                }
+                SectionType::GroupBy => {
+                    query.group_by = self.parse_group_by()?;
+                },
+                SectionType::Having => {
+                    query.having = self.parse_having()?;
+                },
+                SectionType::OrderBy => {
+                    query.order = self.parse_order_by()?;
+                },
+                SectionType::Joins => {
+                    let joins = self.parse_joins()?;
+                    query.joins.extend(joins);
+                },
+                SectionType::Limit => {
+                    query.limit = self.parse_limit()?;
+                },
+                SectionType::Page => {
+                    query.page = self.parse_page()?;
+                },
+                SectionType::Distinct => {
+                    self.advance();
+                    query.distinct = true;
+                },
+                SectionType::Options => {
+                    query.options = self.parse_options()?;
+                },
             }
         }
 
         Ok(query)
+    }
+
+    /// Determine what type of section follows based on lookahead
+    fn determine_section_type(&self) -> Result<SectionType> {
+        match self.peek() {
+            // Keywords that clearly identify section types
+            Some(Token::Group) => Ok(SectionType::GroupBy),
+            Some(Token::Having) => Ok(SectionType::Having),
+            Some(Token::Order) => Ok(SectionType::OrderBy),
+            Some(Token::Join) | Some(Token::LeftJoin) => Ok(SectionType::Joins),
+            Some(Token::Limit) => Ok(SectionType::Limit),
+            Some(Token::Page) => Ok(SectionType::Page),
+            Some(Token::Distinct) => Ok(SectionType::Distinct),
+            Some(Token::Options) => Ok(SectionType::Options),
+
+            // Aggregation functions
+            Some(Token::Count) | Some(Token::Sum) | Some(Token::Avg) | Some(Token::Min) | Some(Token::Max) => {
+                Ok(SectionType::Aggregations)
+            },
+
+            // Parentheses indicate grouped filter expressions
+            Some(Token::LeftParen) => Ok(SectionType::Filters),
+
+            // For dots and identifiers, we need to look ahead to disambiguate
+            Some(Token::Dot) => {
+                // Look ahead to see if this is a filter (.attr operator value) or attribute (.attr, .attr2)
+                self.lookahead_for_filter_or_attribute()
+            },
+
+            Some(Token::Wildcard) => {
+                // .* is always attributes
+                Ok(SectionType::Attributes)
+            },
+
+            Some(Token::Identifier(_)) => {
+                // Could be a filter condition like "attr > value" or aggregation alias reference
+                // Look ahead for operators to determine if it's a filter
+                if self.has_operator_ahead() {
+                    Ok(SectionType::Filters)
+                } else {
+                    // No operator found - could be entity-qualified attributes like "c.fullname, c.lastname"
+                    Ok(SectionType::Attributes)
+                }
+            },
+
+            _ => Err(anyhow::anyhow!("Unexpected token in query section: {:?}", self.peek())),
+        }
+    }
+
+    /// Look ahead to determine if a dot starts a filter or attribute
+    fn lookahead_for_filter_or_attribute(&self) -> Result<SectionType> {
+        let mut pos = self.current + 1; // Skip the dot
+
+        // Skip the attribute name
+        if pos < self.tokens.len() && matches!(self.tokens[pos], Token::Identifier(_)) {
+            pos += 1;
+        } else {
+            return Ok(SectionType::Attributes); // Invalid, but default to attributes
+        }
+
+        // Check what comes after the attribute name
+        if pos < self.tokens.len() {
+            match &self.tokens[pos] {
+                // These indicate a filter condition
+                Token::Equal | Token::NotEqual | Token::GreaterThan | Token::GreaterEqual |
+                Token::LessThan | Token::LessEqual | Token::Like | Token::NotLike |
+                Token::BeginsWith | Token::EndsWith | Token::In | Token::NotIn | Token::Between => {
+                    Ok(SectionType::Filters)
+                },
+                // These indicate attribute selection
+                Token::Comma | Token::Pipe | Token::As | Token::Eof => {
+                    Ok(SectionType::Attributes)
+                },
+                // Default to attributes if ambiguous
+                _ => Ok(SectionType::Attributes),
+            }
+        } else {
+            Ok(SectionType::Attributes)
+        }
+    }
+
+    /// Check if there's an operator ahead in the current position
+    fn has_operator_ahead(&self) -> bool {
+        let mut pos = self.current;
+
+        // Skip identifier
+        if pos < self.tokens.len() && matches!(self.tokens[pos], Token::Identifier(_)) {
+            pos += 1;
+        }
+
+        // Handle entity-qualified identifiers like "a.activityid"
+        if pos < self.tokens.len() && matches!(self.tokens[pos], Token::Dot) {
+            pos += 1; // Skip dot
+            // Skip second identifier
+            if pos < self.tokens.len() && matches!(self.tokens[pos], Token::Identifier(_)) {
+                pos += 1;
+            }
+        }
+
+        // Check for operator
+        if pos < self.tokens.len() {
+            matches!(self.tokens[pos],
+                Token::Equal | Token::NotEqual | Token::GreaterThan | Token::GreaterEqual |
+                Token::LessThan | Token::LessEqual | Token::Like | Token::NotLike |
+                Token::BeginsWith | Token::EndsWith | Token::In | Token::NotIn | Token::Between
+            )
+        } else {
+            false
+        }
     }
 
     /// Parse entity selection (.account, .contact, etc.)
@@ -309,8 +474,40 @@ impl Parser {
         // Parse operator
         let operator = self.parse_filter_operator()?;
 
-        // Parse value
-        let value = self.parse_filter_value()?;
+        // Parse value and handle special cases
+        let (operator, value) = if self.peek() == Some(&Token::Null) {
+            self.advance(); // consume 'null'
+            match operator {
+                FilterOperator::Equal => (FilterOperator::Null, FilterValue::Null),
+                FilterOperator::NotEqual => (FilterOperator::NotNull, FilterValue::Null),
+                _ => return Err(anyhow::anyhow!("Invalid operator with null value")),
+            }
+        } else if operator == FilterOperator::Between {
+            // Parse "between value1 and value2" or "between [value1, value2]"
+            if self.peek() == Some(&Token::LeftBracket) {
+                // List syntax: between [value1, value2] - use separate value elements in XML
+                let list_value = self.parse_filter_value()?;
+                if let FilterValue::List(values) = list_value {
+                    if values.len() == 2 {
+                        // Use a special marker to indicate this should use separate value elements
+                        (operator, FilterValue::Range(Box::new(values[0].clone()), Box::new(values[1].clone())))
+                    } else {
+                        return Err(anyhow::anyhow!("Between operator with list syntax requires exactly 2 values"));
+                    }
+                } else {
+                    return Err(anyhow::anyhow!("Expected list for between operator"));
+                }
+            } else {
+                // Traditional syntax: between value1 and value2 - use comma-separated in single attribute
+                let start_value = self.parse_filter_value()?;
+                self.expect(Token::And)?;
+                let end_value = self.parse_filter_value()?;
+                // Use a special marker to distinguish traditional vs list syntax
+                (operator, FilterValue::RangeTraditional(Box::new(start_value), Box::new(end_value)))
+            }
+        } else {
+            (operator, self.parse_filter_value()?)
+        };
 
         Ok(Filter::Condition {
             attribute,
@@ -354,8 +551,8 @@ impl Parser {
         // Parse 'on' keyword
         self.expect(Token::On)?;
 
-        // Parse join condition
-        let on_condition = self.parse_join_condition()?;
+        // Parse join condition with entity context
+        let on_condition = self.parse_join_condition_with_entity(&entity.name)?;
 
         // Parse optional attributes and filters within the join
         let mut attributes = Vec::new();
@@ -419,40 +616,51 @@ impl Parser {
         })
     }
 
-    /// Parse join condition (on .attr or on .attr1 -> .attr2)
-    fn parse_join_condition(&mut self) -> Result<JoinCondition> {
-        // Parse first attribute
-        self.expect(Token::Dot)?;
-        let from_attribute = match self.advance() {
-            Some(Token::Identifier(name)) => name.clone(),
-            _ => return Err(anyhow::anyhow!("Expected attribute name in join condition")),
+    /// Parse join condition with explicit syntax: source_entity.source_field -> target_entity.target_field
+    fn parse_join_condition_with_entity(&mut self, _entity_name: &str) -> Result<JoinCondition> {
+        // Parse source entity alias and attribute (e.g., "c.contactid")
+        let from_entity_alias = if let Some(Token::Identifier(alias)) = self.peek() {
+            let alias = alias.clone();
+            self.advance();
+
+            self.expect(Token::Dot)?;
+            Some(alias)
+        } else {
+            return Err(anyhow::anyhow!("Expected source entity alias in join condition"));
         };
 
-        // Check for arrow (->) indicating explicit target attribute
-        if self.peek() == Some(&Token::Arrow) {
-            self.advance(); // consume '->'
-            self.expect(Token::Dot)?;
-            let to_attribute = match self.advance() {
-                Some(Token::Identifier(name)) => name.clone(),
-                _ => return Err(anyhow::anyhow!("Expected target attribute name after '->'")),
-            };
+        let from_attribute = match self.advance() {
+            Some(Token::Identifier(name)) => name.clone(),
+            _ => return Err(anyhow::anyhow!("Expected source attribute name in join condition")),
+        };
 
-            Ok(JoinCondition {
-                from_attribute,
-                to_attribute,
-                from_entity_alias: None,
-                to_entity_alias: None,
-            })
+        // Expect arrow (->)
+        self.expect(Token::Arrow)?;
+
+        // Parse target entity alias and attribute (e.g., "account.primarycontactid")
+        let to_entity_alias = if let Some(Token::Identifier(alias)) = self.peek() {
+            let alias = alias.clone();
+            self.advance();
+
+            self.expect(Token::Dot)?;
+            Some(alias)
         } else {
-            // Simple join - same attribute name on both entities
-            Ok(JoinCondition {
-                from_attribute: from_attribute.clone(),
-                to_attribute: from_attribute,
-                from_entity_alias: None,
-                to_entity_alias: None,
-            })
-        }
+            return Err(anyhow::anyhow!("Expected target entity alias in join condition"));
+        };
+
+        let to_attribute = match self.advance() {
+            Some(Token::Identifier(name)) => name.clone(),
+            _ => return Err(anyhow::anyhow!("Expected target attribute name in join condition")),
+        };
+
+        Ok(JoinCondition {
+            from_attribute,
+            to_attribute,
+            from_entity_alias,
+            to_entity_alias,
+        })
     }
+
 
     /// Parse aggregation functions
     fn parse_aggregations(&mut self) -> Result<Vec<Aggregation>> {
@@ -591,11 +799,21 @@ impl Parser {
 
     /// Parse a single order by item
     fn parse_order_item(&mut self) -> Result<OrderBy> {
-        // Parse attribute
-        self.expect(Token::Dot)?;
-        let attribute = match self.advance() {
-            Some(Token::Identifier(name)) => name.clone(),
-            _ => return Err(anyhow::anyhow!("Expected attribute name in order by")),
+        // Parse attribute - could be .attribute or just alias name
+        let attribute = if self.peek() == Some(&Token::Dot) {
+            // Regular attribute reference like .revenue
+            self.advance(); // consume '.'
+            match self.advance() {
+                Some(Token::Identifier(name)) => name.clone(),
+                _ => return Err(anyhow::anyhow!("Expected attribute name after '.' in order by")),
+            }
+        } else if let Some(Token::Identifier(name)) = self.peek() {
+            // Alias reference like avg_revenue (from aggregation alias)
+            let name = name.clone();
+            self.advance();
+            name
+        } else {
+            return Err(anyhow::anyhow!("Expected attribute name or alias in order by"));
         };
 
         // Parse optional direction
@@ -814,3 +1032,4 @@ impl Parser {
         self.advance().cloned()
     }
 }
+

@@ -81,6 +81,33 @@ pub struct LocatedToken {
     pub position: TokenPosition,
 }
 
+/// Error type for parsing errors with position information
+#[derive(Debug)]
+pub struct ParseError {
+    pub message: String,
+    pub position: TokenPosition,
+    pub input: String,
+}
+
+impl std::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "error: {}", self.message)?;
+
+        // Find the line in the input
+        let lines: Vec<&str> = self.input.lines().collect();
+        if self.position.line > 0 && self.position.line <= lines.len() {
+            let line = lines[self.position.line - 1];
+            writeln!(f, "  --> line {}, column {}", self.position.line, self.position.column)?;
+            writeln!(f, "   |")?;
+            writeln!(f, "{:3} | {}", self.position.line, line)?;
+            writeln!(f, "   | {}{}", " ".repeat(self.position.column.saturating_sub(1)), "^")?;
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for ParseError {}
+
 /// Tokenizes FQL input string into a vector of tokens
 ///
 /// # Arguments
@@ -99,155 +126,8 @@ pub struct LocatedToken {
 /// assert_eq!(tokens[1], Token::Identifier("account".to_string()));
 /// ```
 pub fn tokenize(input: &str) -> Result<Vec<Token>> {
-    let mut tokens = Vec::new();
-    let mut chars = input.char_indices().peekable();
-
-    while let Some((pos, ch)) = chars.next() {
-        match ch {
-            // Skip whitespace and newlines
-            ' ' | '\t' | '\r' | '\n' => continue,
-
-            // Single character tokens
-            '.' => tokens.push(Token::Dot),
-            '|' => tokens.push(Token::Pipe),
-            ',' => tokens.push(Token::Comma),
-            '(' => tokens.push(Token::LeftParen),
-            ')' => tokens.push(Token::RightParen),
-            '[' => tokens.push(Token::LeftBracket),
-            ']' => tokens.push(Token::RightBracket),
-            '*' => tokens.push(Token::Wildcard),
-            ':' => tokens.push(Token::Identifier(":".to_string())),
-
-            // Multi-character operators
-            '=' => {
-                if chars.peek().map(|(_, c)| *c) == Some('=') {
-                    chars.next(); // consume second '='
-                    tokens.push(Token::Equal);
-                } else {
-                    return Err(anyhow::anyhow!("Unexpected character '=' at position {}", pos));
-                }
-            },
-            '!' => {
-                match chars.peek().map(|(_, c)| *c) {
-                    Some('=') => {
-                        chars.next();
-                        tokens.push(Token::NotEqual);
-                    },
-                    Some('~') => {
-                        chars.next();
-                        tokens.push(Token::NotLike);
-                    },
-                    Some('i') => {
-                        // Check for "!in"
-                        let mut peek_chars = chars.clone();
-                        peek_chars.next(); // consume 'i'
-                        if peek_chars.peek().map(|(_, c)| *c) == Some('n') {
-                            chars.next(); // consume 'i'
-                            chars.next(); // consume 'n'
-                            tokens.push(Token::NotIn);
-                        } else {
-                            return Err(anyhow::anyhow!("Unexpected character '!' at position {}", pos));
-                        }
-                    },
-                    _ => return Err(anyhow::anyhow!("Unexpected character '!' at position {}", pos)),
-                }
-            },
-            '>' => {
-                if chars.peek().map(|(_, c)| *c) == Some('=') {
-                    chars.next();
-                    tokens.push(Token::GreaterEqual);
-                } else {
-                    tokens.push(Token::GreaterThan);
-                }
-            },
-            '<' => {
-                if chars.peek().map(|(_, c)| *c) == Some('=') {
-                    chars.next();
-                    tokens.push(Token::LessEqual);
-                } else {
-                    tokens.push(Token::LessThan);
-                }
-            },
-            '~' => tokens.push(Token::Like),
-            '^' => {
-                if chars.peek().map(|(_, c)| *c) == Some('=') {
-                    chars.next();
-                    tokens.push(Token::BeginsWith);
-                } else {
-                    return Err(anyhow::anyhow!("Unexpected character '^' at position {}", pos));
-                }
-            },
-            '$' => {
-                if chars.peek().map(|(_, c)| *c) == Some('=') {
-                    chars.next();
-                    tokens.push(Token::EndsWith);
-                } else {
-                    return Err(anyhow::anyhow!("Unexpected character '$' at position {}", pos));
-                }
-            },
-            '-' => {
-                if chars.peek().map(|(_, c)| *c) == Some('>') {
-                    chars.next();
-                    tokens.push(Token::Arrow);
-                } else if ch.is_ascii_digit() || chars.peek().map(|(_, c)| c.is_ascii_digit()).unwrap_or(false) {
-                    // Negative number
-                    let (token, consumed) = parse_number(input, pos)?;
-                    tokens.push(token);
-                    // Advance chars by consumed amount - 1 (since we already consumed one)
-                    for _ in 0..consumed.saturating_sub(1) {
-                        chars.next();
-                    }
-                } else {
-                    return Err(anyhow::anyhow!("Unexpected character '-' at position {}", pos));
-                }
-            },
-
-            // String literals with double or single quotes
-            quote_char if quote_char == '"' || quote_char == '\'' => {
-                let (string_val, consumed) = parse_string_literal(input, pos)?;
-                tokens.push(Token::String(string_val));
-                // Advance chars by consumed amount - 1 (since we already consumed quote)
-                for _ in 0..consumed.saturating_sub(1) {
-                    chars.next();
-                }
-            },
-
-            // Date literals starting with @
-            '@' => {
-                let (date_val, consumed) = parse_date_literal(input, pos)?;
-                tokens.push(Token::Date(date_val));
-                // Advance chars by consumed amount - 1
-                for _ in 0..consumed.saturating_sub(1) {
-                    chars.next();
-                }
-            },
-
-            // Numbers
-            ch if ch.is_ascii_digit() => {
-                let (token, consumed) = parse_number(input, pos)?;
-                tokens.push(token);
-                // Advance chars by consumed amount - 1
-                for _ in 0..consumed.saturating_sub(1) {
-                    chars.next();
-                }
-            },
-
-            // Identifiers and keywords
-            ch if is_identifier_start(ch) => {
-                let (token, consumed) = parse_keyword_or_identifier(input, pos)?;
-                tokens.push(token);
-                // Advance chars by consumed amount - 1
-                for _ in 0..consumed.saturating_sub(1) {
-                    chars.next();
-                }
-            },
-
-            _ => return Err(anyhow::anyhow!("Unexpected character '{}' at position {}", ch, pos)),
-        }
-    }
-
-    tokens.push(Token::Eof);
-    Ok(tokens)
+    let located_tokens = tokenize_with_positions(input)?;
+    Ok(located_tokens.into_iter().map(|lt| lt.token).collect())
 }
 
 /// Tokenizes FQL input with position information
@@ -259,62 +139,249 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>> {
 /// * `Ok(Vec<LocatedToken>)` - Vector of tokens with position info on success
 /// * `Err(anyhow::Error)` - Tokenization error
 pub fn tokenize_with_positions(input: &str) -> Result<Vec<LocatedToken>> {
-    let mut tokens = Vec::new();
-    let chars = input.char_indices().peekable();
-    let mut line = 1;
-    let mut column = 1;
+    let mut lexer = Lexer::new(input);
+    lexer.tokenize()
+}
 
-    for (offset, ch) in chars {
-        let position = TokenPosition { line, column, offset };
+struct Lexer {
+    input: String,
+    position: usize,
+    line: usize,
+    column: usize,
+    tokens: Vec<LocatedToken>,
+}
 
-        match ch {
-            // Handle newlines for position tracking
-            '\n' => {
-                line += 1;
-                column = 1;
-                continue;
-            },
-            // Skip other whitespace
-            ' ' | '\t' | '\r' => {
-                column += 1;
-                continue;
-            },
+impl Lexer {
+    fn new(input: &str) -> Self {
+        Self {
+            input: input.to_string(),
+            position: 0,
+            line: 1,
+            column: 1,
+            tokens: Vec::new(),
+        }
+    }
 
-            // All the same token parsing logic as above, but with position tracking
-            _ => {
-                // For simplicity, we'll use the simpler tokenize function
-                // and reconstruct positions. In a production implementation,
-                // we'd integrate position tracking directly into the main tokenization logic.
-                let remaining_input = &input[offset..];
-                let simple_tokens = tokenize(remaining_input)?;
+    fn tokenize(&mut self) -> Result<Vec<LocatedToken>> {
+        while let Some((pos, ch)) = self.advance() {
+            let position = TokenPosition { line: self.line, column: self.column, offset: pos };
 
-                if let Some(token) = simple_tokens.first()
-                    && !matches!(token, Token::Eof) {
-                        tokens.push(LocatedToken {
-                            token: token.clone(),
-                            position,
-                        });
+            match ch {
+                // Skip whitespace and newlines, but track position
+                ' ' | '\t' | '\r' => {
+                    self.column += 1;
+                    continue;
+                },
+                '\n' => {
+                    self.line += 1;
+                    self.column = 1;
+                    continue;
+                },
+
+                // Single character tokens
+                '.' => self.add_token(Token::Dot, position, 1),
+                '|' => self.add_token(Token::Pipe, position, 1),
+                ',' => self.add_token(Token::Comma, position, 1),
+                '(' => self.add_token(Token::LeftParen, position, 1),
+                ')' => self.add_token(Token::RightParen, position, 1),
+                '[' => self.add_token(Token::LeftBracket, position, 1),
+                ']' => self.add_token(Token::RightBracket, position, 1),
+                '*' => self.add_token(Token::Wildcard, position, 1),
+                ':' => self.add_token(Token::Identifier(":".to_string()), position, 1),
+
+                // Multi-character operators
+                '=' => {
+                    if self.peek_char() == Some('=') {
+                        self.advance(); // consume second '='
+                        self.add_token(Token::Equal, position, 2);
+                    } else {
+                        return self.error("Unexpected character '=', did you mean '=='?", position);
                     }
+                },
+                '!' => {
+                    match self.peek_char() {
+                        Some('=') => {
+                            self.advance();
+                            self.add_token(Token::NotEqual, position, 2);
+                        },
+                        Some('~') => {
+                            self.advance();
+                            self.add_token(Token::NotLike, position, 2);
+                        },
+                        Some('i') => {
+                            // Check for "!in"
+                            if self.peek_ahead(2) == "in" {
+                                self.advance(); // consume 'i'
+                                self.advance(); // consume 'n'
+                                self.add_token(Token::NotIn, position, 3);
+                            } else {
+                                return self.error("Unexpected character '!', expected '!=', '!~', or '!in'", position);
+                            }
+                        },
+                        _ => return self.error("Unexpected character '!', expected '!=', '!~', or '!in'", position),
+                    }
+                },
+                '>' => {
+                    if self.peek_char() == Some('=') {
+                        self.advance();
+                        self.add_token(Token::GreaterEqual, position, 2);
+                    } else {
+                        self.add_token(Token::GreaterThan, position, 1);
+                    }
+                },
+                '<' => {
+                    if self.peek_char() == Some('=') {
+                        self.advance();
+                        self.add_token(Token::LessEqual, position, 2);
+                    } else {
+                        self.add_token(Token::LessThan, position, 1);
+                    }
+                },
+                '~' => self.add_token(Token::Like, position, 1),
+                '^' => {
+                    if self.peek_char() == Some('=') {
+                        self.advance();
+                        self.add_token(Token::BeginsWith, position, 2);
+                    } else {
+                        return self.error("Unexpected character '^', did you mean '^='?", position);
+                    }
+                },
+                '$' => {
+                    if self.peek_char() == Some('=') {
+                        self.advance();
+                        self.add_token(Token::EndsWith, position, 2);
+                    } else {
+                        return self.error("Unexpected character '$', did you mean '$='?", position);
+                    }
+                },
+                '-' => {
+                    if self.peek_char() == Some('>') {
+                        self.advance();
+                        self.add_token(Token::Arrow, position, 2);
+                    } else if ch.is_ascii_digit() || self.peek_char().map_or(false, |c| c.is_ascii_digit()) {
+                        // Negative number
+                        let (token, consumed) = self.parse_number(pos)?;
+                        self.add_token(token, position, consumed);
+                        // Skip the characters we consumed (minus the current one)
+                        for _ in 1..consumed {
+                            self.advance();
+                        }
+                    } else {
+                        return self.error("Unexpected character '-', did you mean '->' or a negative number?", position);
+                    }
+                },
 
-                // This is a simplified approach - in practice you'd want to integrate
-                // position tracking into the main tokenization loop
-                break;
+                // String literals with double or single quotes
+                quote_char if quote_char == '"' || quote_char == '\'' => {
+                    let (string_val, consumed) = self.parse_string_literal(pos)?;
+                    self.add_token(Token::String(string_val), position, consumed);
+                    // Skip the characters we consumed (minus the current one)
+                    for _ in 1..consumed {
+                        self.advance();
+                    }
+                },
+
+                // Date literals starting with @
+                '@' => {
+                    let (date_val, consumed) = self.parse_date_literal(pos)?;
+                    self.add_token(Token::Date(date_val), position, consumed);
+                    // Skip the characters we consumed (minus the current one)
+                    for _ in 1..consumed {
+                        self.advance();
+                    }
+                },
+
+                // Numbers
+                ch if ch.is_ascii_digit() => {
+                    let (token, consumed) = self.parse_number(pos)?;
+                    self.add_token(token, position, consumed);
+                    // Skip the characters we consumed (minus the current one)
+                    for _ in 1..consumed {
+                        self.advance();
+                    }
+                },
+
+                // Identifiers and keywords
+                ch if is_identifier_start(ch) => {
+                    let (token, consumed) = self.parse_keyword_or_identifier(pos)?;
+                    self.add_token(token, position, consumed);
+                    // Skip the characters we consumed (minus the current one)
+                    for _ in 1..consumed {
+                        self.advance();
+                    }
+                },
+
+                _ => return self.error(&format!("Unexpected character '{}'", ch), position),
             }
         }
+
+        self.tokens.push(LocatedToken {
+            token: Token::Eof,
+            position: TokenPosition { line: self.line, column: self.column, offset: self.input.len() }
+        });
+
+        Ok(std::mem::take(&mut self.tokens))
     }
 
-    // For now, fall back to simple tokenization without full position tracking
-    let simple_tokens = tokenize(input)?;
-    for (i, token) in simple_tokens.iter().enumerate() {
-        if !matches!(token, Token::Eof) {
-            tokens.push(LocatedToken {
-                token: token.clone(),
-                position: TokenPosition { line: 1, column: i + 1, offset: i },
-            });
+    fn advance(&mut self) -> Option<(usize, char)> {
+        if self.position >= self.input.len() {
+            return None;
+        }
+
+        let remaining = &self.input[self.position..];
+        if let Some(ch) = remaining.chars().next() {
+            let pos = self.position;
+            self.position += ch.len_utf8();
+            Some((pos, ch))
+        } else {
+            None
         }
     }
 
-    Ok(tokens)
+    fn peek_char(&self) -> Option<char> {
+        if self.position >= self.input.len() {
+            return None;
+        }
+        self.input[self.position..].chars().next()
+    }
+
+    fn peek_ahead(&self, n: usize) -> &str {
+        let remaining = &self.input[self.position..];
+        if remaining.len() >= n {
+            &remaining[..n]
+        } else {
+            remaining
+        }
+    }
+
+    fn add_token(&mut self, token: Token, position: TokenPosition, consumed: usize) {
+        self.tokens.push(LocatedToken { token, position });
+        self.column += consumed;
+    }
+
+    fn error<T>(&self, message: &str, position: TokenPosition) -> Result<T> {
+        Err(anyhow::anyhow!(ParseError {
+            message: message.to_string(),
+            position,
+            input: self.input.clone(),
+        }))
+    }
+
+    fn parse_number(&self, start: usize) -> Result<(Token, usize)> {
+        parse_number(&self.input, start)
+    }
+
+    fn parse_string_literal(&self, start: usize) -> Result<(String, usize)> {
+        parse_string_literal(&self.input, start)
+    }
+
+    fn parse_date_literal(&self, start: usize) -> Result<(String, usize)> {
+        parse_date_literal(&self.input, start)
+    }
+
+    fn parse_keyword_or_identifier(&self, start: usize) -> Result<(Token, usize)> {
+        parse_keyword_or_identifier(&self.input, start)
+    }
 }
 
 /// Helper function to determine if a character can start an identifier
@@ -362,7 +429,7 @@ fn parse_string_literal(input: &str, start: usize) -> Result<(String, usize)> {
         pos += 1;
     }
 
-    Err(anyhow::anyhow!("Unterminated string literal at position {}", start))
+    Err(anyhow::anyhow!("Unterminated string literal"))
 }
 
 /// Helper function to parse numeric literals
@@ -394,7 +461,7 @@ fn parse_number(input: &str, start: usize) -> Result<(Token, usize)> {
     }
 
     if number_str.is_empty() || number_str == "-" {
-        return Err(anyhow::anyhow!("Invalid number at position {}", start));
+        return Err(anyhow::anyhow!("Invalid number"));
     }
 
     let consumed = pos - start;
@@ -402,12 +469,12 @@ fn parse_number(input: &str, start: usize) -> Result<(Token, usize)> {
     if has_dot {
         match number_str.parse::<f64>() {
             Ok(val) => Ok((Token::Number(val), consumed)),
-            Err(_) => Err(anyhow::anyhow!("Invalid float number '{}' at position {}", number_str, start)),
+            Err(_) => Err(anyhow::anyhow!("Invalid float number '{}'", number_str)),
         }
     } else {
         match number_str.parse::<i64>() {
             Ok(val) => Ok((Token::Integer(val), consumed)),
-            Err(_) => Err(anyhow::anyhow!("Invalid integer '{}' at position {}", number_str, start)),
+            Err(_) => Err(anyhow::anyhow!("Invalid integer '{}'", number_str)),
         }
     }
 }
@@ -430,7 +497,7 @@ fn parse_date_literal(input: &str, start: usize) -> Result<(String, usize)> {
     }
 
     if result.is_empty() {
-        return Err(anyhow::anyhow!("Invalid date literal at position {}", start));
+        return Err(anyhow::anyhow!("Invalid date literal"));
     }
 
     Ok((result, pos - start))
@@ -459,7 +526,7 @@ fn parse_operator(input: &str, start: usize) -> Result<(Token, usize)> {
         ('>', _) => Ok((Token::GreaterThan, 1)),
         ('<', _) => Ok((Token::LessThan, 1)),
         ('~', _) => Ok((Token::Like, 1)),
-        _ => Err(anyhow::anyhow!("Unknown operator starting with '{}' at position {}", first_char, start)),
+        _ => Err(anyhow::anyhow!("Unknown operator starting with '{}'", first_char)),
     }
 }
 

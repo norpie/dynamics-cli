@@ -3,6 +3,12 @@
 ## Overview
 This guide covers the complete usage of `dynamics-cli`, a command-line tool for interacting with Microsoft Dynamics 365. The CLI features FQL (FetchXML Query Language), a terse, jq-inspired query language that compiles to FetchXML. FQL prioritizes brevity and readability while maintaining full FetchXML capabilities.
 
+**Key Features:**
+- **Explicit Join Syntax**: Unambiguous `source.field -> target.field` relationship specification
+- **Entity Aliases**: Required for clear field references and join conditions
+- **Comprehensive Operators**: Full support for filtering, aggregation, and ordering
+- **Date Expressions**: Natural date filtering with `@today-30d` syntax
+
 ## Basic Syntax
 
 ### Entity Selection
@@ -56,35 +62,57 @@ This guide covers the complete usage of `dynamics-cli`, a command-line tool for 
 - `in` in list
 - `!in` not-in list
 - `between` range operator
+- `->` join relationship (used in join conditions)
 
 ### Joins (Link Entities)
+
+FQL uses **explicit join syntax** to eliminate ambiguity about which entity fields belong to. The syntax is:
+`join(.entity as alias on source.field -> target.field)`
+
 ```fql
-# Simple join
-.account | join(.contact on .primarycontactid)
+# Simple join - contact.contactid references account.primarycontactid
+.account | join(.contact as c on c.contactid -> account.primarycontactid)
 
 # Join with attributes from joined entity
-.account 
+.account
   | .name, .revenue
-  | join(.contact on .primarycontactid 
+  | join(.contact as c on c.contactid -> account.primarycontactid
     | .firstname, .lastname)
 
 # Multiple joins
-.account 
-  | join(.contact on .primarycontactid)
-  | join(.user on .owninguser)
+.account
+  | join(.contact as c on c.contactid -> account.primarycontactid)
+  | join(.user as u on u.systemuserid -> account.owninguser)
 
-# Outer join
-.account | leftjoin(.contact on .primarycontactid)
+# Outer join (left join)
+.account | leftjoin(.contact as c on c.contactid -> account.primarycontactid)
 
 # Join with alias and conditions
 .account as a
-  | join(.contact as c on .primarycontactid 
+  | join(.contact as c on c.contactid -> a.primarycontactid
     | .statecode == 0)
 
-# Join with complex relationship
-.account 
-  | join(.contact on .accountid -> .parentcustomerid)
+# Complex relationship - contact.parentcustomerid references account.accountid
+.account
+  | join(.contact as c on c.parentcustomerid -> account.accountid)
+
+# Activity joins - activity.regardingobjectid references contact.contactid
+.contact as c
+  | leftjoin(.activitypointer as a on a.regardingobjectid -> c.contactid)
+
+# Opportunity joins - opportunity.customerid references account.accountid
+.account as acc
+  | join(.opportunity as opp on opp.customerid -> acc.accountid)
 ```
+
+#### Join Syntax Rules:
+- **Always use entity aliases**: Required for explicit field references
+- **Source -> Target**: Read as "where source.field equals target.field"
+- **Common patterns**:
+  - `contact.contactid -> account.primarycontactid` (contact is primary contact)
+  - `opportunity.customerid -> account.accountid` (opportunity belongs to account)
+  - `contact.parentcustomerid -> account.accountid` (contact belongs to account)
+  - `activitypointer.regardingobjectid -> contact.contactid` (activity about contact)
 
 ### Aggregations
 ```fql
@@ -161,7 +189,7 @@ This guide covers the complete usage of `dynamics-cli`, a command-line tool for 
 
 # Subquery-like patterns using joins
 .account as a
-  | join(.opportunity as o on .accountid 
+  | join(.opportunity as o on o.customerid -> a.accountid
     | .estimatedvalue > 50000)
   | distinct
 ```
@@ -200,7 +228,7 @@ dynamics-cli query run '.account'  # Returns default limit (100 records)
 dynamics-cli query run '.account | limit(500)'  # Returns 500 records
 
 # Complex query with multiple output options
-dynamics-cli query run '.opportunity as o | .estimatedvalue > 100000 | join(.account as a on .customerid | .name) | order(.estimatedvalue desc)' --format table --pretty
+dynamics-cli query run '.opportunity as o | .estimatedvalue > 100000 | join(.account as a on a.accountid -> o.customerid | .name) | order(.estimatedvalue desc)' --format table --pretty
 
 # Authentication and environment management
 dynamics-cli auth setup --name production  # Setup authentication for production
@@ -224,9 +252,9 @@ dynamics-cli settings reset default-query-limit   # Reset to default (100)
 .opportunity as o
   | .estimatedvalue > 100000
   | .statecode == 0
-  | join(.account as a on .customerid 
+  | join(.account as a on a.accountid -> o.customerid
     | .name, .industrycode)
-  | join(.user as u on .ownerid 
+  | join(.user as u on u.systemuserid -> o.ownerid
     | .fullname)
   | order(.estimatedvalue desc)
   | limit(20)
@@ -248,7 +276,7 @@ dynamics-cli settings reset default-query-limit   # Reset to default (100)
 ```fql
 .contact as c
   | .createdon >= @today-7d
-  | leftjoin(.activitypointer as a on .regardingobjectid
+  | leftjoin(.activitypointer as a on a.regardingobjectid -> c.contactid
     | .activityid)
   | a.activityid == null
   | c.fullname, c.emailaddress1, c.createdon

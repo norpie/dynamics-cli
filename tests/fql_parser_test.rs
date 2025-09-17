@@ -1,6 +1,17 @@
 use anyhow::Result;
 use dynamics_cli::fql::{tokenize, parse, to_fetchxml};
 
+/// Normalize XML for comparison by removing extra whitespace and newlines
+fn normalize_xml(xml: &str) -> String {
+    xml.lines()
+        .map(|line| line.trim())
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<&str>>()
+        .join("")
+        .replace("> <", "><")
+        .replace(" />", "/>")
+}
+
 /// Test helper to run the complete FQL parsing pipeline
 fn test_fql_to_xml(fql: &str, expected_xml: &str) -> Result<()> {
     println!("Testing FQL: {}", fql);
@@ -18,8 +29,17 @@ fn test_fql_to_xml(fql: &str, expected_xml: &str) -> Result<()> {
     println!("Generated XML:\n{}", xml);
     println!("Expected XML:\n{}", expected_xml);
 
-    // TODO: Implement proper XML comparison (normalize whitespace, etc.)
-    // For now, just ensure no panics occur
+    // Compare XML with normalized whitespace
+    let normalized_generated = normalize_xml(&xml);
+    let normalized_expected = normalize_xml(expected_xml);
+
+    if normalized_generated != normalized_expected {
+        eprintln!("XML mismatch!");
+        eprintln!("Generated (normalized): {}", normalized_generated);
+        eprintln!("Expected (normalized):  {}", normalized_expected);
+        return Err(anyhow::anyhow!("Generated XML does not match expected XML"));
+    }
+
     Ok(())
 }
 
@@ -197,10 +217,10 @@ fn test_between_operator() {
 
 #[test]
 fn test_simple_join() {
-    let fql = ".account | join(.contact on .primarycontactid)";
+    let fql = ".account | join(.contact as c on c.contactid -> account.primarycontactid)";
     let expected_xml = r#"<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false">
   <entity name="account">
-    <link-entity name="contact" from="contactid" to="primarycontactid" link-type="inner">
+    <link-entity name="contact" alias="c" from="contactid" to="primarycontactid" link-type="inner">
     </link-entity>
   </entity>
 </fetch>"#;
@@ -210,12 +230,12 @@ fn test_simple_join() {
 
 #[test]
 fn test_join_with_attributes() {
-    let fql = ".account | .name, .revenue | join(.contact on .primarycontactid | .firstname, .lastname)";
+    let fql = ".account | .name, .revenue | join(.contact as c on c.contactid -> account.primarycontactid | .firstname, .lastname)";
     let expected_xml = r#"<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false">
   <entity name="account">
     <attribute name="name" />
     <attribute name="revenue" />
-    <link-entity name="contact" from="contactid" to="primarycontactid" link-type="inner">
+    <link-entity name="contact" alias="c" from="contactid" to="primarycontactid" link-type="inner">
       <attribute name="firstname" />
       <attribute name="lastname" />
     </link-entity>
@@ -227,12 +247,12 @@ fn test_join_with_attributes() {
 
 #[test]
 fn test_multiple_joins() {
-    let fql = ".account | join(.contact on .primarycontactid) | join(.user on .owninguser)";
+    let fql = ".account | join(.contact as c on c.contactid -> account.primarycontactid) | join(.user as u on u.systemuserid -> account.owninguser)";
     let expected_xml = r#"<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false">
   <entity name="account">
-    <link-entity name="contact" from="contactid" to="primarycontactid" link-type="inner">
+    <link-entity name="contact" alias="c" from="contactid" to="primarycontactid" link-type="inner">
     </link-entity>
-    <link-entity name="user" from="systemuserid" to="owninguser" link-type="inner">
+    <link-entity name="user" alias="u" from="systemuserid" to="owninguser" link-type="inner">
     </link-entity>
   </entity>
 </fetch>"#;
@@ -242,10 +262,10 @@ fn test_multiple_joins() {
 
 #[test]
 fn test_left_join() {
-    let fql = ".account | leftjoin(.contact on .primarycontactid)";
+    let fql = ".account | leftjoin(.contact as c on c.contactid -> account.primarycontactid)";
     let expected_xml = r#"<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false">
   <entity name="account">
-    <link-entity name="contact" from="contactid" to="primarycontactid" link-type="outer">
+    <link-entity name="contact" alias="c" from="contactid" to="primarycontactid" link-type="outer">
     </link-entity>
   </entity>
 </fetch>"#;
@@ -255,7 +275,7 @@ fn test_left_join() {
 
 #[test]
 fn test_join_with_alias_and_conditions() {
-    let fql = ".account as a | join(.contact as c on .primarycontactid | .statecode == 0)";
+    let fql = ".account as a | join(.contact as c on c.contactid -> a.primarycontactid | .statecode == 0)";
     let expected_xml = r#"<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false">
   <entity name="account" alias="a">
     <link-entity name="contact" alias="c" from="contactid" to="primarycontactid" link-type="inner">
@@ -271,10 +291,10 @@ fn test_join_with_alias_and_conditions() {
 
 #[test]
 fn test_join_with_complex_relationship() {
-    let fql = ".account | join(.contact on .accountid -> .parentcustomerid)";
+    let fql = ".account | join(.contact as c on c.parentcustomerid -> account.accountid)";
     let expected_xml = r#"<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false">
   <entity name="account">
-    <link-entity name="contact" from="parentcustomerid" to="accountid" link-type="inner">
+    <link-entity name="contact" alias="c" from="parentcustomerid" to="accountid" link-type="inner">
     </link-entity>
   </entity>
 </fetch>"#;
@@ -456,7 +476,7 @@ fn test_nested_conditions() {
 
 #[test]
 fn test_subquery_like_patterns() {
-    let fql = ".account as a | join(.opportunity as o on .accountid | .estimatedvalue > 50000) | distinct";
+    let fql = ".account as a | join(.opportunity as o on o.customerid -> a.accountid | .estimatedvalue > 50000) | distinct";
     let expected_xml = r#"<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="true">
   <entity name="account" alias="a">
     <link-entity name="opportunity" alias="o" from="customerid" to="accountid" link-type="inner">
@@ -475,9 +495,9 @@ fn test_high_value_opportunities_example() {
     let fql = r#".opportunity as o
   | .estimatedvalue > 100000
   | .statecode == 0
-  | join(.account as a on .customerid
+  | join(.account as a on a.accountid -> o.customerid
     | .name, .industrycode)
-  | join(.user as u on .ownerid
+  | join(.user as u on u.systemuserid -> o.ownerid
     | .fullname)
   | order(.estimatedvalue desc)
   | limit(20)"#;
@@ -536,7 +556,7 @@ fn test_account_summary_by_industry_example() {
 fn test_recent_contacts_without_activities_example() {
     let fql = r#".contact as c
   | .createdon >= @today-7d
-  | leftjoin(.activitypointer as a on .regardingobjectid
+  | leftjoin(.activitypointer as a on a.regardingobjectid -> c.contactid
     | .activityid)
   | a.activityid == null
   | c.fullname, c.emailaddress1, c.createdon"#;
@@ -579,6 +599,93 @@ fn test_comparison_example() {
       <condition attribute="statecode" operator="eq" value="0" />
     </filter>
     <order attribute="revenue" descending="true" />
+  </entity>
+</fetch>"#;
+
+    test_fql_to_xml(fql, expected_xml).unwrap();
+}
+
+#[test]
+fn test_null_condition() {
+    let fql = ".account | .primarycontactid == null";
+    let expected_xml = r#"<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false">
+  <entity name="account">
+    <filter type="and">
+      <condition attribute="primarycontactid" operator="null" />
+    </filter>
+  </entity>
+</fetch>"#;
+
+    test_fql_to_xml(fql, expected_xml).unwrap();
+}
+
+#[test]
+fn test_not_null_condition() {
+    let fql = ".contact | .emailaddress1 != null";
+    let expected_xml = r#"<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false">
+  <entity name="contact">
+    <filter type="and">
+      <condition attribute="emailaddress1" operator="not-null" />
+    </filter>
+  </entity>
+</fetch>"#;
+
+    test_fql_to_xml(fql, expected_xml).unwrap();
+}
+
+#[test]
+fn test_between_condition() {
+    let fql = ".opportunity | .estimatedvalue between 10000 and 50000";
+    let expected_xml = r#"<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false">
+  <entity name="opportunity">
+    <filter type="and">
+      <condition attribute="estimatedvalue" operator="between" value="10000,50000" />
+    </filter>
+  </entity>
+</fetch>"#;
+
+    test_fql_to_xml(fql, expected_xml).unwrap();
+}
+
+#[test]
+fn test_between_with_dates() {
+    let fql = ".account | .createdon between @2023-01-01 and @2023-12-31";
+    let expected_xml = r#"<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false">
+  <entity name="account">
+    <filter type="and">
+      <condition attribute="createdon" operator="between" value="2023-01-01,2023-12-31" />
+    </filter>
+  </entity>
+</fetch>"#;
+
+    test_fql_to_xml(fql, expected_xml).unwrap();
+}
+
+#[test]
+fn test_complex_null_and_range_conditions() {
+    let fql = ".opportunity | .primarycontactid != null and .estimatedvalue between 25000 and 100000 | order(.estimatedvalue desc)";
+    let expected_xml = r#"<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false">
+  <entity name="opportunity">
+    <filter type="and">
+      <condition attribute="primarycontactid" operator="not-null" />
+      <condition attribute="estimatedvalue" operator="between" value="25000,100000" />
+    </filter>
+    <order attribute="estimatedvalue" descending="true" />
+  </entity>
+</fetch>"#;
+
+    test_fql_to_xml(fql, expected_xml).unwrap();
+}
+
+#[test]
+fn test_multiple_null_checks() {
+    let fql = ".account | .primarycontactid != null and .emailaddress1 == null";
+    let expected_xml = r#"<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false">
+  <entity name="account">
+    <filter type="and">
+      <condition attribute="primarycontactid" operator="not-null" />
+      <condition attribute="emailaddress1" operator="null" />
+    </filter>
   </entity>
 </fetch>"#;
 
