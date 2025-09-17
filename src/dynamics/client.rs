@@ -64,16 +64,76 @@ impl DynamicsClient {
         }
     }
 
+    /// Extract entity name from FetchXML
+    fn extract_entity_name(&self, fetchxml: &str) -> Result<String> {
+        let doc = roxmltree::Document::parse(fetchxml)
+            .map_err(|e| anyhow::anyhow!("Failed to parse FetchXML: {}", e))?;
+
+        // Find the entity element
+        let entity_node = doc.descendants()
+            .find(|n| n.has_tag_name("entity"))
+            .ok_or_else(|| anyhow::anyhow!("No entity element found in FetchXML"))?;
+
+        // Get the entity name attribute
+        let entity_name = entity_node.attribute("name")
+            .ok_or_else(|| anyhow::anyhow!("Entity element missing 'name' attribute"))?;
+
+        // Convert to plural form for Web API endpoint
+        let plural_name = self.pluralize_entity_name(entity_name);
+
+        debug!("Extracted entity name: {} -> {}", entity_name, plural_name);
+        Ok(plural_name)
+    }
+
+    /// Convert entity name to plural form for Dynamics Web API
+    fn pluralize_entity_name(&self, entity_name: &str) -> String {
+        match entity_name {
+            // Common Dynamics entities with irregular plurals
+            "account" => "accounts".to_string(),
+            "contact" => "contacts".to_string(),
+            "lead" => "leads".to_string(),
+            "opportunity" => "opportunities".to_string(),
+            "campaign" => "campaigns".to_string(),
+            "incident" => "incidents".to_string(),
+            "quote" => "quotes".to_string(),
+            "salesorder" => "salesorders".to_string(),
+            "invoice" => "invoices".to_string(),
+            "product" => "products".to_string(),
+            "appointment" => "appointments".to_string(),
+            "task" => "tasks".to_string(),
+            "phonecall" => "phonecalls".to_string(),
+            "email" => "emails".to_string(),
+            "letter" => "letters".to_string(),
+            "fax" => "faxes".to_string(),
+            "activitypointer" => "activitypointers".to_string(),
+            "annotation" => "annotations".to_string(),
+            "systemuser" => "systemusers".to_string(),
+            "team" => "teams".to_string(),
+            "businessunit" => "businessunits".to_string(),
+            "role" => "roles".to_string(),
+
+            // For custom entities or unknown entities, add 's'
+            // Most custom entities follow the pattern: prefix_entityname -> prefix_entitynames
+            name if name.contains('_') => format!("{}s", name),
+
+            // Default: add 's' for standard entities
+            _ => format!("{}s", entity_name),
+        }
+    }
+
     /// Execute a FetchXML query against Dynamics 365
     pub async fn execute_fetchxml(&mut self, fetchxml: &str) -> Result<Value> {
         let token = self.get_access_token().await?.to_string();
+
+        // Extract entity name from FetchXML
+        let entity_name = self.extract_entity_name(fetchxml)?;
 
         // Construct the Web API URL for FetchXML queries
         let mut base_url = self.auth_config.host.clone();
         if !base_url.ends_with('/') {
             base_url.push('/');
         }
-        let query_url = format!("{}api/data/v9.2/", base_url);
+        let query_url = format!("{}api/data/v9.2/{}", base_url, entity_name);
 
         info!("Executing FetchXML query against: {}", query_url);
         debug!("FetchXML: {}", fetchxml);
