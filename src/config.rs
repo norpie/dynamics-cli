@@ -20,6 +20,18 @@ pub struct Config {
     pub environments: HashMap<String, AuthConfig>,
     #[serde(default)]
     pub entity_mappings: HashMap<String, String>,
+    #[serde(default)]
+    pub settings: Settings,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Settings {
+    #[serde(default = "default_query_limit")]
+    pub default_query_limit: u32,
+}
+
+fn default_query_limit() -> u32 {
+    100
 }
 
 impl Default for Config {
@@ -28,6 +40,15 @@ impl Default for Config {
             current_environment: None,
             environments: HashMap::new(),
             entity_mappings: HashMap::new(),
+            settings: Settings::default(),
+        }
+    }
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            default_query_limit: default_query_limit(),
         }
     }
 }
@@ -163,5 +184,15 @@ impl Config {
 
     pub fn list_entity_mappings(&self) -> &HashMap<String, String> {
         &self.entity_mappings
+    }
+
+    pub fn get_settings(&self) -> &Settings {
+        &self.settings
+    }
+
+    pub fn update_default_query_limit(&mut self, limit: u32) -> Result<()> {
+        info!("Updating default query limit to: {}", limit);
+        self.settings.default_query_limit = limit;
+        self.save()
     }
 }

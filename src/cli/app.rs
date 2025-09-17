@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 use super::commands::auth::AuthCommands;
 use super::commands::query::QueryCommands;
 use super::commands::entity::EntityCommands;
+use super::commands::settings::SettingsCommands;
 
 #[derive(Parser)]
 #[command(name = "dynamics-cli")]
@@ -19,4 +20,6 @@ pub enum Commands {
     Query(QueryCommands),
     /// Entity name mapping management
     Entity(EntityCommands),
+    /// Application settings management
+    Settings(SettingsCommands),
 }

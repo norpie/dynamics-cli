@@ -1,5 +1,6 @@
 use anyhow::Result;
 use crate::fql::ast::*;
+use crate::config::Config;
 
 /// Converts an FQL AST into FetchXML string
 ///
@@ -55,9 +56,11 @@ impl XmlGenerator {
 
         tag_str.push_str(&format!(" distinct=\"{}\"", if query.distinct { "true" } else { "false" }));
 
-        if let Some(limit) = query.limit {
-            tag_str.push_str(&format!(" top=\"{}\"", limit));
-        }
+        // Apply limit - use specified limit or configurable default to prevent huge result sets
+        // This provides a sane default when no explicit limit() is specified in FQL
+        let default_limit = Config::load()?.get_settings().default_query_limit;
+        let effective_limit = query.limit.unwrap_or(default_limit);
+        tag_str.push_str(&format!(" top=\"{}\"", effective_limit));
 
         if let Some((page_num, page_size)) = query.page {
             tag_str.push_str(&format!(" page=\"{}\" count=\"{}\"", page_num, page_size));
