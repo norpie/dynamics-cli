@@ -15,6 +15,7 @@ pub struct AuthConfig {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct Config {
     pub current_environment: Option<String>,
     pub environments: HashMap<String, AuthConfig>,
@@ -34,16 +35,6 @@ fn default_query_limit() -> u32 {
     100
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            current_environment: None,
-            environments: HashMap::new(),
-            entity_mappings: HashMap::new(),
-            settings: Settings::default(),
-        }
-    }
-}
 
 impl Default for Settings {
     fn default() -> Self {

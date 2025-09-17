@@ -41,12 +41,11 @@ pub async fn reset_command(name: String) -> Result<()> {
 pub async fn reset_all_command(force: bool) -> Result<()> {
     info!("Resetting all settings to defaults");
 
-    if !force {
-        if !confirm("Reset all settings to their default values?", false)? {
+    if !force
+        && !confirm("Reset all settings to their default values?", false)? {
             println!("Operation cancelled.");
             return Ok(());
         }
-    }
 
     let mut config = Config::load()?;
     config.settings = Settings::default();

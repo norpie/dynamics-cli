@@ -19,7 +19,7 @@ pub async fn list_command() -> Result<()> {
     }
 
     println!("Entity Name Mappings:");
-    println!("{:<20} -> {}", "Entity Name", "Plural Name");
+    println!("{:<20} -> Plural Name", "Entity Name");
     println!("{}", "-".repeat(50));
 
     let mut mappings_vec: Vec<(&String, &String)> = mappings.iter().collect();

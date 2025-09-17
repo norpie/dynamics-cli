@@ -65,7 +65,7 @@ pub enum Token {
     Wildcard,         // *
     Whitespace,
     Newline,
-    EOF,
+    Eof,
 }
 
 #[derive(Debug, Clone)]
@@ -246,7 +246,7 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>> {
         }
     }
 
-    tokens.push(Token::EOF);
+    tokens.push(Token::Eof);
     Ok(tokens)
 }
 
@@ -260,11 +260,11 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>> {
 /// * `Err(anyhow::Error)` - Tokenization error
 pub fn tokenize_with_positions(input: &str) -> Result<Vec<LocatedToken>> {
     let mut tokens = Vec::new();
-    let mut chars = input.char_indices().peekable();
+    let chars = input.char_indices().peekable();
     let mut line = 1;
     let mut column = 1;
 
-    while let Some((offset, ch)) = chars.next() {
+    for (offset, ch) in chars {
         let position = TokenPosition { line, column, offset };
 
         match ch {
@@ -288,14 +288,13 @@ pub fn tokenize_with_positions(input: &str) -> Result<Vec<LocatedToken>> {
                 let remaining_input = &input[offset..];
                 let simple_tokens = tokenize(remaining_input)?;
 
-                if let Some(token) = simple_tokens.first() {
-                    if !matches!(token, Token::EOF) {
+                if let Some(token) = simple_tokens.first()
+                    && !matches!(token, Token::Eof) {
                         tokens.push(LocatedToken {
                             token: token.clone(),
                             position,
                         });
                     }
-                }
 
                 // This is a simplified approach - in practice you'd want to integrate
                 // position tracking into the main tokenization loop
@@ -307,7 +306,7 @@ pub fn tokenize_with_positions(input: &str) -> Result<Vec<LocatedToken>> {
     // For now, fall back to simple tokenization without full position tracking
     let simple_tokens = tokenize(input)?;
     for (i, token) in simple_tokens.iter().enumerate() {
-        if !matches!(token, Token::EOF) {
+        if !matches!(token, Token::Eof) {
             tokens.push(LocatedToken {
                 token: token.clone(),
                 position: TokenPosition { line: 1, column: i + 1, offset: i },

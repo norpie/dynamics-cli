@@ -153,7 +153,7 @@ impl Parser {
 
         // Check for .* pattern (dot followed by wildcard)
         if self.peek() == Some(&Token::Dot) {
-            let mut lookahead = self.current + 1;
+            let lookahead = self.current + 1;
             if lookahead < self.tokens.len() && self.tokens[lookahead] == Token::Wildcard {
                 self.advance(); // consume '.'
                 self.advance(); // consume '*'
@@ -806,15 +806,11 @@ impl Parser {
 
     /// Helper: Check if we're at end of tokens
     fn is_at_end(&self) -> bool {
-        self.current >= self.tokens.len() || matches!(self.peek(), Some(Token::EOF))
+        self.current >= self.tokens.len() || matches!(self.peek(), Some(Token::Eof))
     }
 
     /// Helper: Get current token and advance
     fn consume(&mut self) -> Option<Token> {
-        if let Some(token) = self.advance() {
-            Some(token.clone())
-        } else {
-            None
-        }
+        self.advance().cloned()
     }
 }

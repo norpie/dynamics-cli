@@ -138,11 +138,7 @@ impl DynamicsClient {
         println!("Dynamics 365 Web API requires the plural form of entity names.");
 
         // Suggest default pluralization
-        let suggested_plural = if entity_name.contains('_') {
-            format!("{}s", entity_name)
-        } else {
-            format!("{}s", entity_name)
-        };
+        let suggested_plural = format!("{}s", entity_name);
 
         println!("Suggested plural form: '{}'", suggested_plural);
 
@@ -270,12 +266,12 @@ impl DynamicsClient {
                 if let Some(obj) = record.as_object() {
                     let row: Vec<String> = column_vec.iter().map(|col| {
                         obj.get(col)
-                            .and_then(|v| match v {
-                                Value::String(s) => Some(s.clone()),
-                                Value::Number(n) => Some(n.to_string()),
-                                Value::Bool(b) => Some(b.to_string()),
-                                Value::Null => Some("null".to_string()),
-                                _ => Some("...".to_string()),
+                            .map(|v| match v {
+                                Value::String(s) => s.clone(),
+                                Value::Number(n) => n.to_string(),
+                                Value::Bool(b) => b.to_string(),
+                                Value::Null => "null".to_string(),
+                                _ => "...".to_string(),
                             })
                             .unwrap_or_else(|| "".to_string())
                     }).collect();

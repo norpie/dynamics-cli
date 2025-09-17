@@ -2,41 +2,44 @@ use anyhow::Result;
 use log::{info, warn, error};
 
 use crate::config::{Config, AuthConfig};
-use crate::auth::{DynamicsAuthClient, CredentialSource};
+use crate::auth::{DynamicsAuthClient, Credentials};
 use crate::ui::{prompt_environment_name, prompt_overwrite_confirmation, prompt_save_anyway_confirmation, prompt_credentials};
 
-pub async fn setup_command(
-    name: Option<String>,
-    host: Option<String>,
-    username: Option<String>,
-    password: Option<String>,
-    client_id: Option<String>,
-    client_secret: Option<String>,
-    from_env: bool,
-    from_env_file: Option<String>,
-) -> Result<()> {
+pub struct SetupOptions {
+    pub name: Option<String>,
+    pub host: Option<String>,
+    pub username: Option<String>,
+    pub password: Option<String>,
+    pub client_id: Option<String>,
+    pub client_secret: Option<String>,
+    pub from_env: bool,
+    pub from_env_file: Option<String>,
+}
+
+pub async fn setup_command(options: SetupOptions) -> Result<()> {
     info!("Starting auth setup");
 
     let mut config = Config::load()?;
 
     // Determine credentials source and get values
-    let (env_name, credentials) = if from_env {
-        let env_name = name.unwrap_or_else(|| "from-env".to_string());
-        let credentials = CredentialSource::from_env()?;
+    let (env_name, credentials) = if options.from_env {
+        let env_name = options.name.unwrap_or_else(|| "from-env".to_string());
+        let credentials = Credentials::from_env()?;
         (env_name, credentials)
-    } else if let Some(ref env_file_path) = from_env_file {
-        let env_name = name.unwrap_or_else(|| "from-env-file".to_string());
-        let credentials = CredentialSource::from_env_file(env_file_path)?;
+    } else if let Some(ref env_file_path) = options.from_env_file {
+        let env_name = options.name.unwrap_or_else(|| "from-env-file".to_string());
+        let credentials = Credentials::from_env_file(env_file_path)?;
         (env_name, credentials)
-    } else if host.is_some() && username.is_some() && password.is_some() && client_id.is_some() && client_secret.is_some() {
+    } else if let (Some(host), Some(username), Some(password), Some(client_id), Some(client_secret)) =
+        (&options.host, &options.username, &options.password, &options.client_id, &options.client_secret) {
         // All parameters provided via command line
-        let env_name = name.unwrap_or_else(|| "cli-setup".to_string());
-        let credentials = CredentialSource::from_command_line(
-            host.unwrap(),
-            username.unwrap(),
-            password.unwrap(),
-            client_id.unwrap(),
-            client_secret.unwrap(),
+        let env_name = options.name.unwrap_or_else(|| "cli-setup".to_string());
+        let credentials = Credentials::from_command_line(
+            host.clone(),
+            username.clone(),
+            password.clone(),
+            client_id.clone(),
+            client_secret.clone(),
         );
         (env_name, credentials)
     } else {
@@ -44,7 +47,7 @@ pub async fn setup_command(
         info!("Starting interactive setup");
 
         // Get environment name
-        let env_name = prompt_environment_name(name)?;
+        let env_name = prompt_environment_name(options.name)?;
 
         // Check if environment exists and confirm overwrite
         if config.environments.contains_key(&env_name) {
@@ -57,19 +60,18 @@ pub async fn setup_command(
         }
 
         // Collect missing authentication details interactively
-        let credentials = prompt_credentials(host, username, password, client_id, client_secret)?;
+        let credentials = prompt_credentials(options.host, options.username, options.password, options.client_id, options.client_secret)?;
 
         (env_name, credentials)
     };
 
     // Check if environment exists and handle overwrite (for non-interactive modes)
-    if config.environments.contains_key(&env_name) && !from_env && from_env_file.is_none() {
-        if !env_name.starts_with("cli-setup") {
+    if config.environments.contains_key(&env_name) && !options.from_env && options.from_env_file.is_none()
+        && !env_name.starts_with("cli-setup") {
             // Non-interactive mode with explicit parameters, assume overwrite
             warn!("Environment '{}' already exists, overwriting", env_name);
         }
         // Interactive mode already handled above
-    }
 
     let auth_config = AuthConfig {
         host: credentials.host.clone(),
@@ -102,7 +104,7 @@ pub async fn setup_command(
             error!("Authentication test failed: {}", e);
             println!("✗ Authentication test failed: {}", e);
 
-            let save_anyway = if from_env || from_env_file.is_some() || env_name == "cli-setup" {
+            let save_anyway = if options.from_env || options.from_env_file.is_some() || env_name == "cli-setup" {
                 // Non-interactive mode, save anyway
                 true
             } else {

@@ -11,19 +11,7 @@ pub struct Credentials {
     pub client_secret: String,
 }
 
-pub enum CredentialSource {
-    Environment,
-    EnvFile(String),
-    CommandLine {
-        host: String,
-        username: String,
-        password: String,
-        client_id: String,
-        client_secret: String,
-    },
-}
-
-impl CredentialSource {
+impl Credentials {
     pub fn from_env() -> Result<Credentials> {
         info!("Importing from environment variables");
 

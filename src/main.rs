@@ -16,7 +16,7 @@ use cli::commands::auth::AuthSubcommands;
 use cli::commands::query::QuerySubcommands;
 use cli::commands::entity::EntitySubcommands;
 use cli::commands::settings::SettingsSubcommands;
-use commands::auth::{setup_command, select_command, remove_command, status_command};
+use commands::auth::{setup_command, SetupOptions, select_command, remove_command, status_command};
 use commands::query::{run_command, file_command};
 use commands::entity::{list_command, add_command, remove_command as entity_remove_command, update_command};
 use commands::settings::{show_command, get_command, set_command, reset_command, reset_all_command};
@@ -37,7 +37,9 @@ async fn main() -> Result<()> {
             match auth_commands.command {
                 AuthSubcommands::Setup {
                     name, host, username, password, client_id, client_secret, from_env, from_env_file
-                } => setup_command(name, host, username, password, client_id, client_secret, from_env, from_env_file).await?,
+                } => setup_command(SetupOptions {
+                    name, host, username, password, client_id, client_secret, from_env, from_env_file
+                }).await?,
                 AuthSubcommands::Select { name } => select_command(name).await?,
                 AuthSubcommands::Remove { name, force } => remove_command(name, force).await?,
                 AuthSubcommands::Status => status_command().await?,
