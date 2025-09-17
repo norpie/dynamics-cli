@@ -1,7 +1,7 @@
-# FetchXML Query Language (FQL) Specification
+# Dynamics CLI Usage Guide
 
 ## Overview
-FQL is a terse, jq-inspired query language that compiles to FetchXML for Dynamics 365. It prioritizes brevity and readability while maintaining full FetchXML capabilities.
+This guide covers the complete usage of `dynamics-cli`, a command-line tool for interacting with Microsoft Dynamics 365. The CLI features FQL (FetchXML Query Language), a terse, jq-inspired query language that compiles to FetchXML. FQL prioritizes brevity and readability while maintaining full FetchXML capabilities.
 
 ## Basic Syntax
 
@@ -118,11 +118,17 @@ FQL is a terse, jq-inspired query language that compiles to FetchXML for Dynamic
 .account | page(3, 50)  # page 3, 50 records per page
 
 # Combined
-.account 
+.account
   | .revenue > 1000000
   | order(.revenue desc)
   | limit(10)
+
+# Automatic default limits
+.account        # Automatically limited to default (100 records)
+.account | .*   # Also automatically limited to default
 ```
+
+**Note**: All FQL queries automatically include a default result limit (100 records) when no explicit `limit()` is specified. This prevents accidentally retrieving huge result sets. The default can be configured using `dynamics-cli settings set default-query-limit <N>`.
 
 ### Advanced Features
 
@@ -163,27 +169,52 @@ FQL is a terse, jq-inspired query language that compiles to FetchXML for Dynamic
 ## CLI Integration Examples
 
 ```bash
-# Basic query
-fql query '.account | .name, .revenue | limit(10)'
+# Basic query execution
+dynamics-cli query run '.account | .name, .revenue | limit(10)'
 
-# With output format
-fql query '.account | limit(5)' --output json
+# With output format options
+dynamics-cli query run '.account | limit(5)' --format json
+dynamics-cli query run '.account | limit(5)' --format xml
+dynamics-cli query run '.account | limit(5)' --format table
 
-# Save query to file
+# Pretty printing
+dynamics-cli query run '.account | limit(5)' --format json --pretty
+
+# Execute query from file
 echo '.account | .revenue > 1000000' > big_accounts.fql
-fql query -f big_accounts.fql
+dynamics-cli query file big_accounts.fql
 
-# Pipe to other tools
-fql query '.contact | .emailaddress1' | grep '@contoso.com'
+# Execute query from file with formatting
+dynamics-cli query file big_accounts.fql --format table --pretty
 
-# Export to CSV
-fql query '.opportunity | .name, .estimatedvalue' --output csv > opportunities.csv
+# Pipe to other tools (using JSON format for processing)
+dynamics-cli query run '.contact | .emailaddress1' --format json | jq -r '.value[].emailaddress1' | grep '@contoso.com'
 
-# With environment selection
-fql query '.account' --env production
+# Extract data for CSV processing
+dynamics-cli query run '.opportunity | .name, .estimatedvalue' --format json | jq -r '.value[] | [.name, .estimatedvalue] | @csv' > opportunities.csv
 
-# Watch mode (live updates)
-fql watch '.case | .statecode == 0 | count()'
+# Using default result limits (automatically limited to configured default)
+dynamics-cli query run '.account'  # Returns default limit (100 records)
+
+# Override default limits
+dynamics-cli query run '.account | limit(500)'  # Returns 500 records
+
+# Complex query with multiple output options
+dynamics-cli query run '.opportunity as o | .estimatedvalue > 100000 | join(.account as a on .customerid | .name) | order(.estimatedvalue desc)' --format table --pretty
+
+# Authentication and environment management
+dynamics-cli auth setup --name production  # Setup authentication for production
+dynamics-cli auth select production        # Switch to production environment
+dynamics-cli auth status                   # Check current authentication
+
+# Entity mapping management (for custom entities)
+dynamics-cli entity add my_custom_entity my_custom_entities  # Add custom entity mapping
+dynamics-cli entity list                                     # View all entity mappings
+
+# Settings management
+dynamics-cli settings set default-query-limit 50  # Set default limit to 50 records
+dynamics-cli settings show                         # View all current settings
+dynamics-cli settings reset default-query-limit   # Reset to default (100)
 ```
 
 ## Complete Examples
@@ -223,23 +254,36 @@ fql watch '.case | .statecode == 0 | count()'
   | c.fullname, c.emailaddress1, c.createdon
 ```
 
-## Parser Implementation Notes (Rust)
+## Parser Implementation (Rust)
 
-The parser should:
-1. Tokenize the FQL string
-2. Build an AST representing the query structure
-3. Transform AST to FetchXML DOM
-4. Serialize to FetchXML string
+The FQL parser is implemented with a complete lexer-parser-codegen pipeline:
 
-Key structures:
-- Entity nodes
-- Filter condition trees  
-- Join relationships
-- Attribute selections
-- Aggregation functions
-- Order/pagination modifiers
+### Implementation Architecture
+1. **Lexer** (`src/fql/lexer.rs`): Tokenizes FQL strings into structured tokens
+2. **Parser** (`src/fql/parser.rs`): Builds Abstract Syntax Tree (AST) from tokens using recursive descent
+3. **AST** (`src/fql/ast.rs`): Type-safe representation of query structure
+4. **XML Generator** (`src/fql/xml.rs`): Converts AST to FetchXML strings
 
-The CLI tool can leverage `clap` for argument parsing and `quick-xml` or similar for FetchXML generation.
+### Key AST Structures
+- `Query` - Root query node with entity, attributes, filters, joins, etc.
+- `Entity` - Entity selection with optional alias
+- `Filter` - Condition trees with logical operators (AND/OR)
+- `Join` - Link-entity relationships with join conditions
+- `Attribute` - Column selections with optional aliases
+- `Aggregation` - Functions like count(), sum(), avg()
+- `OrderBy` - Sort specifications with direction
+
+### Integration Features
+- **Automatic Default Limits**: XML generator applies configurable default limits
+- **Entity Name Resolution**: Integrates with entity mapping system
+- **Live Query Execution**: AST compiles to FetchXML and executes against Dynamics 365
+- **Multiple Output Formats**: JSON, XML, and tabular presentation
+
+### Testing
+Comprehensive test suite in `tests/fql_parser_test.rs` validates the complete pipeline:
+- FQL → Tokens → AST → FetchXML transformation
+- All FQL language features with expected XML output
+- 36+ test cases covering the complete specification
 
 ## Comparison
 
