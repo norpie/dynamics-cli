@@ -3,6 +3,10 @@ name = "dynamics-cli"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "dynamics_cli"
+path = "src/lib.rs"
+
 [dependencies]
 clap = { version = "4.0", features = ["derive"] }
 reqwest = { version = "0.11", features = ["json"] }
@@ -17,3 +21,6 @@ toml = "0.8"
 dirs = "5.0"
 dialoguer = "0.11"
 rpassword = "7.0"
+
+[dev-dependencies]
+# Test dependencies for comprehensive testing

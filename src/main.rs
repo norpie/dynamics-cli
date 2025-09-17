@@ -7,6 +7,7 @@ mod config;
 mod auth;
 mod ui;
 mod commands;
+mod fql;
 
 use cli::Cli;
 use cli::app::Commands;
