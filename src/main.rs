@@ -8,11 +8,14 @@ mod auth;
 mod ui;
 mod commands;
 mod fql;
+mod dynamics;
 
 use cli::Cli;
 use cli::app::Commands;
 use cli::commands::auth::AuthSubcommands;
+use cli::commands::query::QuerySubcommands;
 use commands::auth::{setup_command, select_command, remove_command, status_command};
+use commands::query::{run_command, file_command};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -35,7 +38,13 @@ async fn main() -> Result<()> {
                 AuthSubcommands::Remove { name, force } => remove_command(name, force).await?,
                 AuthSubcommands::Status => status_command().await?,
             }
-        }
+        },
+        Commands::Query(query_commands) => {
+            match query_commands.command {
+                QuerySubcommands::Run { query, format, pretty } => run_command(query, format, pretty).await?,
+                QuerySubcommands::File { path, format, pretty } => file_command(path, format, pretty).await?,
+            }
+        },
     }
 
     Ok(())

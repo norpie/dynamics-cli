@@ -1,5 +1,6 @@
 use clap::{Parser, Subcommand};
 use super::commands::auth::AuthCommands;
+use super::commands::query::QueryCommands;
 
 #[derive(Parser)]
 #[command(name = "dynamics-cli")]
@@ -13,4 +14,6 @@ pub struct Cli {
 pub enum Commands {
     /// Authentication management
     Auth(AuthCommands),
+    /// Execute FQL queries against Dynamics 365
+    Query(QueryCommands),
 }
