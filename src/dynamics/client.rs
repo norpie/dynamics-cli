@@ -2,7 +2,8 @@ use anyhow::Result;
 use log::{debug, info};
 use reqwest::Client;
 use serde_json::Value;
-use crate::config::AuthConfig;
+use crate::config::{AuthConfig, Config};
+use crate::ui::prompts::text_input;
 
 pub struct DynamicsClient {
     client: Client,
@@ -65,7 +66,7 @@ impl DynamicsClient {
     }
 
     /// Extract entity name from FetchXML
-    fn extract_entity_name(&self, fetchxml: &str) -> Result<String> {
+    async fn extract_entity_name(&self, fetchxml: &str) -> Result<String> {
         let doc = roxmltree::Document::parse(fetchxml)
             .map_err(|e| anyhow::anyhow!("Failed to parse FetchXML: {}", e))?;
 
@@ -79,46 +80,89 @@ impl DynamicsClient {
             .ok_or_else(|| anyhow::anyhow!("Entity element missing 'name' attribute"))?;
 
         // Convert to plural form for Web API endpoint
-        let plural_name = self.pluralize_entity_name(entity_name);
+        let plural_name = self.pluralize_entity_name(entity_name).await?;
 
         debug!("Extracted entity name: {} -> {}", entity_name, plural_name);
         Ok(plural_name)
     }
 
     /// Convert entity name to plural form for Dynamics Web API
-    fn pluralize_entity_name(&self, entity_name: &str) -> String {
-        match entity_name {
-            // Common Dynamics entities with irregular plurals
-            "account" => "accounts".to_string(),
-            "contact" => "contacts".to_string(),
-            "lead" => "leads".to_string(),
-            "opportunity" => "opportunities".to_string(),
-            "campaign" => "campaigns".to_string(),
-            "incident" => "incidents".to_string(),
-            "quote" => "quotes".to_string(),
-            "salesorder" => "salesorders".to_string(),
-            "invoice" => "invoices".to_string(),
-            "product" => "products".to_string(),
-            "appointment" => "appointments".to_string(),
-            "task" => "tasks".to_string(),
-            "phonecall" => "phonecalls".to_string(),
-            "email" => "emails".to_string(),
-            "letter" => "letters".to_string(),
-            "fax" => "faxes".to_string(),
-            "activitypointer" => "activitypointers".to_string(),
-            "annotation" => "annotations".to_string(),
-            "systemuser" => "systemusers".to_string(),
-            "team" => "teams".to_string(),
-            "businessunit" => "businessunits".to_string(),
-            "role" => "roles".to_string(),
-
-            // For custom entities or unknown entities, add 's'
-            // Most custom entities follow the pattern: prefix_entityname -> prefix_entitynames
-            name if name.contains('_') => format!("{}s", name),
-
-            // Default: add 's' for standard entities
-            _ => format!("{}s", entity_name),
+    async fn pluralize_entity_name(&self, entity_name: &str) -> Result<String> {
+        // First check config for custom mappings
+        let config = Config::load()?;
+        if let Some(plural) = config.get_entity_mapping(entity_name) {
+            debug!("Found custom mapping: {} -> {}", entity_name, plural);
+            return Ok(plural.clone());
         }
+
+        // Then check built-in mappings
+        let built_in_plural = match entity_name {
+            // Common Dynamics entities with irregular plurals
+            "account" => "accounts",
+            "contact" => "contacts",
+            "lead" => "leads",
+            "opportunity" => "opportunities",
+            "campaign" => "campaigns",
+            "incident" => "incidents",
+            "quote" => "quotes",
+            "salesorder" => "salesorders",
+            "invoice" => "invoices",
+            "product" => "products",
+            "appointment" => "appointments",
+            "task" => "tasks",
+            "phonecall" => "phonecalls",
+            "email" => "emails",
+            "letter" => "letters",
+            "fax" => "faxes",
+            "activitypointer" => "activitypointers",
+            "annotation" => "annotations",
+            "systemuser" => "systemusers",
+            "team" => "teams",
+            "businessunit" => "businessunits",
+            "role" => "roles",
+            _ => "",
+        };
+
+        if !built_in_plural.is_empty() {
+            debug!("Found built-in mapping: {} -> {}", entity_name, built_in_plural);
+            return Ok(built_in_plural.to_string());
+        }
+
+        // Unknown entity - prompt user interactively
+        self.prompt_for_entity_mapping(entity_name).await
+    }
+
+    /// Prompt user for entity mapping when entity is not known
+    async fn prompt_for_entity_mapping(&self, entity_name: &str) -> Result<String> {
+        println!("\nUnknown entity: '{}'", entity_name);
+        println!("Dynamics 365 Web API requires the plural form of entity names.");
+
+        // Suggest default pluralization
+        let suggested_plural = if entity_name.contains('_') {
+            format!("{}s", entity_name)
+        } else {
+            format!("{}s", entity_name)
+        };
+
+        println!("Suggested plural form: '{}'", suggested_plural);
+
+        let prompt = format!("Enter plural form for '{}' (or press Enter for '{}')", entity_name, suggested_plural);
+        let user_input = text_input(&prompt, Some(&suggested_plural))?;
+
+        let plural_name = if user_input.trim().is_empty() {
+            suggested_plural
+        } else {
+            user_input.trim().to_string()
+        };
+
+        // Save the mapping for future use
+        let mut config = Config::load()?;
+        config.add_entity_mapping(entity_name.to_string(), plural_name.clone())?;
+
+        println!("Saved mapping: {} -> {}", entity_name, plural_name);
+        println!("You can manage entity mappings with: dynamics-cli entity");
+
+        Ok(plural_name)
     }
 
     /// Execute a FetchXML query against Dynamics 365
@@ -126,7 +170,7 @@ impl DynamicsClient {
         let token = self.get_access_token().await?.to_string();
 
         // Extract entity name from FetchXML
-        let entity_name = self.extract_entity_name(fetchxml)?;
+        let entity_name = self.extract_entity_name(fetchxml).await?;
 
         // Construct the Web API URL for FetchXML queries
         let mut base_url = self.auth_config.host.clone();

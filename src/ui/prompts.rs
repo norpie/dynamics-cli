@@ -129,3 +129,35 @@ pub fn prompt_environment_selection(env_names: &[String], current_env: Option<&S
 
     Ok(env_names[selection].clone())
 }
+
+/// Simple text input prompt with optional default value
+///
+/// # Arguments
+/// * `prompt` - The prompt message to display
+/// * `default` - Optional default value
+///
+/// # Returns
+/// * `Ok(String)` - User input or default value
+pub fn text_input(prompt: &str, default: Option<&str>) -> Result<String> {
+    let mut input_prompt = Input::<String>::new()
+        .with_prompt(prompt);
+
+    if let Some(default_val) = default {
+        input_prompt = input_prompt.default(default_val.to_string());
+    }
+
+    Ok(input_prompt.interact()?)
+}
+
+/// Simple confirmation prompt using the existing prompt_confirmation function
+///
+/// # Arguments
+/// * `message` - The question to ask the user
+/// * `default` - Whether "Yes" should be the default selection
+///
+/// # Returns
+/// * `Ok(true)` if user selects "Yes"
+/// * `Ok(false)` if user selects "No"
+pub fn confirm(message: &str, default: bool) -> Result<bool> {
+    prompt_confirmation(message, default)
+}

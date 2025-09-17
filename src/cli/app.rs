@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use super::commands::auth::AuthCommands;
 use super::commands::query::QueryCommands;
+use super::commands::entity::EntityCommands;
 
 #[derive(Parser)]
 #[command(name = "dynamics-cli")]
@@ -16,4 +17,6 @@ pub enum Commands {
     Auth(AuthCommands),
     /// Execute FQL queries against Dynamics 365
     Query(QueryCommands),
+    /// Entity name mapping management
+    Entity(EntityCommands),
 }

@@ -18,6 +18,8 @@ pub struct AuthConfig {
 pub struct Config {
     pub current_environment: Option<String>,
     pub environments: HashMap<String, AuthConfig>,
+    #[serde(default)]
+    pub entity_mappings: HashMap<String, String>,
 }
 
 impl Default for Config {
@@ -25,6 +27,7 @@ impl Default for Config {
         Self {
             current_environment: None,
             environments: HashMap::new(),
+            entity_mappings: HashMap::new(),
         }
     }
 }
@@ -137,5 +140,28 @@ impl Config {
         }
 
         self.save()
+    }
+
+    pub fn add_entity_mapping(&mut self, entity_name: String, plural_name: String) -> Result<()> {
+        info!("Adding entity mapping: {} -> {}", entity_name, plural_name);
+        self.entity_mappings.insert(entity_name, plural_name);
+        self.save()
+    }
+
+    pub fn get_entity_mapping(&self, entity_name: &str) -> Option<&String> {
+        self.entity_mappings.get(entity_name)
+    }
+
+    pub fn remove_entity_mapping(&mut self, entity_name: &str) -> Result<()> {
+        if self.entity_mappings.remove(entity_name).is_some() {
+            info!("Removed entity mapping: {}", entity_name);
+            self.save()
+        } else {
+            anyhow::bail!("Entity mapping '{}' not found", entity_name);
+        }
+    }
+
+    pub fn list_entity_mappings(&self) -> &HashMap<String, String> {
+        &self.entity_mappings
     }
 }
