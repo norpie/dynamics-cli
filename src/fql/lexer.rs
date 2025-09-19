@@ -120,27 +120,6 @@ impl std::fmt::Display for ParseError {
 
 impl std::error::Error for ParseError {}
 
-/// Tokenizes FQL input string into a vector of tokens
-///
-/// # Arguments
-/// * `input` - The FQL query string to tokenize
-///
-/// # Returns
-/// * `Ok(Vec<Token>)` - Vector of tokens on success
-/// * `Err(anyhow::Error)` - Tokenization error
-///
-/// # Examples
-/// ```rust
-/// use dynamics_cli::fql::lexer::tokenize;
-///
-/// let tokens = tokenize(".account | .name, .revenue")?;
-/// assert_eq!(tokens[0], Token::Dot);
-/// assert_eq!(tokens[1], Token::Identifier("account".to_string()));
-/// ```
-pub fn tokenize(input: &str) -> Result<Vec<Token>> {
-    let located_tokens = tokenize_with_positions(input)?;
-    Ok(located_tokens.into_iter().map(|lt| lt.token).collect())
-}
 
 /// Tokenizes FQL input with position information
 ///
@@ -150,7 +129,7 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>> {
 /// # Returns
 /// * `Ok(Vec<LocatedToken>)` - Vector of tokens with position info on success
 /// * `Err(anyhow::Error)` - Tokenization error
-pub fn tokenize_with_positions(input: &str) -> Result<Vec<LocatedToken>> {
+pub fn tokenize(input: &str) -> Result<Vec<LocatedToken>> {
     let mut lexer = Lexer::new(input);
     lexer.tokenize()
 }

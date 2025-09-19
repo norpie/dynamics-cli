@@ -2,27 +2,6 @@ use crate::fql::ast::*;
 use crate::fql::lexer::{LocatedToken, ParseError, Token};
 use anyhow::Result;
 
-/// Parses a vector of tokens into an FQL AST
-///
-/// # Arguments
-/// * `tokens` - Vector of tokens from lexer
-///
-/// # Returns
-/// * `Ok(Query)` - Parsed query AST on success
-/// * `Err(anyhow::Error)` - Parse error
-///
-/// # Examples
-/// ```rust
-/// use dynamics_cli::fql::{tokenize, parse};
-///
-/// let tokens = tokenize(".account | .name, .revenue")?;
-/// let query = parse(tokens)?;
-/// assert_eq!(query.entity.name, "account");
-/// ```
-pub fn parse(tokens: Vec<Token>) -> Result<Query> {
-    let mut parser = Parser::new(tokens);
-    parser.parse_query()
-}
 
 /// Parses a vector of located tokens into an FQL AST with position-aware error messages
 ///
@@ -33,12 +12,13 @@ pub fn parse(tokens: Vec<Token>) -> Result<Query> {
 /// # Returns
 /// * `Ok(Query)` - Parsed query AST on success
 /// * `Err(anyhow::Error)` - Parse error with position information
-pub fn parse_with_positions(tokens: Vec<LocatedToken>, input: &str) -> Result<Query> {
+pub fn parse(tokens: Vec<LocatedToken>, input: &str) -> Result<Query> {
     // Extract just the tokens for the regular parser
     let plain_tokens: Vec<Token> = tokens.iter().map(|lt| lt.token.clone()).collect();
 
     // Try parsing with the regular parser
-    match parse(plain_tokens) {
+    let mut parser = Parser::new(plain_tokens);
+    match parser.parse_query() {
         Ok(query) => Ok(query),
         Err(_) => {
             // If parsing failed, try to give better error messages

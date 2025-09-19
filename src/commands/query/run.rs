@@ -1,6 +1,6 @@
 use crate::config::Config;
 use crate::dynamics::DynamicsClient;
-use crate::fql::{parse_with_positions, to_fetchxml, tokenize_with_positions};
+use crate::fql::{parse, to_fetchxml, tokenize};
 use anyhow::Result;
 use log::{debug, info};
 
@@ -32,10 +32,10 @@ pub async fn run_command(query: String, format: String, pretty: bool) -> Result<
     );
 
     // Parse the FQL query
-    let tokens = tokenize_with_positions(&query)?;
+    let tokens = tokenize(&query)?;
     debug!("Tokenized FQL query into {} tokens", tokens.len());
 
-    let ast = parse_with_positions(tokens, &query)?;
+    let ast = parse(tokens, &query)?;
     debug!("Parsed FQL query into AST");
 
     // Generate FetchXML

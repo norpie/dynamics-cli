@@ -18,10 +18,10 @@ fn test_fql_to_xml(fql: &str, expected_xml: &str) -> Result<()> {
 
     // Step 1: Tokenize
     let tokens = tokenize(fql)?;
-    println!("Tokens: {:?}", tokens);
+    println!("Tokens: {:?}", tokens.iter().map(|t| &t.token).collect::<Vec<_>>());
 
     // Step 2: Parse to AST
-    let ast = parse(tokens)?;
+    let ast = parse(tokens, fql)?;
     println!("AST: {:?}", ast);
 
     // Step 3: Generate XML

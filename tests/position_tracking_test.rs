@@ -1,4 +1,4 @@
-use dynamics_cli::fql::{parse_with_positions, tokenize_with_positions};
+use dynamics_cli::fql::{parse, tokenize};
 
 #[test]
 fn test_position_error_formatting() {
@@ -8,7 +8,7 @@ fn test_position_error_formatting() {
     println!("Testing position tracking with invalid FQL: {}", input);
 
     // Step 1: Tokenize with positions
-    let tokens_result = tokenize_with_positions(input);
+    let tokens_result = tokenize(input);
     match tokens_result {
         Ok(_) => panic!("Expected tokenization to fail"),
         Err(e) => {
@@ -44,7 +44,7 @@ fn test_lexer_position_error() {
 
     println!("Testing lexer error with: {}", input);
 
-    let result = tokenize_with_positions(input);
+    let result = tokenize(input);
     match result {
         Ok(_) => panic!("Expected lexer to fail on single '='"),
         Err(e) => {
@@ -68,7 +68,7 @@ fn test_parser_position_error() {
 
     println!("Testing parser error with: {}", input);
 
-    match tokenize_with_positions(input) {
+    match tokenize(input) {
         Ok(_) => panic!("Expected tokenization to fail"),
         Err(e) => {
             println!("Lexer error with position:");
@@ -90,14 +90,14 @@ fn test_successful_parsing_with_positions() {
 
     println!("Testing successful parsing with: {}", input);
 
-    match tokenize_with_positions(input) {
+    match tokenize(input) {
         Ok(tokens) => {
             println!(
                 "Tokens: {:?}",
                 tokens.iter().map(|t| &t.token).collect::<Vec<_>>()
             );
 
-            match parse_with_positions(tokens, input) {
+            match parse(tokens, input) {
                 Ok(query) => {
                     println!("Successfully parsed query: {:#?}", query);
                     assert_eq!(query.entity.name, "account");
