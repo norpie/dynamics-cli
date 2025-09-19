@@ -91,8 +91,6 @@ pub struct ParseError {
 
 impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "error: {}", self.message)?;
-
         // Find the line in the input
         let lines: Vec<&str> = self.input.lines().collect();
         if self.position.line > 0 && self.position.line <= lines.len() {
@@ -102,13 +100,19 @@ impl std::fmt::Display for ParseError {
                 "  --> line {}, column {}",
                 self.position.line, self.position.column
             )?;
-            writeln!(f, "   |")?;
-            writeln!(f, "{:3} | {}", self.position.line, line)?;
+            let line_number_prefix = format!("{:3} | ", self.position.line);
+            writeln!(f, "{}", line_number_prefix.replace(|c: char| c.is_ascii_digit(), " "))?; // Align the separator | with content |
+            writeln!(f, "{}{}", line_number_prefix, line)?;
+            let pointer_prefix = format!("{:3} | ", "");  // Same width as line number prefix but with spaces
             writeln!(
                 f,
-                "   | {}^",
+                "{}{}^",
+                pointer_prefix,
                 " ".repeat(self.position.column.saturating_sub(1))
             )?;
+            writeln!(f, "error: {}", self.message)?;
+        } else {
+            writeln!(f, "error: {}", self.message)?;
         }
         Ok(())
     }
