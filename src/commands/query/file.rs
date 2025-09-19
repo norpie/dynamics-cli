@@ -1,10 +1,10 @@
-use anyhow::Result;
-use log::{info, debug};
-use std::path::PathBuf;
-use std::fs;
-use crate::fql::{tokenize, parse, to_fetchxml};
 use crate::config::Config;
 use crate::dynamics::DynamicsClient;
+use crate::fql::{parse, to_fetchxml, tokenize};
+use anyhow::Result;
+use log::{debug, info};
+use std::fs;
+use std::path::PathBuf;
 
 /// Execute an FQL query from a file
 ///
@@ -38,17 +38,26 @@ pub async fn file_command(path: PathBuf, format: String, pretty: bool) -> Result
     // Trim whitespace and check if file is empty
     let query = query.trim();
     if query.is_empty() {
-        return Err(anyhow::anyhow!("File contains no FQL query: {}", path.display()));
+        return Err(anyhow::anyhow!(
+            "File contains no FQL query: {}",
+            path.display()
+        ));
     }
 
     info!("Executing FQL query: {}", query);
 
     // Load config and get current authentication
     let config = Config::load()?;
-    let auth_config = config.get_current_auth()
-        .ok_or_else(|| anyhow::anyhow!("No authentication environment selected. Run 'dynamics-cli auth setup' first."))?;
+    let auth_config = config.get_current_auth().ok_or_else(|| {
+        anyhow::anyhow!(
+            "No authentication environment selected. Run 'dynamics-cli auth setup' first."
+        )
+    })?;
 
-    info!("Using environment: {}", config.get_current_environment_name().unwrap());
+    info!(
+        "Using environment: {}",
+        config.get_current_environment_name().unwrap()
+    );
 
     // Parse the FQL query
     let tokens = tokenize(query)?;

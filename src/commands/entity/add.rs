@@ -1,6 +1,6 @@
+use crate::config::Config;
 use anyhow::Result;
 use log::info;
-use crate::config::Config;
 
 /// Add a new entity name mapping
 ///
@@ -20,10 +20,16 @@ pub async fn add_command(entity_name: String, plural_name: String) -> Result<()>
     if config.get_entity_mapping(&entity_name).is_some() {
         let existing = config.get_entity_mapping(&entity_name).unwrap();
         if existing == &plural_name {
-            println!("Entity mapping '{}' -> '{}' already exists.", entity_name, plural_name);
+            println!(
+                "Entity mapping '{}' -> '{}' already exists.",
+                entity_name, plural_name
+            );
             return Ok(());
         } else {
-            println!("Entity mapping '{}' already exists with value '{}'.", entity_name, existing);
+            println!(
+                "Entity mapping '{}' already exists with value '{}'.",
+                entity_name, existing
+            );
             println!("Use 'entity update' to change the mapping.");
             anyhow::bail!("Entity mapping already exists");
         }

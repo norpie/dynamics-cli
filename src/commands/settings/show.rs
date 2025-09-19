@@ -1,6 +1,6 @@
+use crate::config::Config;
 use anyhow::Result;
 use log::info;
-use crate::config::Config;
 
 /// Show all current settings
 ///

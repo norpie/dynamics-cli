@@ -1,8 +1,8 @@
 use anyhow::Result;
-use log::{info, error};
+use log::{error, info};
 
-use crate::config::Config;
 use crate::auth::DynamicsAuthClient;
+use crate::config::Config;
 
 pub async fn status_command() -> Result<()> {
     info!("Executing auth status command");
@@ -39,17 +39,20 @@ pub async fn status_command() -> Result<()> {
 
         println!("\nTesting authentication...");
         let auth_client = DynamicsAuthClient::new();
-        match auth_client.test_auth(
-            &current_auth.host,
-            &current_auth.username,
-            &current_auth.password,
-            &current_auth.client_id,
-            &current_auth.client_secret,
-        ).await {
+        match auth_client
+            .test_auth(
+                &current_auth.host,
+                &current_auth.username,
+                &current_auth.password,
+                &current_auth.client_id,
+                &current_auth.client_secret,
+            )
+            .await
+        {
             Ok(()) => {
                 info!("Authentication test successful");
                 println!("✓ Authentication successful");
-            },
+            }
             Err(e) => {
                 error!("Authentication test failed: {}", e);
                 println!("✗ Authentication failed: {}", e);

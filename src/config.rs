@@ -14,8 +14,7 @@ pub struct AuthConfig {
     pub client_secret: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Config {
     pub current_environment: Option<String>,
     pub environments: HashMap<String, AuthConfig>,
@@ -34,7 +33,6 @@ pub struct Settings {
 fn default_query_limit() -> u32 {
     100
 }
-
 
 impl Default for Settings {
     fn default() -> Self {
@@ -83,7 +81,10 @@ impl Config {
         let config: Config = toml::from_str(&config_content)
             .with_context(|| format!("Failed to parse config file: {:?}", config_path))?;
 
-        debug!("Loaded config with {} environments", config.environments.len());
+        debug!(
+            "Loaded config with {} environments",
+            config.environments.len()
+        );
         Ok(config)
     }
 
@@ -91,8 +92,8 @@ impl Config {
         let config_path = Self::get_config_path()?;
         debug!("Saving config to: {:?}", config_path);
 
-        let config_content = toml::to_string_pretty(self)
-            .context("Failed to serialize config to TOML")?;
+        let config_content =
+            toml::to_string_pretty(self).context("Failed to serialize config to TOML")?;
 
         fs::write(&config_path, config_content)
             .with_context(|| format!("Failed to write config file: {:?}", config_path))?;

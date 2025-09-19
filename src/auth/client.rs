@@ -24,9 +24,13 @@ impl DynamicsAuthClient {
         client_id: &str,
         client_secret: &str,
     ) -> Result<()> {
-        debug!("Attempting authentication to {} with client_id {}", host, client_id);
+        debug!(
+            "Attempting authentication to {} with client_id {}",
+            host, client_id
+        );
 
-        let response = self.client
+        let response = self
+            .client
             .post(&self.token_url)
             .form(&[
                 ("grant_type", "password"),

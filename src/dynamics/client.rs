@@ -1,9 +1,9 @@
+use crate::config::{AuthConfig, Config};
+use crate::ui::prompts::text_input;
 use anyhow::Result;
 use log::{debug, info};
 use reqwest::Client;
 use serde_json::Value;
-use crate::config::{AuthConfig, Config};
-use crate::ui::prompts::text_input;
 
 pub struct DynamicsClient {
     client: Client,
@@ -32,11 +32,15 @@ impl DynamicsClient {
     /// Authenticate with Azure AD to get access token
     async fn authenticate(&mut self) -> Result<()> {
         info!("Authenticating with Dynamics 365...");
-        debug!("Host: {}, Client ID: {}", self.auth_config.host, self.auth_config.client_id);
+        debug!(
+            "Host: {}, Client ID: {}",
+            self.auth_config.host, self.auth_config.client_id
+        );
 
         let token_url = "https://login.windows.net/common/oauth2/token";
 
-        let response = self.client
+        let response = self
+            .client
             .post(token_url)
             .form(&[
                 ("grant_type", "password"),
@@ -60,7 +64,10 @@ impl DynamicsClient {
             }
             anyhow::bail!("Authentication failed: No access token in response");
         } else {
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
             anyhow::bail!("Authentication failed: {}", error_text)
         }
     }
@@ -71,12 +78,14 @@ impl DynamicsClient {
             .map_err(|e| anyhow::anyhow!("Failed to parse FetchXML: {}", e))?;
 
         // Find the entity element
-        let entity_node = doc.descendants()
+        let entity_node = doc
+            .descendants()
             .find(|n| n.has_tag_name("entity"))
             .ok_or_else(|| anyhow::anyhow!("No entity element found in FetchXML"))?;
 
         // Get the entity name attribute
-        let entity_name = entity_node.attribute("name")
+        let entity_name = entity_node
+            .attribute("name")
             .ok_or_else(|| anyhow::anyhow!("Entity element missing 'name' attribute"))?;
 
         // Convert to plural form for Web API endpoint
@@ -124,7 +133,10 @@ impl DynamicsClient {
         };
 
         if !built_in_plural.is_empty() {
-            debug!("Found built-in mapping: {} -> {}", entity_name, built_in_plural);
+            debug!(
+                "Found built-in mapping: {} -> {}",
+                entity_name, built_in_plural
+            );
             return Ok(built_in_plural.to_string());
         }
 
@@ -142,7 +154,10 @@ impl DynamicsClient {
 
         println!("Suggested plural form: '{}'", suggested_plural);
 
-        let prompt = format!("Enter plural form for '{}' (or press Enter for '{}')", entity_name, suggested_plural);
+        let prompt = format!(
+            "Enter plural form for '{}' (or press Enter for '{}')",
+            entity_name, suggested_plural
+        );
         let user_input = text_input(&prompt, Some(&suggested_plural))?;
 
         let plural_name = if user_input.trim().is_empty() {
@@ -182,7 +197,8 @@ impl DynamicsClient {
         let encoded_fetchxml = urlencoding::encode(fetchxml);
         let full_url = format!("{}?fetchXml={}", query_url, encoded_fetchxml);
 
-        let response = self.client
+        let response = self
+            .client
             .get(&full_url)
             .header("Authorization", format!("Bearer {}", token))
             .header("Accept", "application/json")
@@ -214,21 +230,23 @@ impl DynamicsClient {
                 } else {
                     Ok(serde_json::to_string(&result)?)
                 }
-            },
+            }
             "xml" => {
                 // For XML format, return the original FetchXML along with results
                 if pretty {
-                    Ok(format!("<!-- FetchXML Query -->\n{}\n\n<!-- Results -->\n{}",
-                              fetchxml,
-                              serde_json::to_string_pretty(&result)?))
+                    Ok(format!(
+                        "<!-- FetchXML Query -->\n{}\n\n<!-- Results -->\n{}",
+                        fetchxml,
+                        serde_json::to_string_pretty(&result)?
+                    ))
                 } else {
                     Ok(format!("{}\n{}", fetchxml, serde_json::to_string(&result)?))
                 }
-            },
+            }
             "table" => {
                 // Format as a simple table
                 self.format_as_table(&result)
-            },
+            }
             _ => anyhow::bail!("Unsupported format: {}", format),
         }
     }
@@ -264,17 +282,20 @@ impl DynamicsClient {
             // Data rows
             for record in values {
                 if let Some(obj) = record.as_object() {
-                    let row: Vec<String> = column_vec.iter().map(|col| {
-                        obj.get(col)
-                            .map(|v| match v {
-                                Value::String(s) => s.clone(),
-                                Value::Number(n) => n.to_string(),
-                                Value::Bool(b) => b.to_string(),
-                                Value::Null => "null".to_string(),
-                                _ => "...".to_string(),
-                            })
-                            .unwrap_or_else(|| "".to_string())
-                    }).collect();
+                    let row: Vec<String> = column_vec
+                        .iter()
+                        .map(|col| {
+                            obj.get(col)
+                                .map(|v| match v {
+                                    Value::String(s) => s.clone(),
+                                    Value::Number(n) => n.to_string(),
+                                    Value::Bool(b) => b.to_string(),
+                                    Value::Null => "null".to_string(),
+                                    _ => "...".to_string(),
+                                })
+                                .unwrap_or_else(|| "".to_string())
+                        })
+                        .collect();
                     output.push_str(&format!("{}\n", row.join(" | ")));
                 }
             }

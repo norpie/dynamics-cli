@@ -1,7 +1,7 @@
-use anyhow::Result;
-use log::info;
 use crate::config::Config;
 use crate::ui::prompts::confirm;
+use anyhow::Result;
+use log::info;
 
 /// Remove an entity name mapping
 ///
@@ -28,7 +28,10 @@ pub async fn remove_command(entity_name: String, force: bool) -> Result<()> {
 
     // Confirm removal unless force flag is used
     if !force {
-        let message = format!("Remove entity mapping '{}' -> '{}'?", entity_name, plural_name);
+        let message = format!(
+            "Remove entity mapping '{}' -> '{}'?",
+            entity_name, plural_name
+        );
         if !confirm(&message, false)? {
             println!("Operation cancelled.");
             return Ok(());

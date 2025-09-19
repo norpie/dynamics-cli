@@ -1,6 +1,6 @@
+use crate::auth::credentials::Credentials;
 use anyhow::Result;
 use dialoguer::{Input, Password, Select};
-use crate::auth::credentials::Credentials;
 
 pub fn prompt_environment_name(default_name: Option<String>) -> Result<String> {
     if let Some(name) = default_name {
@@ -38,21 +38,21 @@ pub fn prompt_confirmation(prompt: &str, default_yes: bool) -> Result<bool> {
 pub fn prompt_overwrite_confirmation(env_name: &str) -> Result<bool> {
     prompt_confirmation(
         &format!("Environment '{}' already exists. Overwrite?", env_name),
-        false // Default to "No" for safety
+        false, // Default to "No" for safety
     )
 }
 
 pub fn prompt_save_anyway_confirmation() -> Result<bool> {
     prompt_confirmation(
         "Save configuration anyway?",
-        false // Default to "No" for safety
+        false, // Default to "No" for safety
     )
 }
 
 pub fn prompt_remove_confirmation(env_name: &str) -> Result<bool> {
     prompt_confirmation(
         &format!("Remove environment '{}'?", env_name),
-        false // Default to "No" for safety
+        false, // Default to "No" for safety
     )
 }
 
@@ -74,17 +74,13 @@ pub fn prompt_credentials(
     let username_val = if let Some(u) = username {
         u
     } else {
-        Input::<String>::new()
-            .with_prompt("Username")
-            .interact()?
+        Input::<String>::new().with_prompt("Username").interact()?
     };
 
     let password_val = if let Some(p) = password {
         p
     } else {
-        Password::new()
-            .with_prompt("Password")
-            .interact()?
+        Password::new().with_prompt("Password").interact()?
     };
 
     let client_id_val = if let Some(c) = client_id {
@@ -112,7 +108,10 @@ pub fn prompt_credentials(
     })
 }
 
-pub fn prompt_environment_selection(env_names: &[String], current_env: Option<&String>) -> Result<String> {
+pub fn prompt_environment_selection(
+    env_names: &[String],
+    current_env: Option<&String>,
+) -> Result<String> {
     let mut items = Vec::new();
     for env in env_names {
         if current_env == Some(env) {
@@ -139,8 +138,7 @@ pub fn prompt_environment_selection(env_names: &[String], current_env: Option<&S
 /// # Returns
 /// * `Ok(String)` - User input or default value
 pub fn text_input(prompt: &str, default: Option<&str>) -> Result<String> {
-    let mut input_prompt = Input::<String>::new()
-        .with_prompt(prompt);
+    let mut input_prompt = Input::<String>::new().with_prompt(prompt);
 
     if let Some(default_val) = default {
         input_prompt = input_prompt.default(default_val.to_string());

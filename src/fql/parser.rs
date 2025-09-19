@@ -1,6 +1,6 @@
-use anyhow::Result;
 use crate::fql::ast::*;
-use crate::fql::lexer::{Token, LocatedToken, ParseError};
+use crate::fql::lexer::{LocatedToken, ParseError, Token};
+use anyhow::Result;
 
 /// Parses a vector of tokens into an FQL AST
 ///
@@ -52,11 +52,17 @@ pub fn parse_with_positions(tokens: Vec<LocatedToken>, input: &str) -> Result<Qu
 
             // Check for incomplete expressions (e.g., ".account | .name ==")
             if let Some(last_token) = tokens.last() {
-                if matches!(last_token.token, Token::Equal | Token::NotEqual | Token::GreaterThan | Token::LessThan) {
-                    error_message = "Incomplete expression: expected value after operator".to_string();
+                if matches!(
+                    last_token.token,
+                    Token::Equal | Token::NotEqual | Token::GreaterThan | Token::LessThan
+                ) {
+                    error_message =
+                        "Incomplete expression: expected value after operator".to_string();
                     error_position = last_token.position.clone();
                 } else if matches!(last_token.token, Token::And | Token::Or) {
-                    error_message = "Incomplete expression: expected condition after logical operator".to_string();
+                    error_message =
+                        "Incomplete expression: expected condition after logical operator"
+                            .to_string();
                     error_position = last_token.position.clone();
                 }
             }
@@ -103,7 +109,10 @@ impl Parser {
     /// Parse the main query structure
     fn parse_query(&mut self) -> Result<Query> {
         let mut query = Query {
-            entity: Entity { name: String::new(), alias: None },
+            entity: Entity {
+                name: String::new(),
+                alias: None,
+            },
             attributes: Vec::new(),
             filters: Vec::new(),
             joins: Vec::new(),
@@ -140,41 +149,41 @@ impl Parser {
                 SectionType::Attributes => {
                     let attrs = self.parse_attributes()?;
                     query.attributes.extend(attrs);
-                },
+                }
                 SectionType::Filters => {
                     let filter = self.parse_filter()?;
                     query.filters.push(filter);
-                },
+                }
                 SectionType::Aggregations => {
                     let aggs = self.parse_aggregations()?;
                     query.aggregations.extend(aggs);
-                },
+                }
                 SectionType::GroupBy => {
                     query.group_by = self.parse_group_by()?;
-                },
+                }
                 SectionType::Having => {
                     query.having = self.parse_having()?;
-                },
+                }
                 SectionType::OrderBy => {
                     query.order = self.parse_order_by()?;
-                },
+                }
                 SectionType::Joins => {
                     let joins = self.parse_joins()?;
                     query.joins.extend(joins);
-                },
+                }
                 SectionType::Limit => {
                     query.limit = self.parse_limit()?;
-                },
+                }
                 SectionType::Page => {
                     query.page = self.parse_page()?;
-                },
+                }
                 SectionType::Distinct => {
                     self.advance();
                     query.distinct = true;
-                },
+                }
                 SectionType::Options => {
                     query.options = self.parse_options()?;
-                },
+                }
             }
         }
 
@@ -195,9 +204,8 @@ impl Parser {
             Some(Token::Options) => Ok(SectionType::Options),
 
             // Aggregation functions
-            Some(Token::Count) | Some(Token::Sum) | Some(Token::Avg) | Some(Token::Min) | Some(Token::Max) => {
-                Ok(SectionType::Aggregations)
-            },
+            Some(Token::Count) | Some(Token::Sum) | Some(Token::Avg) | Some(Token::Min)
+            | Some(Token::Max) => Ok(SectionType::Aggregations),
 
             // Parentheses indicate grouped filter expressions
             Some(Token::LeftParen) => Ok(SectionType::Filters),
@@ -206,12 +214,12 @@ impl Parser {
             Some(Token::Dot) => {
                 // Look ahead to see if this is a filter (.attr operator value) or attribute (.attr, .attr2)
                 self.lookahead_for_filter_or_attribute()
-            },
+            }
 
             Some(Token::Wildcard) => {
                 // .* is always attributes
                 Ok(SectionType::Attributes)
-            },
+            }
 
             Some(Token::Identifier(_)) => {
                 // Could be a filter condition like "attr > value" or aggregation alias reference
@@ -222,9 +230,12 @@ impl Parser {
                     // No operator found - could be entity-qualified attributes like "c.fullname, c.lastname"
                     Ok(SectionType::Attributes)
                 }
-            },
+            }
 
-            _ => Err(anyhow::anyhow!("Unexpected token in query section: {:?}", self.peek())),
+            _ => Err(anyhow::anyhow!(
+                "Unexpected token in query section: {:?}",
+                self.peek()
+            )),
         }
     }
 
@@ -243,15 +254,21 @@ impl Parser {
         if pos < self.tokens.len() {
             match &self.tokens[pos] {
                 // These indicate a filter condition
-                Token::Equal | Token::NotEqual | Token::GreaterThan | Token::GreaterEqual |
-                Token::LessThan | Token::LessEqual | Token::Like | Token::NotLike |
-                Token::BeginsWith | Token::EndsWith | Token::In | Token::NotIn | Token::Between => {
-                    Ok(SectionType::Filters)
-                },
+                Token::Equal
+                | Token::NotEqual
+                | Token::GreaterThan
+                | Token::GreaterEqual
+                | Token::LessThan
+                | Token::LessEqual
+                | Token::Like
+                | Token::NotLike
+                | Token::BeginsWith
+                | Token::EndsWith
+                | Token::In
+                | Token::NotIn
+                | Token::Between => Ok(SectionType::Filters),
                 // These indicate attribute selection
-                Token::Comma | Token::Pipe | Token::As | Token::Eof => {
-                    Ok(SectionType::Attributes)
-                },
+                Token::Comma | Token::Pipe | Token::As | Token::Eof => Ok(SectionType::Attributes),
                 // Default to attributes if ambiguous
                 _ => Ok(SectionType::Attributes),
             }
@@ -280,10 +297,21 @@ impl Parser {
 
         // Check for operator
         if pos < self.tokens.len() {
-            matches!(self.tokens[pos],
-                Token::Equal | Token::NotEqual | Token::GreaterThan | Token::GreaterEqual |
-                Token::LessThan | Token::LessEqual | Token::Like | Token::NotLike |
-                Token::BeginsWith | Token::EndsWith | Token::In | Token::NotIn | Token::Between
+            matches!(
+                self.tokens[pos],
+                Token::Equal
+                    | Token::NotEqual
+                    | Token::GreaterThan
+                    | Token::GreaterEqual
+                    | Token::LessThan
+                    | Token::LessEqual
+                    | Token::Like
+                    | Token::NotLike
+                    | Token::BeginsWith
+                    | Token::EndsWith
+                    | Token::In
+                    | Token::NotIn
+                    | Token::Between
             )
         } else {
             false
@@ -296,7 +324,7 @@ impl Parser {
 
         let name = match self.advance() {
             Some(Token::Identifier(name)) => name.clone(),
-            _ => return Err(anyhow::anyhow!("Expected entity name after '.'"))
+            _ => return Err(anyhow::anyhow!("Expected entity name after '.'")),
         };
 
         let mut alias = None;
@@ -360,7 +388,9 @@ impl Parser {
                 if let Some(Token::Identifier(attr_name)) = self.advance() {
                     name = attr_name.clone();
                 } else {
-                    return Err(anyhow::anyhow!("Expected attribute name after entity alias"));
+                    return Err(anyhow::anyhow!(
+                        "Expected attribute name after entity alias"
+                    ));
                 }
             } else {
                 // This was just the attribute name
@@ -388,7 +418,11 @@ impl Parser {
             }
         }
 
-        Ok(Attribute { name, alias, entity_alias })
+        Ok(Attribute {
+            name,
+            alias,
+            entity_alias,
+        })
     }
 
     /// Parse filter conditions
@@ -416,12 +450,12 @@ impl Parser {
                     self.advance();
                     let right = self.parse_filter_term()?;
                     left = Filter::And(vec![left, right]);
-                },
+                }
                 Token::Or => {
                     self.advance();
                     let right = self.parse_filter_term()?;
                     left = Filter::Or(vec![left, right]);
-                },
+                }
                 _ => break,
             }
         }
@@ -462,7 +496,9 @@ impl Parser {
                 if let Some(Token::Identifier(attr_name)) = self.advance() {
                     attr_name.clone()
                 } else {
-                    return Err(anyhow::anyhow!("Expected attribute name after entity alias"));
+                    return Err(anyhow::anyhow!(
+                        "Expected attribute name after entity alias"
+                    ));
                 }
             } else {
                 first_part
@@ -490,9 +526,17 @@ impl Parser {
                 if let FilterValue::List(values) = list_value {
                     if values.len() == 2 {
                         // Use a special marker to indicate this should use separate value elements
-                        (operator, FilterValue::Range(Box::new(values[0].clone()), Box::new(values[1].clone())))
+                        (
+                            operator,
+                            FilterValue::Range(
+                                Box::new(values[0].clone()),
+                                Box::new(values[1].clone()),
+                            ),
+                        )
                     } else {
-                        return Err(anyhow::anyhow!("Between operator with list syntax requires exactly 2 values"));
+                        return Err(anyhow::anyhow!(
+                            "Between operator with list syntax requires exactly 2 values"
+                        ));
                     }
                 } else {
                     return Err(anyhow::anyhow!("Expected list for between operator"));
@@ -503,7 +547,10 @@ impl Parser {
                 self.expect(Token::And)?;
                 let end_value = self.parse_filter_value()?;
                 // Use a special marker to distinguish traditional vs list syntax
-                (operator, FilterValue::RangeTraditional(Box::new(start_value), Box::new(end_value)))
+                (
+                    operator,
+                    FilterValue::RangeTraditional(Box::new(start_value), Box::new(end_value)),
+                )
             }
         } else {
             (operator, self.parse_filter_value()?)
@@ -525,7 +572,7 @@ impl Parser {
             match token {
                 Token::Join | Token::LeftJoin => {
                     joins.push(self.parse_join()?);
-                },
+                }
                 _ => break,
             }
         }
@@ -571,12 +618,22 @@ impl Parser {
                         // Look ahead to see if this is a filter (has an operator after the attribute)
                         while lookahead < self.tokens.len() {
                             match &self.tokens[lookahead] {
-                                Token::Equal | Token::NotEqual | Token::GreaterThan | Token::GreaterEqual |
-                                Token::LessThan | Token::LessEqual | Token::Like | Token::NotLike |
-                                Token::BeginsWith | Token::EndsWith | Token::In | Token::NotIn | Token::Between => {
+                                Token::Equal
+                                | Token::NotEqual
+                                | Token::GreaterThan
+                                | Token::GreaterEqual
+                                | Token::LessThan
+                                | Token::LessEqual
+                                | Token::Like
+                                | Token::NotLike
+                                | Token::BeginsWith
+                                | Token::EndsWith
+                                | Token::In
+                                | Token::NotIn
+                                | Token::Between => {
                                     is_filter = true;
                                     break;
-                                },
+                                }
                                 Token::Comma | Token::RightParen => break,
                                 _ => lookahead += 1,
                             }
@@ -589,11 +646,11 @@ impl Parser {
                             let attrs = self.parse_attributes()?;
                             attributes.extend(attrs);
                         }
-                    },
+                    }
                     Some(Token::Wildcard) => {
                         let attrs = self.parse_attributes()?;
                         attributes.extend(attrs);
-                    },
+                    }
                     _ => {
                         let filter = self.parse_filter()?;
                         filters.push(filter);
@@ -626,12 +683,18 @@ impl Parser {
             self.expect(Token::Dot)?;
             Some(alias)
         } else {
-            return Err(anyhow::anyhow!("Expected source entity alias in join condition"));
+            return Err(anyhow::anyhow!(
+                "Expected source entity alias in join condition"
+            ));
         };
 
         let from_attribute = match self.advance() {
             Some(Token::Identifier(name)) => name.clone(),
-            _ => return Err(anyhow::anyhow!("Expected source attribute name in join condition")),
+            _ => {
+                return Err(anyhow::anyhow!(
+                    "Expected source attribute name in join condition"
+                ));
+            }
         };
 
         // Expect arrow (->)
@@ -645,12 +708,18 @@ impl Parser {
             self.expect(Token::Dot)?;
             Some(alias)
         } else {
-            return Err(anyhow::anyhow!("Expected target entity alias in join condition"));
+            return Err(anyhow::anyhow!(
+                "Expected target entity alias in join condition"
+            ));
         };
 
         let to_attribute = match self.advance() {
             Some(Token::Identifier(name)) => name.clone(),
-            _ => return Err(anyhow::anyhow!("Expected target attribute name in join condition")),
+            _ => {
+                return Err(anyhow::anyhow!(
+                    "Expected target attribute name in join condition"
+                ));
+            }
         };
 
         Ok(JoinCondition {
@@ -660,7 +729,6 @@ impl Parser {
             to_entity_alias,
         })
     }
-
 
     /// Parse aggregation functions
     fn parse_aggregations(&mut self) -> Result<Vec<Aggregation>> {
@@ -805,7 +873,11 @@ impl Parser {
             self.advance(); // consume '.'
             match self.advance() {
                 Some(Token::Identifier(name)) => name.clone(),
-                _ => return Err(anyhow::anyhow!("Expected attribute name after '.' in order by")),
+                _ => {
+                    return Err(anyhow::anyhow!(
+                        "Expected attribute name after '.' in order by"
+                    ));
+                }
             }
         } else if let Some(Token::Identifier(name)) = self.peek() {
             // Alias reference like avg_revenue (from aggregation alias)
@@ -813,7 +885,9 @@ impl Parser {
             self.advance();
             name
         } else {
-            return Err(anyhow::anyhow!("Expected attribute name or alias in order by"));
+            return Err(anyhow::anyhow!(
+                "Expected attribute name or alias in order by"
+            ));
         };
 
         // Parse optional direction
@@ -821,11 +895,11 @@ impl Parser {
             Some(Token::Asc) => {
                 self.advance();
                 OrderDirection::Ascending
-            },
+            }
             Some(Token::Desc) => {
                 self.advance();
                 OrderDirection::Descending
-            },
+            }
             _ => OrderDirection::Ascending, // default
         };
 
@@ -899,7 +973,11 @@ impl Parser {
         };
 
         // Expect ':' separator
-        if self.peek().map(|t| matches!(t, Token::Identifier(s) if s == ":")).unwrap_or(false) {
+        if self
+            .peek()
+            .map(|t| matches!(t, Token::Identifier(s) if s == ":"))
+            .unwrap_or(false)
+        {
             self.advance(); // consume ':'
         } else {
             return Err(anyhow::anyhow!("Expected ':' after option name"));
@@ -907,25 +985,27 @@ impl Parser {
 
         // Parse option value
         match option_name.as_str() {
-            "nolock" => {
-                match self.advance() {
-                    Some(Token::True) => options.no_lock = true,
-                    Some(Token::False) => options.no_lock = false,
-                    _ => return Err(anyhow::anyhow!("Expected boolean value for nolock option")),
+            "nolock" => match self.advance() {
+                Some(Token::True) => options.no_lock = true,
+                Some(Token::False) => options.no_lock = false,
+                _ => return Err(anyhow::anyhow!("Expected boolean value for nolock option")),
+            },
+            "returntotalrecordcount" => match self.advance() {
+                Some(Token::True) => options.return_total_record_count = true,
+                Some(Token::False) => options.return_total_record_count = false,
+                _ => {
+                    return Err(anyhow::anyhow!(
+                        "Expected boolean value for returntotalrecordcount option"
+                    ));
                 }
             },
-            "returntotalrecordcount" => {
-                match self.advance() {
-                    Some(Token::True) => options.return_total_record_count = true,
-                    Some(Token::False) => options.return_total_record_count = false,
-                    _ => return Err(anyhow::anyhow!("Expected boolean value for returntotalrecordcount option")),
-                }
-            },
-            "formatted" => {
-                match self.advance() {
-                    Some(Token::True) => options.formatted = true,
-                    Some(Token::False) => options.formatted = false,
-                    _ => return Err(anyhow::anyhow!("Expected boolean value for formatted option")),
+            "formatted" => match self.advance() {
+                Some(Token::True) => options.formatted = true,
+                Some(Token::False) => options.formatted = false,
+                _ => {
+                    return Err(anyhow::anyhow!(
+                        "Expected boolean value for formatted option"
+                    ));
                 }
             },
             _ => {
@@ -969,7 +1049,7 @@ impl Parser {
 
                 self.expect(Token::RightBracket)?;
                 Ok(FilterValue::List(values))
-            },
+            }
             _ => Err(anyhow::anyhow!("Expected filter value")),
         }
     }
@@ -1000,10 +1080,17 @@ impl Parser {
             if std::mem::discriminant(token) == std::mem::discriminant(&expected) {
                 Ok(())
             } else {
-                Err(anyhow::anyhow!("Expected {:?}, found {:?}", expected, token))
+                Err(anyhow::anyhow!(
+                    "Expected {:?}, found {:?}",
+                    expected,
+                    token
+                ))
             }
         } else {
-            Err(anyhow::anyhow!("Expected {:?}, found end of input", expected))
+            Err(anyhow::anyhow!(
+                "Expected {:?}, found end of input",
+                expected
+            ))
         }
     }
 
@@ -1032,4 +1119,3 @@ impl Parser {
         self.advance().cloned()
     }
 }
-

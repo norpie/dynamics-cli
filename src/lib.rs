@@ -1,5 +1,5 @@
-pub mod fql;
-pub mod config;
 pub mod auth;
-pub mod ui;
+pub mod config;
 pub mod dynamics;
+pub mod fql;
+pub mod ui;

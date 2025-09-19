@@ -1,9 +1,9 @@
-use dynamics_cli::fql::{tokenize_with_positions, parse_with_positions};
+use dynamics_cli::fql::{parse_with_positions, tokenize_with_positions};
 
 #[test]
 fn test_position_error_formatting() {
     // Test with a lexer error that has position information
-    let input = ".account | .name % value";  // Invalid '%' character
+    let input = ".account | .name % value"; // Invalid '%' character
 
     println!("Testing position tracking with invalid FQL: {}", input);
 
@@ -17,10 +17,22 @@ fn test_position_error_formatting() {
 
             // Check if this is our custom ParseError with position info
             let error_str = format!("{}", e);
-            assert!(error_str.contains("error:"), "Error should be formatted nicely");
-            assert!(error_str.contains("line"), "Error should contain line information");
-            assert!(error_str.contains("column"), "Error should contain column information");
-            assert!(error_str.contains("^"), "Error should contain position indicator");
+            assert!(
+                error_str.contains("error:"),
+                "Error should be formatted nicely"
+            );
+            assert!(
+                error_str.contains("line"),
+                "Error should contain line information"
+            );
+            assert!(
+                error_str.contains("column"),
+                "Error should contain column information"
+            );
+            assert!(
+                error_str.contains("^"),
+                "Error should contain position indicator"
+            );
         }
     }
 }
@@ -28,7 +40,7 @@ fn test_position_error_formatting() {
 #[test]
 fn test_lexer_position_error() {
     // Test with invalid characters to trigger lexer errors
-    let input = ".account | .name = value";  // Single '=' should trigger error
+    let input = ".account | .name = value"; // Single '=' should trigger error
 
     println!("Testing lexer error with: {}", input);
 
@@ -52,7 +64,7 @@ fn test_lexer_position_error() {
 #[test]
 fn test_parser_position_error() {
     // Test with a lexer error to show another example of position tracking
-    let input = ".account | .name $ \"test\"";  // Invalid '$' character
+    let input = ".account | .name $ \"test\""; // Invalid '$' character
 
     println!("Testing parser error with: {}", input);
 
@@ -80,7 +92,10 @@ fn test_successful_parsing_with_positions() {
 
     match tokenize_with_positions(input) {
         Ok(tokens) => {
-            println!("Tokens: {:?}", tokens.iter().map(|t| &t.token).collect::<Vec<_>>());
+            println!(
+                "Tokens: {:?}",
+                tokens.iter().map(|t| &t.token).collect::<Vec<_>>()
+            );
 
             match parse_with_positions(tokens, input) {
                 Ok(query) => {

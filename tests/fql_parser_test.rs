@@ -1,5 +1,5 @@
 use anyhow::Result;
-use dynamics_cli::fql::{tokenize, parse, to_fetchxml};
+use dynamics_cli::fql::{parse, to_fetchxml, tokenize};
 
 /// Normalize XML for comparison by removing extra whitespace and newlines
 fn normalize_xml(xml: &str) -> String {
@@ -458,7 +458,8 @@ fn test_options_formatted() {
 
 #[test]
 fn test_nested_conditions() {
-    let fql = ".opportunity | (.estimatedvalue > 100000 and (.statecode == 0 or .closeprobability > 80))";
+    let fql =
+        ".opportunity | (.estimatedvalue > 100000 and (.statecode == 0 or .closeprobability > 80))";
     let expected_xml = r#"<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false">
   <entity name="opportunity">
     <filter type="and">

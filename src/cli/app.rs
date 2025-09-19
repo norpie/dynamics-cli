@@ -1,8 +1,8 @@
-use clap::{Parser, Subcommand};
 use super::commands::auth::AuthCommands;
-use super::commands::query::QueryCommands;
 use super::commands::entity::EntityCommands;
+use super::commands::query::QueryCommands;
 use super::commands::settings::SettingsCommands;
+use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "dynamics-cli")]

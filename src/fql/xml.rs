@@ -1,5 +1,5 @@
-use anyhow::Result;
 use crate::fql::ast::*;
+use anyhow::Result;
 
 /// Converts an FQL AST into FetchXML string
 ///
@@ -51,9 +51,13 @@ impl XmlGenerator {
 
     /// Generate fetch element with attributes
     fn generate_fetch_element(&mut self, query: &Query) -> Result<()> {
-        let mut tag_str = "<fetch version=\"1.0\" output-format=\"xml-platform\" mapping=\"logical\"".to_string();
+        let mut tag_str =
+            "<fetch version=\"1.0\" output-format=\"xml-platform\" mapping=\"logical\"".to_string();
 
-        tag_str.push_str(&format!(" distinct=\"{}\"", if query.distinct { "true" } else { "false" }));
+        tag_str.push_str(&format!(
+            " distinct=\"{}\"",
+            if query.distinct { "true" } else { "false" }
+        ));
 
         // Add aggregate attribute if query has aggregations or group by
         if !query.aggregations.is_empty() || !query.group_by.is_empty() {
@@ -109,12 +113,14 @@ impl XmlGenerator {
         }
 
         // Generate filters that belong to the main entity (no entity alias or matching main entity alias)
-        let main_entity_filters: Vec<&Filter> = query.filters.iter()
+        let main_entity_filters: Vec<&Filter> = query
+            .filters
+            .iter()
             .filter(|filter| {
                 match filter {
                     Filter::Condition { entity_alias, .. } => {
                         entity_alias.is_none() || entity_alias.as_ref() == entity.alias.as_ref()
-                    },
+                    }
                     Filter::And(_) | Filter::Or(_) => true, // Complex filters stay at main level for now
                 }
             })
@@ -232,7 +238,7 @@ impl XmlGenerator {
             match &filters[0] {
                 Filter::And(_) | Filter::Or(_) => {
                     self.generate_filter(&filters[0])?;
-                },
+                }
                 _ => {
                     // Single condition - wrap in filter
                     self.add_opening_tag("filter", &[("type", "and")]);
@@ -263,7 +269,7 @@ impl XmlGenerator {
             match &filters[0] {
                 Filter::And(_) | Filter::Or(_) => {
                     self.generate_filter(filters[0])?;
-                },
+                }
                 _ => {
                     // Single condition - wrap in filter
                     self.add_opening_tag("filter", &[("type", "and")]);
@@ -289,52 +295,74 @@ impl XmlGenerator {
     /// Generate a single filter condition
     fn generate_filter(&mut self, filter: &Filter) -> Result<()> {
         match filter {
-            Filter::Condition { attribute, operator, value, entity_alias: _ } => {
+            Filter::Condition {
+                attribute,
+                operator,
+                value,
+                entity_alias: _,
+            } => {
                 let op_str = self.operator_to_xml(operator, value);
 
                 match operator {
                     FilterOperator::Null | FilterOperator::NotNull => {
-                        let condition_str = format!("<condition attribute=\"{}\" operator=\"{}\" />",
-                               self.escape_xml(attribute), op_str);
+                        let condition_str = format!(
+                            "<condition attribute=\"{}\" operator=\"{}\" />",
+                            self.escape_xml(attribute),
+                            op_str
+                        );
                         self.add_line(&condition_str);
-                    },
+                    }
                     FilterOperator::Between => {
                         // Handle between operator - different formats based on syntax used
                         match value {
                             FilterValue::Range(start, end) => {
                                 // List syntax: between [val1, val2] - use separate value elements
-                                self.add_opening_tag("condition", &[
-                                    ("attribute", attribute.as_str()),
-                                    ("operator", op_str),
-                                ]);
+                                self.add_opening_tag(
+                                    "condition",
+                                    &[("attribute", attribute.as_str()), ("operator", op_str)],
+                                );
                                 self.indent();
 
                                 let start_str = self.value_to_xml_with_date_prefix(start, false)?;
                                 let end_str = self.value_to_xml_with_date_prefix(end, false)?;
 
-                                self.add_line(&format!("<value>{}</value>", self.escape_xml(&start_str)));
-                                self.add_line(&format!("<value>{}</value>", self.escape_xml(&end_str)));
+                                self.add_line(&format!(
+                                    "<value>{}</value>",
+                                    self.escape_xml(&start_str)
+                                ));
+                                self.add_line(&format!(
+                                    "<value>{}</value>",
+                                    self.escape_xml(&end_str)
+                                ));
 
                                 self.unindent();
                                 self.add_closing_tag("condition");
-                            },
+                            }
                             FilterValue::RangeTraditional(start, end) => {
                                 // Traditional syntax: between val1 and val2 - use comma-separated value
                                 let start_str = self.value_to_xml_with_date_prefix(start, false)?;
                                 let end_str = self.value_to_xml_with_date_prefix(end, false)?;
                                 let value_str = format!("{},{}", start_str, end_str);
-                                let condition_str = format!("<condition attribute=\"{}\" operator=\"{}\" value=\"{}\" />",
-                                       self.escape_xml(attribute), op_str, self.escape_xml(&value_str));
+                                let condition_str = format!(
+                                    "<condition attribute=\"{}\" operator=\"{}\" value=\"{}\" />",
+                                    self.escape_xml(attribute),
+                                    op_str,
+                                    self.escape_xml(&value_str)
+                                );
                                 self.add_line(&condition_str);
-                            },
+                            }
                             _ => {
                                 let value_str = self.value_to_xml_with_date_prefix(value, false)?;
-                                let condition_str = format!("<condition attribute=\"{}\" operator=\"{}\" value=\"{}\" />",
-                                       self.escape_xml(attribute), op_str, self.escape_xml(&value_str));
+                                let condition_str = format!(
+                                    "<condition attribute=\"{}\" operator=\"{}\" value=\"{}\" />",
+                                    self.escape_xml(attribute),
+                                    op_str,
+                                    self.escape_xml(&value_str)
+                                );
                                 self.add_line(&condition_str);
                             }
                         }
-                    },
+                    }
                     FilterOperator::Like | FilterOperator::NotLike => {
                         // For LIKE operators, automatically wrap string values with wildcards
                         let value_str = match value {
@@ -344,48 +372,63 @@ impl XmlGenerator {
                                 } else {
                                     s.clone()
                                 }
-                            },
+                            }
                             _ => self.value_to_xml(value)?,
                         };
-                        let condition_str = format!("<condition attribute=\"{}\" operator=\"{}\" value=\"{}\" />",
-                               self.escape_xml(attribute), op_str, self.escape_xml(&value_str));
+                        let condition_str = format!(
+                            "<condition attribute=\"{}\" operator=\"{}\" value=\"{}\" />",
+                            self.escape_xml(attribute),
+                            op_str,
+                            self.escape_xml(&value_str)
+                        );
                         self.add_line(&condition_str);
-                    },
+                    }
                     FilterOperator::In | FilterOperator::NotIn => {
                         // For IN operators, use separate value elements
                         match value {
                             FilterValue::List(values) => {
-                                self.add_opening_tag("condition", &[
-                                    ("attribute", attribute.as_str()),
-                                    ("operator", op_str),
-                                ]);
+                                self.add_opening_tag(
+                                    "condition",
+                                    &[("attribute", attribute.as_str()), ("operator", op_str)],
+                                );
                                 self.indent();
 
                                 for val in values {
                                     let val_str = self.value_to_xml(val)?;
-                                    self.add_line(&format!("<value>{}</value>", self.escape_xml(&val_str)));
+                                    self.add_line(&format!(
+                                        "<value>{}</value>",
+                                        self.escape_xml(&val_str)
+                                    ));
                                 }
 
                                 self.unindent();
                                 self.add_closing_tag("condition");
-                            },
+                            }
                             _ => {
                                 // Fallback to single value
                                 let value_str = self.value_to_xml(value)?;
-                                let condition_str = format!("<condition attribute=\"{}\" operator=\"{}\" value=\"{}\" />",
-                                       self.escape_xml(attribute), op_str, self.escape_xml(&value_str));
+                                let condition_str = format!(
+                                    "<condition attribute=\"{}\" operator=\"{}\" value=\"{}\" />",
+                                    self.escape_xml(attribute),
+                                    op_str,
+                                    self.escape_xml(&value_str)
+                                );
                                 self.add_line(&condition_str);
                             }
                         }
-                    },
+                    }
                     _ => {
                         let value_str = self.value_to_xml(value)?;
-                        let condition_str = format!("<condition attribute=\"{}\" operator=\"{}\" value=\"{}\" />",
-                               self.escape_xml(attribute), op_str, self.escape_xml(&value_str));
+                        let condition_str = format!(
+                            "<condition attribute=\"{}\" operator=\"{}\" value=\"{}\" />",
+                            self.escape_xml(attribute),
+                            op_str,
+                            self.escape_xml(&value_str)
+                        );
                         self.add_line(&condition_str);
                     }
                 }
-            },
+            }
             Filter::And(filters) => {
                 self.add_opening_tag("filter", &[("type", "and")]);
                 self.indent();
@@ -394,7 +437,7 @@ impl XmlGenerator {
                 }
                 self.unindent();
                 self.add_closing_tag("filter");
-            },
+            }
             Filter::Or(filters) => {
                 self.add_opening_tag("filter", &[("type", "or")]);
                 self.indent();
@@ -403,7 +446,7 @@ impl XmlGenerator {
                 }
                 self.unindent();
                 self.add_closing_tag("filter");
-            },
+            }
         }
         Ok(())
     }
@@ -446,11 +489,10 @@ impl XmlGenerator {
         // Add entity-qualified filters from the main query that belong to this join
         if let Some(join_alias) = &join.entity.alias {
             for filter in query_filters {
-                if let Filter::Condition { entity_alias, .. } = filter {
-                    if entity_alias.as_ref() == Some(join_alias) {
+                if let Filter::Condition { entity_alias, .. } = filter
+                    && entity_alias.as_ref() == Some(join_alias) {
                         join_filters.push(filter);
                     }
-                }
             }
         }
 
@@ -472,10 +514,10 @@ impl XmlGenerator {
             match order_item.direction {
                 OrderDirection::Descending => {
                     order_attrs.push(("descending", "true"));
-                },
+                }
                 OrderDirection::Ascending => {
                     order_attrs.push(("descending", "false"));
-                },
+                }
             }
 
             self.add_self_closing_tag("order", &order_attrs);
@@ -538,30 +580,43 @@ impl XmlGenerator {
     }
 
     /// Convert filter value to XML value string with option to control date prefix
-    fn value_to_xml_with_date_prefix(&self, value: &FilterValue, add_date_prefix: bool) -> Result<String> {
+    fn value_to_xml_with_date_prefix(
+        &self,
+        value: &FilterValue,
+        add_date_prefix: bool,
+    ) -> Result<String> {
         match value {
             FilterValue::String(s) => Ok(self.escape_xml(s)),
             FilterValue::Number(n) => Ok(n.to_string()),
             FilterValue::Integer(i) => Ok(i.to_string()),
-            FilterValue::Boolean(b) => Ok(if *b { "true".to_string() } else { "false".to_string() }),
-            FilterValue::Date(d) => Ok(if add_date_prefix { format!("@{}", d) } else { d.clone() }),
+            FilterValue::Boolean(b) => Ok(if *b {
+                "true".to_string()
+            } else {
+                "false".to_string()
+            }),
+            FilterValue::Date(d) => Ok(if add_date_prefix {
+                format!("@{}", d)
+            } else {
+                d.clone()
+            }),
             FilterValue::Null => Ok(String::new()),
             FilterValue::List(values) => {
-                let str_values: Result<Vec<String>> = values.iter()
+                let str_values: Result<Vec<String>> = values
+                    .iter()
                     .map(|v| self.value_to_xml_with_date_prefix(v, add_date_prefix))
                     .collect();
                 Ok(str_values?.join(","))
-            },
+            }
             FilterValue::Range(start, end) => {
                 let start_str = self.value_to_xml_with_date_prefix(start, add_date_prefix)?;
                 let end_str = self.value_to_xml_with_date_prefix(end, add_date_prefix)?;
                 Ok(format!("{},{}", start_str, end_str))
-            },
+            }
             FilterValue::RangeTraditional(start, end) => {
                 let start_str = self.value_to_xml_with_date_prefix(start, add_date_prefix)?;
                 let end_str = self.value_to_xml_with_date_prefix(end, add_date_prefix)?;
                 Ok(format!("{},{}", start_str, end_str))
-            },
+            }
         }
     }
 

@@ -57,8 +57,9 @@ impl Credentials {
             .map_err(|_| anyhow::anyhow!("DYNAMICS_PASSWORD not found in .env file: {}", path))?;
         let client_id = std::env::var("DYNAMICS_CLIENT_ID")
             .map_err(|_| anyhow::anyhow!("DYNAMICS_CLIENT_ID not found in .env file: {}", path))?;
-        let client_secret = std::env::var("DYNAMICS_CLIENT_SECRET")
-            .map_err(|_| anyhow::anyhow!("DYNAMICS_CLIENT_SECRET not found in .env file: {}", path))?;
+        let client_secret = std::env::var("DYNAMICS_CLIENT_SECRET").map_err(|_| {
+            anyhow::anyhow!("DYNAMICS_CLIENT_SECRET not found in .env file: {}", path)
+        })?;
 
         println!("✓ Imported credentials from .env file: {}", path);
 

@@ -1,6 +1,6 @@
+use crate::config::Config;
 use anyhow::Result;
 use log::info;
-use crate::config::Config;
 
 /// Get the value of a specific setting
 ///
@@ -19,7 +19,7 @@ pub async fn get_command(name: String) -> Result<()> {
     match name.as_str() {
         "default-query-limit" => {
             println!("{}", settings.default_query_limit);
-        },
+        }
         _ => {
             anyhow::bail!("Unknown setting: {}", name);
         }

@@ -1,6 +1,6 @@
+use crate::config::Config;
 use anyhow::Result;
 use log::info;
-use crate::config::Config;
 
 /// List all entity name mappings
 ///
