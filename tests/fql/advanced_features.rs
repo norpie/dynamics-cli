@@ -94,7 +94,8 @@ fn test_options_datasource() {
 
 #[test]
 fn test_options_multiple() {
-    let fql = ".account | options(latematerialize: true, aggregatelimit: \"50000\", formatted: true)";
+    let fql =
+        ".account | options(latematerialize: true, aggregatelimit: \"50000\", formatted: true)";
     let expected_xml = r#"<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false" formatted-value="true" latematerialize="true" aggregatelimit="50000">
   <entity name="account">
   </entity>

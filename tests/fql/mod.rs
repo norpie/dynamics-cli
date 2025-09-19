@@ -1,15 +1,14 @@
+pub mod advanced_features;
+pub mod aggregation;
 /// FQL (FetchXML Query Language) parser tests
 ///
 /// This module contains comprehensive tests for the FQL parser,
 /// organized by functionality area.
-
 pub mod basic_queries;
 pub mod filtering;
-pub mod joins;
-pub mod aggregation;
-pub mod ordering_pagination;
-pub mod advanced_features;
 pub mod integration_examples;
+pub mod joins;
+pub mod ordering_pagination;
 
 use anyhow::Result;
 use dynamics_cli::fql::{parse, to_fetchxml, tokenize};

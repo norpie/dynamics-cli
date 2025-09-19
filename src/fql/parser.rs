@@ -404,7 +404,6 @@ impl Parser {
         })
     }
 
-
     /// Parse a single filter condition
     fn parse_filter(&mut self) -> Result<Filter> {
         self.parse_filter_expression()
@@ -1083,5 +1082,4 @@ impl Parser {
     fn is_at_end(&self) -> bool {
         self.current >= self.tokens.len() || matches!(self.peek(), Some(Token::Eof))
     }
-
 }

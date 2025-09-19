@@ -215,7 +215,11 @@ impl XmlGenerator {
     }
 
     /// Generate aggregation attributes
-    fn generate_aggregation_attributes(&mut self, aggregations: &[Aggregation], entity_name: &str) -> Result<()> {
+    fn generate_aggregation_attributes(
+        &mut self,
+        aggregations: &[Aggregation],
+        entity_name: &str,
+    ) -> Result<()> {
         for agg in aggregations {
             let mut attr_attrs = Vec::new();
 
@@ -262,7 +266,6 @@ impl XmlGenerator {
         self.add_closing_tag("filter");
         Ok(())
     }
-
 
     /// Generate filter elements from references
     fn generate_filters_by_ref(&mut self, filters: &[&Filter]) -> Result<()> {

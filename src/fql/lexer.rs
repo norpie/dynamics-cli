@@ -524,7 +524,6 @@ fn parse_date_literal(input: &str, start: usize) -> Result<(String, usize)> {
     Ok((result, pos - start))
 }
 
-
 /// Helper function to parse keywords and identifiers
 fn parse_keyword_or_identifier(input: &str, start: usize) -> Result<(Token, usize)> {
     let chars: Vec<char> = input.chars().collect();
