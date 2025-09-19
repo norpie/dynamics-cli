@@ -13,11 +13,16 @@ use anyhow::Result;
 /// # Examples
 /// ```rust
 /// use dynamics_cli::fql::{tokenize, parse, to_fetchxml};
+/// use anyhow::Result;
 ///
-/// let tokens = tokenize(".account | .name, .revenue | limit(10)")?;
-/// let query = parse(tokens)?;
-/// let xml = to_fetchxml(query)?;
-/// assert!(xml.contains("<entity name=\"account\">"));
+/// fn example() -> Result<()> {
+///     let fql = ".account | .name, .revenue | limit(10)";
+///     let tokens = tokenize(fql)?;
+///     let query = parse(tokens, fql)?;
+///     let xml = to_fetchxml(query)?;
+///     assert!(xml.contains("<entity name=\"account\">"));
+///     Ok(())
+/// }
 /// ```
 pub fn to_fetchxml(query: Query) -> Result<String> {
     let mut generator = XmlGenerator::new();
