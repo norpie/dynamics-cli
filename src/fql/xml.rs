@@ -230,36 +230,6 @@ impl XmlGenerator {
         Ok(())
     }
 
-    /// Generate filter elements
-    fn generate_filters(&mut self, filters: &[Filter]) -> Result<()> {
-        if filters.len() == 1 {
-            // If there's only one filter and it's already a logical grouping (And/Or),
-            // generate it directly without additional wrapping
-            match &filters[0] {
-                Filter::And(_) | Filter::Or(_) => {
-                    self.generate_filter(&filters[0])?;
-                }
-                _ => {
-                    // Single condition - wrap in filter
-                    self.add_opening_tag("filter", &[("type", "and")]);
-                    self.indent();
-                    self.generate_filter(&filters[0])?;
-                    self.unindent();
-                    self.add_closing_tag("filter");
-                }
-            }
-        } else {
-            // Multiple filters - wrap them all in an AND filter
-            self.add_opening_tag("filter", &[("type", "and")]);
-            self.indent();
-            for filter in filters {
-                self.generate_filter(filter)?;
-            }
-            self.unindent();
-            self.add_closing_tag("filter");
-        }
-        Ok(())
-    }
 
     /// Generate filter elements from references
     fn generate_filters_by_ref(&mut self, filters: &[&Filter]) -> Result<()> {
@@ -490,9 +460,10 @@ impl XmlGenerator {
         if let Some(join_alias) = &join.entity.alias {
             for filter in query_filters {
                 if let Filter::Condition { entity_alias, .. } = filter
-                    && entity_alias.as_ref() == Some(join_alias) {
-                        join_filters.push(filter);
-                    }
+                    && entity_alias.as_ref() == Some(join_alias)
+                {
+                    join_filters.push(filter);
+                }
             }
         }
 

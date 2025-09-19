@@ -2,7 +2,6 @@ use crate::fql::ast::*;
 use crate::fql::lexer::{LocatedToken, ParseError, Token};
 use anyhow::Result;
 
-
 /// Parses a vector of located tokens into an FQL AST with position-aware error messages
 ///
 /// # Arguments
@@ -405,15 +404,6 @@ impl Parser {
         })
     }
 
-    /// Parse filter conditions
-    fn parse_filters(&mut self) -> Result<Vec<Filter>> {
-        let mut filters = Vec::new();
-
-        let filter = self.parse_filter_expression()?;
-        filters.push(filter);
-
-        Ok(filters)
-    }
 
     /// Parse a single filter condition
     fn parse_filter(&mut self) -> Result<Filter> {
@@ -1094,8 +1084,4 @@ impl Parser {
         self.current >= self.tokens.len() || matches!(self.peek(), Some(Token::Eof))
     }
 
-    /// Helper: Get current token and advance
-    fn consume(&mut self) -> Option<Token> {
-        self.advance().cloned()
-    }
 }

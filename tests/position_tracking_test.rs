@@ -101,7 +101,7 @@ fn test_successful_parsing_with_positions() {
                 Ok(query) => {
                     println!("Successfully parsed query: {:#?}", query);
                     assert_eq!(query.entity.name, "account");
-                    assert!(query.attributes.len() > 0, "Should have attributes");
+                    assert!(!query.attributes.is_empty(), "Should have attributes");
                 }
                 Err(e) => panic!("Expected successful parsing, got error: {}", e),
             }

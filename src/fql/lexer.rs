@@ -72,7 +72,6 @@ pub enum Token {
 pub struct TokenPosition {
     pub line: usize,
     pub column: usize,
-    pub offset: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -101,9 +100,13 @@ impl std::fmt::Display for ParseError {
                 self.position.line, self.position.column
             )?;
             let line_number_prefix = format!("{:3} | ", self.position.line);
-            writeln!(f, "{}", line_number_prefix.replace(|c: char| c.is_ascii_digit(), " "))?; // Align the separator | with content |
+            writeln!(
+                f,
+                "{}",
+                line_number_prefix.replace(|c: char| c.is_ascii_digit(), " ")
+            )?; // Align the separator | with content |
             writeln!(f, "{}{}", line_number_prefix, line)?;
-            let pointer_prefix = format!("{:3} | ", "");  // Same width as line number prefix but with spaces
+            let pointer_prefix = format!("{:3} | ", ""); // Same width as line number prefix but with spaces
             writeln!(
                 f,
                 "{}{}^",
@@ -119,7 +122,6 @@ impl std::fmt::Display for ParseError {
 }
 
 impl std::error::Error for ParseError {}
-
 
 /// Tokenizes FQL input with position information
 ///
@@ -158,7 +160,6 @@ impl Lexer {
             let position = TokenPosition {
                 line: self.line,
                 column: self.column,
-                offset: pos,
             };
 
             match ch {
@@ -331,7 +332,6 @@ impl Lexer {
             position: TokenPosition {
                 line: self.line,
                 column: self.column,
-                offset: self.input.len(),
             },
         });
 
@@ -524,41 +524,6 @@ fn parse_date_literal(input: &str, start: usize) -> Result<(String, usize)> {
     Ok((result, pos - start))
 }
 
-/// Helper function to parse operators (==, !=, >=, etc.)
-fn parse_operator(input: &str, start: usize) -> Result<(Token, usize)> {
-    let chars: Vec<char> = input.chars().collect();
-
-    if start >= chars.len() {
-        return Err(anyhow::anyhow!(
-            "Unexpected end of input while parsing operator"
-        ));
-    }
-
-    let first_char = chars[start];
-    let second_char = if start + 1 < chars.len() {
-        Some(chars[start + 1])
-    } else {
-        None
-    };
-
-    match (first_char, second_char) {
-        ('=', Some('=')) => Ok((Token::Equal, 2)),
-        ('!', Some('=')) => Ok((Token::NotEqual, 2)),
-        ('>', Some('=')) => Ok((Token::GreaterEqual, 2)),
-        ('<', Some('=')) => Ok((Token::LessEqual, 2)),
-        ('!', Some('~')) => Ok((Token::NotLike, 2)),
-        ('^', Some('=')) => Ok((Token::BeginsWith, 2)),
-        ('$', Some('=')) => Ok((Token::EndsWith, 2)),
-        ('-', Some('>')) => Ok((Token::Arrow, 2)),
-        ('>', _) => Ok((Token::GreaterThan, 1)),
-        ('<', _) => Ok((Token::LessThan, 1)),
-        ('~', _) => Ok((Token::Like, 1)),
-        _ => Err(anyhow::anyhow!(
-            "Unknown operator starting with '{}'",
-            first_char
-        )),
-    }
-}
 
 /// Helper function to parse keywords and identifiers
 fn parse_keyword_or_identifier(input: &str, start: usize) -> Result<(Token, usize)> {
