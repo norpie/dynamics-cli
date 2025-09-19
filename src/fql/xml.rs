@@ -86,6 +86,34 @@ impl XmlGenerator {
             tag_str.push_str(" no-lock=\"true\"");
         }
 
+        if query.options.formatted {
+            tag_str.push_str(" formatted-value=\"true\"");
+        }
+
+        // Handle custom options from the HashMap
+        for (key, value) in &query.options.custom_options {
+            // Convert known option names to their FetchXML attribute equivalents
+            let attr_name = match key.as_str() {
+                "latematerialize" => "latematerialize",
+                "aggregatelimit" => "aggregatelimit",
+                "useraworderby" => "useraworderby",
+                "datasource" => "datasource",
+                "options" => "options",
+                "outputformat" => "output-format",
+                "mapping" => "mapping",
+                // Pass through other options as-is (for forward compatibility)
+                _ => key.as_str(),
+            };
+
+            // Handle boolean-like values
+            if value == "true" || value == "false" {
+                tag_str.push_str(&format!(" {}=\"{}\"", attr_name, value));
+            } else {
+                // Handle string/numeric values
+                tag_str.push_str(&format!(" {}=\"{}\"", attr_name, self.escape_xml(value)));
+            }
+        }
+
         tag_str.push('>');
         self.add_line(&tag_str);
         Ok(())
