@@ -104,7 +104,7 @@ impl XmlGenerator {
 
         // Generate aggregation attributes
         if !query.aggregations.is_empty() {
-            self.generate_aggregation_attributes(&query.aggregations)?;
+            self.generate_aggregation_attributes(&query.aggregations, &entity.name)?;
         }
 
         // Generate regular attributes
@@ -182,16 +182,16 @@ impl XmlGenerator {
     }
 
     /// Generate aggregation attributes
-    fn generate_aggregation_attributes(&mut self, aggregations: &[Aggregation]) -> Result<()> {
+    fn generate_aggregation_attributes(&mut self, aggregations: &[Aggregation], entity_name: &str) -> Result<()> {
         for agg in aggregations {
             let mut attr_attrs = Vec::new();
 
-            // For count() without an attribute, use the primary key of the entity (typically "accountid", "contactid", etc.)
+            // For count() without an attribute, use the primary key of the entity
             let attr_name = if let Some(attribute) = &agg.attribute {
                 attribute.as_str()
             } else {
-                // For count(), we typically use the primary key field
-                "accountid" // This could be made more dynamic based on entity type
+                // Generate primary key name using entity name + "id" pattern
+                &format!("{}id", entity_name)
             };
 
             attr_attrs.push(("name", attr_name));

@@ -55,3 +55,27 @@ fn test_having_clause() {
 
     test_fql_to_xml(fql, expected_xml).unwrap();
 }
+
+#[test]
+fn test_count_aggregation_contact_entity() {
+    let fql = ".contact | count()";
+    let expected_xml = r#"<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false" aggregate="true">
+  <entity name="contact">
+    <attribute name="contactid" aggregate="count" alias="count" />
+  </entity>
+</fetch>"#;
+
+    test_fql_to_xml(fql, expected_xml).unwrap();
+}
+
+#[test]
+fn test_count_aggregation_opportunity_entity() {
+    let fql = ".opportunity | count()";
+    let expected_xml = r#"<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false" aggregate="true">
+  <entity name="opportunity">
+    <attribute name="opportunityid" aggregate="count" alias="count" />
+  </entity>
+</fetch>"#;
+
+    test_fql_to_xml(fql, expected_xml).unwrap();
+}
