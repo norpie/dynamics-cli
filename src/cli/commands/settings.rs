@@ -33,4 +33,6 @@ pub enum SettingsSubcommands {
         #[arg(short, long)]
         force: bool,
     },
+    /// List all field mappings
+    ListMappings,
 }

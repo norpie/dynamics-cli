@@ -307,4 +307,151 @@ impl DynamicsClient {
 
         Ok(output)
     }
+
+    /// Fetch entity metadata from Dynamics 365
+    pub async fn fetch_metadata(&mut self) -> Result<String> {
+        let token = self.get_access_token().await?.to_string();
+
+        // Construct the metadata URL
+        let mut base_url = self.auth_config.host.clone();
+        if !base_url.ends_with('/') {
+            base_url.push('/');
+        }
+        let metadata_url = format!("{}api/data/v9.2/$metadata", base_url);
+
+        info!("Fetching metadata from: {}", metadata_url);
+
+        let response = self
+            .client
+            .get(&metadata_url)
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Accept", "application/xml")
+            .header("OData-MaxVersion", "4.0")
+            .header("OData-Version", "4.0")
+            .send()
+            .await?;
+
+        debug!("Metadata response status: {}", response.status());
+
+        if response.status().is_success() {
+            let metadata_xml = response.text().await?;
+            debug!("Metadata fetched successfully");
+            Ok(metadata_xml)
+        } else {
+            let error_text = response.text().await?;
+            anyhow::bail!("Metadata fetch failed: {}", error_text)
+        }
+    }
+
+    /// Fetch views from Dynamics 365 savedqueries entity
+    pub async fn fetch_views(&mut self, entity_name: Option<&str>) -> Result<Vec<crate::dynamics::metadata::ViewInfo>> {
+        let token = self.get_access_token().await?.to_string();
+
+        // Construct the savedqueries URL
+        let mut base_url = self.auth_config.host.clone();
+        if !base_url.ends_with('/') {
+            base_url.push('/');
+        }
+
+        // Build the OData query for savedqueries
+        let mut query_url = format!("{}api/data/v9.2/savedqueries", base_url);
+
+        // Add filter for specific entity if provided
+        if let Some(entity) = entity_name {
+            query_url.push_str(&format!("?$filter=returnedtypecode eq '{}'", entity));
+            query_url.push_str("&$select=name,returnedtypecode,querytype,iscustom,fetchxml");
+        } else {
+            query_url.push_str("?$select=name,returnedtypecode,querytype,iscustom,fetchxml");
+        }
+
+        // Order by entity name and then by view name
+        query_url.push_str("&$orderby=returnedtypecode,name");
+
+        info!("Fetching views from: {}", query_url);
+
+        let response = self
+            .client
+            .get(&query_url)
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Accept", "application/json")
+            .header("OData-MaxVersion", "4.0")
+            .header("OData-Version", "4.0")
+            .send()
+            .await?;
+
+        debug!("Views response status: {}", response.status());
+
+        if response.status().is_success() {
+            let views_data: Value = response.json().await?;
+            debug!("Views fetched successfully");
+
+            let mut views = Vec::new();
+
+            if let Some(value_array) = views_data.get("value").and_then(|v| v.as_array()) {
+                for view_data in value_array {
+                    if let Some(view_info) = self.parse_view_from_json(view_data)? {
+                        views.push(view_info);
+                    }
+                }
+            }
+
+            debug!("Parsed {} views", views.len());
+            Ok(views)
+        } else {
+            let error_text = response.text().await?;
+            anyhow::bail!("Views fetch failed: {}", error_text)
+        }
+    }
+
+    /// Parse a single view from JSON response
+    fn parse_view_from_json(&self, view_data: &Value) -> Result<Option<crate::dynamics::metadata::ViewInfo>> {
+        let name = view_data.get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Unknown View")
+            .to_string();
+
+        let entity_name = view_data.get("returnedtypecode")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown")
+            .to_string();
+
+        let query_type = view_data.get("querytype")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
+
+        let view_type = match query_type {
+            0 => "Public".to_string(),
+            1 => "Advanced Find".to_string(),
+            2 => "Associated".to_string(),
+            4 => "Quick Find".to_string(),
+            _ => format!("Type {}", query_type),
+        };
+
+        let is_custom = view_data.get("iscustom")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let fetch_xml = view_data.get("fetchxml")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        // Skip views without FetchXML (incomplete data)
+        if fetch_xml.is_empty() {
+            return Ok(None);
+        }
+
+        // Parse columns from FetchXML
+        let columns = crate::dynamics::metadata::parse_view_columns(&fetch_xml)
+            .unwrap_or_else(|_| Vec::new());
+
+        Ok(Some(crate::dynamics::metadata::ViewInfo {
+            name,
+            entity_name,
+            view_type,
+            is_custom,
+            columns,
+            fetch_xml,
+        }))
+    }
 }

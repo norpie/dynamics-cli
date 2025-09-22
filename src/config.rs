@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use chrono;
 use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -14,6 +15,43 @@ pub struct AuthConfig {
     pub client_secret: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SavedMigration {
+    pub name: String,
+    pub source_env: String,
+    pub target_env: String,
+    pub comparisons: Vec<SavedComparison>,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub last_used: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ComparisonType {
+    Entity,
+    View,
+}
+
+impl Default for ComparisonType {
+    fn default() -> Self {
+        ComparisonType::Entity
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SavedComparison {
+    pub name: String,
+    pub source_entity: String,
+    pub target_entity: String,
+    #[serde(default)]
+    pub comparison_type: ComparisonType,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub last_used: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Config {
     pub current_environment: Option<String>,
@@ -22,12 +60,18 @@ pub struct Config {
     pub entity_mappings: HashMap<String, String>,
     #[serde(default)]
     pub settings: Settings,
+    #[serde(default)]
+    pub migrations: HashMap<String, SavedMigration>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Settings {
     #[serde(default = "default_query_limit")]
     pub default_query_limit: u32,
+    #[serde(default)]
+    pub field_mappings: HashMap<String, HashMap<String, String>>,
+    #[serde(default)]
+    pub prefix_mappings: HashMap<String, HashMap<String, String>>,
 }
 
 fn default_query_limit() -> u32 {
@@ -38,6 +82,8 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             default_query_limit: default_query_limit(),
+            field_mappings: HashMap::new(),
+            prefix_mappings: HashMap::new(),
         }
     }
 }
@@ -186,5 +232,228 @@ impl Config {
         info!("Updating default query limit to: {}", limit);
         self.settings.default_query_limit = limit;
         self.save()
+    }
+
+    /// Add a manual field mapping for specific entity comparison
+    /// Key format: "source_entity:target_entity" -> {"source_field": "target_field"}
+    pub fn add_field_mapping(
+        &mut self,
+        source_entity: &str,
+        target_entity: &str,
+        source_field: &str,
+        target_field: &str,
+    ) -> Result<()> {
+        let mapping_key = format!("{}:{}", source_entity, target_entity);
+        info!(
+            "Adding field mapping for {}: {} -> {}",
+            mapping_key, source_field, target_field
+        );
+
+        self.settings
+            .field_mappings
+            .entry(mapping_key)
+            .or_insert_with(HashMap::new)
+            .insert(source_field.to_string(), target_field.to_string());
+
+        self.save()
+    }
+
+    /// Get field mappings for a specific entity comparison
+    pub fn get_field_mappings(
+        &self,
+        source_entity: &str,
+        target_entity: &str,
+    ) -> Option<&HashMap<String, String>> {
+        let mapping_key = format!("{}:{}", source_entity, target_entity);
+        self.settings.field_mappings.get(&mapping_key)
+    }
+
+    /// Remove a specific field mapping
+    pub fn remove_field_mapping(
+        &mut self,
+        source_entity: &str,
+        target_entity: &str,
+        source_field: &str,
+    ) -> Result<()> {
+        let mapping_key = format!("{}:{}", source_entity, target_entity);
+
+        if let Some(entity_mappings) = self.settings.field_mappings.get_mut(&mapping_key) {
+            if entity_mappings.remove(source_field).is_some() {
+                info!(
+                    "Removed field mapping for {}: {}",
+                    mapping_key, source_field
+                );
+                // Remove the entity mapping if it's empty
+                if entity_mappings.is_empty() {
+                    self.settings.field_mappings.remove(&mapping_key);
+                }
+                self.save()
+            } else {
+                anyhow::bail!(
+                    "Field mapping '{}' not found for entity comparison '{}'",
+                    source_field,
+                    mapping_key
+                );
+            }
+        } else {
+            anyhow::bail!("No field mappings found for entity comparison '{}'", mapping_key);
+        }
+    }
+
+    /// List all field mappings
+    pub fn list_field_mappings(&self) -> &HashMap<String, HashMap<String, String>> {
+        &self.settings.field_mappings
+    }
+
+    /// Add a prefix mapping for entity field comparisons
+    pub fn add_prefix_mapping(
+        &mut self,
+        source_entity: &str,
+        target_entity: &str,
+        source_prefix: &str,
+        target_prefix: &str,
+    ) -> Result<()> {
+        let mapping_key = format!("{}:{}", source_entity, target_entity);
+        info!(
+            "Adding prefix mapping for {}: {} -> {}",
+            mapping_key, source_prefix, target_prefix
+        );
+
+        self.settings
+            .prefix_mappings
+            .entry(mapping_key)
+            .or_insert_with(HashMap::new)
+            .insert(source_prefix.to_string(), target_prefix.to_string());
+
+        self.save()
+    }
+
+    /// Get prefix mappings for a specific entity comparison
+    pub fn get_prefix_mappings(
+        &self,
+        source_entity: &str,
+        target_entity: &str,
+    ) -> Option<&HashMap<String, String>> {
+        let mapping_key = format!("{}:{}", source_entity, target_entity);
+        self.settings.prefix_mappings.get(&mapping_key)
+    }
+
+    /// Remove a specific prefix mapping
+    pub fn remove_prefix_mapping(
+        &mut self,
+        source_entity: &str,
+        target_entity: &str,
+        source_prefix: &str,
+    ) -> Result<()> {
+        let mapping_key = format!("{}:{}", source_entity, target_entity);
+
+        if let Some(entity_mappings) = self.settings.prefix_mappings.get_mut(&mapping_key) {
+            if entity_mappings.remove(source_prefix).is_some() {
+                info!(
+                    "Removed prefix mapping for {}: {}",
+                    mapping_key, source_prefix
+                );
+                // Remove the entity mapping if it's empty
+                if entity_mappings.is_empty() {
+                    self.settings.prefix_mappings.remove(&mapping_key);
+                }
+                self.save()
+            } else {
+                anyhow::bail!(
+                    "Prefix mapping '{}' not found for entity comparison '{}'",
+                    source_prefix,
+                    mapping_key
+                );
+            }
+        } else {
+            anyhow::bail!("No prefix mappings found for entity comparison '{}'", mapping_key);
+        }
+    }
+
+    /// List all prefix mappings
+    pub fn list_prefix_mappings(&self) -> &HashMap<String, HashMap<String, String>> {
+        &self.settings.prefix_mappings
+    }
+
+    // Migration management methods
+
+    /// Save a migration configuration
+    pub fn save_migration(&mut self, migration: SavedMigration) -> Result<()> {
+        info!("Saving migration: {}", migration.name);
+        self.migrations.insert(migration.name.clone(), migration);
+        self.save()
+    }
+
+    /// Get a migration by name
+    pub fn get_migration(&self, name: &str) -> Option<&SavedMigration> {
+        self.migrations.get(name)
+    }
+
+    /// List all saved migrations
+    pub fn list_migrations(&self) -> Vec<&SavedMigration> {
+        let mut migrations: Vec<&SavedMigration> = self.migrations.values().collect();
+        // Sort by last_used, then by name
+        migrations.sort_by(|a, b| {
+            b.last_used.cmp(&a.last_used).then_with(|| a.name.cmp(&b.name))
+        });
+        migrations
+    }
+
+    /// Remove a migration
+    pub fn remove_migration(&mut self, name: &str) -> Result<()> {
+        if self.migrations.remove(name).is_some() {
+            info!("Removed migration: {}", name);
+            self.save()
+        } else {
+            anyhow::bail!("Migration '{}' not found", name);
+        }
+    }
+
+    /// Update last used timestamp for a migration
+    pub fn touch_migration(&mut self, name: &str) -> Result<()> {
+        if let Some(migration) = self.migrations.get_mut(name) {
+            migration.last_used = chrono::Utc::now().to_rfc3339();
+            self.save()
+        } else {
+            anyhow::bail!("Migration '{}' not found", name);
+        }
+    }
+
+    /// Add a comparison to a migration
+    pub fn add_comparison_to_migration(
+        &mut self,
+        migration_name: &str,
+        comparison: SavedComparison,
+    ) -> Result<()> {
+        if let Some(migration) = self.migrations.get_mut(migration_name) {
+            info!("Adding comparison '{}' to migration '{}'", comparison.name, migration_name);
+            migration.comparisons.push(comparison);
+            migration.last_used = chrono::Utc::now().to_rfc3339();
+            self.save()
+        } else {
+            anyhow::bail!("Migration '{}' not found", migration_name);
+        }
+    }
+
+    /// Remove a comparison from a migration
+    pub fn remove_comparison_from_migration(
+        &mut self,
+        migration_name: &str,
+        comparison_name: &str,
+    ) -> Result<()> {
+        if let Some(migration) = self.migrations.get_mut(migration_name) {
+            let original_len = migration.comparisons.len();
+            migration.comparisons.retain(|c| c.name != comparison_name);
+
+            if migration.comparisons.len() < original_len {
+                info!("Removed comparison '{}' from migration '{}'", comparison_name, migration_name);
+                migration.last_used = chrono::Utc::now().to_rfc3339();
+                self.save()
+            } else {
+                anyhow::bail!("Comparison '{}' not found in migration '{}'", comparison_name, migration_name);
+            }
+        } else {
+            anyhow::bail!("Migration '{}' not found", migration_name);
+        }
     }
 }

@@ -14,6 +14,7 @@ use cli::Cli;
 use cli::app::Commands;
 use cli::commands::auth::AuthSubcommands;
 use cli::commands::entity::EntitySubcommands;
+use cli::commands::migration::MigrationSubCommands;
 use cli::commands::query::QuerySubcommands;
 use cli::commands::settings::SettingsSubcommands;
 use commands::auth::{SetupOptions, remove_command, select_command, setup_command, status_command};
@@ -22,8 +23,9 @@ use commands::entity::{
 };
 use commands::query::{file_command, run_command};
 use commands::settings::{
-    get_command, reset_all_command, reset_command, set_command, show_command,
+    get_command, list_mappings_command, reset_all_command, reset_command, set_command, show_command,
 };
+use commands::migration;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -96,6 +98,12 @@ async fn main() -> Result<()> {
             SettingsSubcommands::Set { name, value } => set_command(name, value).await?,
             SettingsSubcommands::Reset { name } => reset_command(name).await?,
             SettingsSubcommands::ResetAll { force } => reset_all_command(force).await?,
+            SettingsSubcommands::ListMappings => list_mappings_command().await?,
+        },
+        Commands::Migration(migration_commands) => match migration_commands.command {
+            MigrationSubCommands::Compare(args) => migration::execute(args).await?,
+            MigrationSubCommands::Export(args) => migration::export(args).await?,
+            MigrationSubCommands::Start => migration::start().await?,
         },
     }
 

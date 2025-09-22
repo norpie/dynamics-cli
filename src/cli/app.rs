@@ -1,5 +1,6 @@
 use super::commands::auth::AuthCommands;
 use super::commands::entity::EntityCommands;
+use super::commands::migration::MigrationCommands;
 use super::commands::query::QueryCommands;
 use super::commands::settings::SettingsCommands;
 use clap::{Parser, Subcommand};
@@ -22,4 +23,6 @@ pub enum Commands {
     Entity(EntityCommands),
     /// Application settings management
     Settings(SettingsCommands),
+    /// Migration tools for comparing entities between CRM instances
+    Migration(MigrationCommands),
 }
