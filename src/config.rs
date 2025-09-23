@@ -1,10 +1,36 @@
 use anyhow::{Context, Result};
-use chrono;
 use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+
+/// Serializable example pair for configuration persistence
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigExamplePair {
+    pub id: String,
+    pub source_uuid: String,
+    pub target_uuid: String,
+    pub label: Option<String>,
+}
+
+impl ConfigExamplePair {
+    /// Create a new ConfigExamplePair
+    pub fn new(source_uuid: String, target_uuid: String) -> Self {
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            source_uuid,
+            target_uuid,
+            label: None,
+        }
+    }
+
+    /// Create a ConfigExamplePair with a label
+    pub fn with_label(mut self, label: String) -> Self {
+        self.label = Some(label);
+        self
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthConfig {
@@ -28,31 +54,41 @@ pub struct SavedMigration {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ComparisonType {
-    Entity,
-    View,
-}
-
-impl Default for ComparisonType {
-    fn default() -> Self {
-        ComparisonType::Entity
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SavedComparison {
     pub name: String,
     pub source_entity: String,
     pub target_entity: String,
     #[serde(default)]
-    pub comparison_type: ComparisonType,
+    pub entity_comparison: EntityComparison,
+    #[serde(default)]
+    pub view_comparisons: Vec<ViewComparison>,
     #[serde(default)]
     pub created_at: String,
     #[serde(default)]
     pub last_used: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct EntityComparison {
+    #[serde(default)]
+    pub field_mappings: HashMap<String, String>, // manual field mappings
+    #[serde(default)]
+    pub prefix_mappings: HashMap<String, String>, // bulk prefix rules
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ViewComparison {
+    pub source_view_name: String,
+    pub target_view_name: String,
+    #[serde(default)]
+    pub column_mappings: HashMap<String, String>, // derived from field_mappings
+    #[serde(default)]
+    pub filter_mappings: HashMap<String, String>, // conditions mapping
+    #[serde(default)]
+    pub sort_mappings: HashMap<String, String>, // order-by mapping
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Config {
     pub current_environment: Option<String>,
     pub environments: HashMap<String, AuthConfig>,
@@ -64,7 +100,7 @@ pub struct Config {
     pub migrations: HashMap<String, SavedMigration>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     #[serde(default = "default_query_limit")]
     pub default_query_limit: u32,
@@ -72,6 +108,8 @@ pub struct Settings {
     pub field_mappings: HashMap<String, HashMap<String, String>>,
     #[serde(default)]
     pub prefix_mappings: HashMap<String, HashMap<String, String>>,
+    #[serde(default)]
+    pub examples: HashMap<String, Vec<ConfigExamplePair>>, // key: "source_entity:target_entity"
 }
 
 fn default_query_limit() -> u32 {
@@ -84,6 +122,7 @@ impl Default for Settings {
             default_query_limit: default_query_limit(),
             field_mappings: HashMap::new(),
             prefix_mappings: HashMap::new(),
+            examples: HashMap::new(),
         }
     }
 }
@@ -170,6 +209,10 @@ impl Config {
         self.current_environment.as_ref()
     }
 
+    pub fn get_auth(&self, env_name: &str) -> Option<&AuthConfig> {
+        self.environments.get(env_name)
+    }
+
     pub fn set_current_environment(&mut self, name: String) -> Result<()> {
         if !self.environments.contains_key(&name) {
             anyhow::bail!("Environment '{}' not found", name);
@@ -252,7 +295,7 @@ impl Config {
         self.settings
             .field_mappings
             .entry(mapping_key)
-            .or_insert_with(HashMap::new)
+            .or_default()
             .insert(source_field.to_string(), target_field.to_string());
 
         self.save()
@@ -296,7 +339,10 @@ impl Config {
                 );
             }
         } else {
-            anyhow::bail!("No field mappings found for entity comparison '{}'", mapping_key);
+            anyhow::bail!(
+                "No field mappings found for entity comparison '{}'",
+                mapping_key
+            );
         }
     }
 
@@ -322,7 +368,7 @@ impl Config {
         self.settings
             .prefix_mappings
             .entry(mapping_key)
-            .or_insert_with(HashMap::new)
+            .or_default()
             .insert(source_prefix.to_string(), target_prefix.to_string());
 
         self.save()
@@ -366,7 +412,10 @@ impl Config {
                 );
             }
         } else {
-            anyhow::bail!("No prefix mappings found for entity comparison '{}'", mapping_key);
+            anyhow::bail!(
+                "No prefix mappings found for entity comparison '{}'",
+                mapping_key
+            );
         }
     }
 
@@ -394,7 +443,9 @@ impl Config {
         let mut migrations: Vec<&SavedMigration> = self.migrations.values().collect();
         // Sort by last_used, then by name
         migrations.sort_by(|a, b| {
-            b.last_used.cmp(&a.last_used).then_with(|| a.name.cmp(&b.name))
+            b.last_used
+                .cmp(&a.last_used)
+                .then_with(|| a.name.cmp(&b.name))
         });
         migrations
     }
@@ -426,7 +477,10 @@ impl Config {
         comparison: SavedComparison,
     ) -> Result<()> {
         if let Some(migration) = self.migrations.get_mut(migration_name) {
-            info!("Adding comparison '{}' to migration '{}'", comparison.name, migration_name);
+            info!(
+                "Adding comparison '{}' to migration '{}'",
+                comparison.name, migration_name
+            );
             migration.comparisons.push(comparison);
             migration.last_used = chrono::Utc::now().to_rfc3339();
             self.save()
@@ -446,14 +500,141 @@ impl Config {
             migration.comparisons.retain(|c| c.name != comparison_name);
 
             if migration.comparisons.len() < original_len {
-                info!("Removed comparison '{}' from migration '{}'", comparison_name, migration_name);
+                info!(
+                    "Removed comparison '{}' from migration '{}'",
+                    comparison_name, migration_name
+                );
                 migration.last_used = chrono::Utc::now().to_rfc3339();
                 self.save()
             } else {
-                anyhow::bail!("Comparison '{}' not found in migration '{}'", comparison_name, migration_name);
+                anyhow::bail!(
+                    "Comparison '{}' not found in migration '{}'",
+                    comparison_name,
+                    migration_name
+                );
             }
         } else {
             anyhow::bail!("Migration '{}' not found", migration_name);
+        }
+    }
+
+    // Examples management methods
+
+    /// Add an example pair for a specific entity comparison
+    pub fn add_example(
+        &mut self,
+        source_entity: &str,
+        target_entity: &str,
+        example: ConfigExamplePair,
+    ) -> Result<()> {
+        let mapping_key = format!("{}:{}", source_entity, target_entity);
+        info!(
+            "Adding example for {}: {} -> {}",
+            mapping_key, example.source_uuid, example.target_uuid
+        );
+
+        self.settings
+            .examples
+            .entry(mapping_key)
+            .or_default()
+            .push(example);
+
+        self.save()
+    }
+
+    /// Get all examples for a specific entity comparison
+    pub fn get_examples(
+        &self,
+        source_entity: &str,
+        target_entity: &str,
+    ) -> Option<&Vec<ConfigExamplePair>> {
+        let mapping_key = format!("{}:{}", source_entity, target_entity);
+        self.settings.examples.get(&mapping_key)
+    }
+
+    /// Remove an example by ID for a specific entity comparison
+    pub fn remove_example(
+        &mut self,
+        source_entity: &str,
+        target_entity: &str,
+        example_id: &str,
+    ) -> Result<()> {
+        let mapping_key = format!("{}:{}", source_entity, target_entity);
+
+        if let Some(examples) = self.settings.examples.get_mut(&mapping_key) {
+            let original_len = examples.len();
+            examples.retain(|e| e.id != example_id);
+
+            if examples.len() < original_len {
+                info!(
+                    "Removed example {} for {}",
+                    example_id, mapping_key
+                );
+                // Remove the entity examples if it's empty
+                if examples.is_empty() {
+                    self.settings.examples.remove(&mapping_key);
+                }
+                self.save()
+            } else {
+                anyhow::bail!(
+                    "Example '{}' not found for entity comparison '{}'",
+                    example_id,
+                    mapping_key
+                );
+            }
+        } else {
+            anyhow::bail!(
+                "No examples found for entity comparison '{}'",
+                mapping_key
+            );
+        }
+    }
+
+    /// Update all examples for a specific entity comparison
+    pub fn update_examples(
+        &mut self,
+        source_entity: &str,
+        target_entity: &str,
+        examples: Vec<ConfigExamplePair>,
+    ) -> Result<()> {
+        let mapping_key = format!("{}:{}", source_entity, target_entity);
+        info!(
+            "Updating {} examples for {}",
+            examples.len(),
+            mapping_key
+        );
+
+        if examples.is_empty() {
+            // Remove the entry if no examples
+            self.settings.examples.remove(&mapping_key);
+        } else {
+            self.settings.examples.insert(mapping_key, examples);
+        }
+
+        self.save()
+    }
+
+    /// List all examples for all entity comparisons
+    pub fn list_all_examples(&self) -> &HashMap<String, Vec<ConfigExamplePair>> {
+        &self.settings.examples
+    }
+
+    /// Remove all examples for a specific entity comparison
+    pub fn clear_examples(
+        &mut self,
+        source_entity: &str,
+        target_entity: &str,
+    ) -> Result<()> {
+        let mapping_key = format!("{}:{}", source_entity, target_entity);
+
+        if self.settings.examples.remove(&mapping_key).is_some() {
+            info!("Cleared all examples for {}", mapping_key);
+            self.save()
+        } else {
+            anyhow::bail!(
+                "No examples found for entity comparison '{}'",
+                mapping_key
+            );
         }
     }
 }

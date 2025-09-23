@@ -5,6 +5,7 @@ use log::{debug, info};
 use reqwest::Client;
 use serde_json::Value;
 
+#[derive(Debug)]
 pub struct DynamicsClient {
     client: Client,
     auth_config: AuthConfig,
@@ -142,6 +143,60 @@ impl DynamicsClient {
 
         // Unknown entity - prompt user interactively
         self.prompt_for_entity_mapping(entity_name).await
+    }
+
+    /// Get entity plural name without prompting (silent mode for TUI)
+    async fn pluralize_entity_name_silent(&self, entity_name: &str) -> Result<String> {
+        // First check config for custom mappings
+        let config = Config::load()?;
+        if let Some(plural) = config.get_entity_mapping(entity_name) {
+            debug!("Found custom mapping: {} -> {}", entity_name, plural);
+            return Ok(plural.clone());
+        }
+
+        // Then check built-in mappings
+        let built_in_plural = match entity_name {
+            // Common Dynamics entities with irregular plurals
+            "account" => "accounts",
+            "contact" => "contacts",
+            "lead" => "leads",
+            "opportunity" => "opportunities",
+            "campaign" => "campaigns",
+            "incident" => "incidents",
+            "quote" => "quotes",
+            "salesorder" => "salesorders",
+            "invoice" => "invoices",
+            "product" => "products",
+            "appointment" => "appointments",
+            "task" => "tasks",
+            "phonecall" => "phonecalls",
+            "email" => "emails",
+            "letter" => "letters",
+            "fax" => "faxes",
+            "activitypointer" => "activitypointers",
+            "annotation" => "annotations",
+            "systemuser" => "systemusers",
+            "team" => "teams",
+            "businessunit" => "businessunits",
+            "role" => "roles",
+            _ => "",
+        };
+
+        if !built_in_plural.is_empty() {
+            debug!(
+                "Found built-in mapping: {} -> {}",
+                entity_name, built_in_plural
+            );
+            return Ok(built_in_plural.to_string());
+        }
+
+        // Unknown entity - use default pluralization (no prompting)
+        let default_plural = format!("{}s", entity_name);
+        debug!(
+            "Using default pluralization for unknown entity: {} -> {}",
+            entity_name, default_plural
+        );
+        Ok(default_plural)
     }
 
     /// Prompt user for entity mapping when entity is not known
@@ -344,7 +399,10 @@ impl DynamicsClient {
     }
 
     /// Fetch views from Dynamics 365 savedqueries entity
-    pub async fn fetch_views(&mut self, entity_name: Option<&str>) -> Result<Vec<crate::dynamics::metadata::ViewInfo>> {
+    pub async fn fetch_views(
+        &mut self,
+        entity_name: Option<&str>,
+    ) -> Result<Vec<crate::dynamics::metadata::ViewInfo>> {
         let token = self.get_access_token().await?.to_string();
 
         // Construct the savedqueries URL
@@ -404,18 +462,24 @@ impl DynamicsClient {
     }
 
     /// Parse a single view from JSON response
-    fn parse_view_from_json(&self, view_data: &Value) -> Result<Option<crate::dynamics::metadata::ViewInfo>> {
-        let name = view_data.get("name")
+    fn parse_view_from_json(
+        &self,
+        view_data: &Value,
+    ) -> Result<Option<crate::dynamics::metadata::ViewInfo>> {
+        let name = view_data
+            .get("name")
             .and_then(|v| v.as_str())
             .unwrap_or("Unknown View")
             .to_string();
 
-        let entity_name = view_data.get("returnedtypecode")
+        let entity_name = view_data
+            .get("returnedtypecode")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown")
             .to_string();
 
-        let query_type = view_data.get("querytype")
+        let query_type = view_data
+            .get("querytype")
             .and_then(|v| v.as_i64())
             .unwrap_or(0);
 
@@ -427,11 +491,13 @@ impl DynamicsClient {
             _ => format!("Type {}", query_type),
         };
 
-        let is_custom = view_data.get("iscustom")
+        let is_custom = view_data
+            .get("iscustom")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
-        let fetch_xml = view_data.get("fetchxml")
+        let fetch_xml = view_data
+            .get("fetchxml")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
@@ -453,5 +519,240 @@ impl DynamicsClient {
             columns,
             fetch_xml,
         }))
+    }
+
+    /// Fetch forms from Dynamics 365 systemforms entity
+    pub async fn fetch_forms(
+        &mut self,
+        entity_name: Option<&str>,
+    ) -> Result<Vec<crate::dynamics::metadata::FormInfo>> {
+        let token = self.get_access_token().await?.to_string();
+
+        // Construct the systemforms URL
+        let mut base_url = self.auth_config.host.clone();
+        if !base_url.ends_with('/') {
+            base_url.push('/');
+        }
+
+        // Build the OData query for systemforms
+        let mut query_url = format!("{}api/data/v9.2/systemforms", base_url);
+
+        // Build proper OData query with $select and $filter
+        if let Some(entity) = entity_name {
+            // Entity-specific query: filter by entity and form criteria
+            query_url.push_str(&format!(
+                "?$filter=objecttypecode eq '{}' and formactivationstate eq 1 and (type eq 2 or type eq 7 or type eq 8)",
+                entity
+            ));
+            query_url.push_str(
+                "&$select=name,objecttypecode,type,iscustomizable,formactivationstate,formxml",
+            );
+        } else {
+            // General query: filter by form criteria only
+            query_url.push_str(
+                "?$filter=formactivationstate eq 1 and (type eq 2 or type eq 7 or type eq 8)",
+            );
+            query_url.push_str(
+                "&$select=name,objecttypecode,type,iscustomizable,formactivationstate,formxml",
+            );
+        }
+
+        // Order by form type and then by name
+        query_url.push_str("&$orderby=type,name");
+
+        info!("Fetching forms from: {}", query_url);
+
+        let response = self
+            .client
+            .get(&query_url)
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Accept", "application/json")
+            .header("OData-MaxVersion", "4.0")
+            .header("OData-Version", "4.0")
+            .send()
+            .await?;
+
+        debug!("Forms response status: {}", response.status());
+
+        if response.status().is_success() {
+            let response_text = response.text().await?;
+            let forms_data: Value = serde_json::from_str(&response_text)?;
+
+            let mut forms = Vec::new();
+
+            if let Some(value_array) = forms_data.get("value").and_then(|v| v.as_array()) {
+                for form_data in value_array {
+                    if let Some(form_info) = self.parse_form_from_json(form_data)? {
+                        forms.push(form_info);
+                    }
+                }
+            }
+
+            debug!("Parsed {} forms", forms.len());
+            Ok(forms)
+        } else {
+            let error_text = response.text().await?;
+            anyhow::bail!("Forms fetch failed: {}", error_text)
+        }
+    }
+
+    /// Parse a single form from JSON response
+    fn parse_form_from_json(
+        &self,
+        form_data: &Value,
+    ) -> Result<Option<crate::dynamics::metadata::FormInfo>> {
+        let name = form_data
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Unknown Form")
+            .to_string();
+
+        let entity_name = form_data
+            .get("objecttypecode")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown")
+            .to_string();
+
+        let form_type_code = form_data.get("type").and_then(|v| v.as_i64()).unwrap_or(0);
+
+        let form_type = match form_type_code {
+            2 => "Main".to_string(),
+            7 => "QuickCreate".to_string(),
+            8 => "QuickView".to_string(),
+            11 => "Card".to_string(),
+            _ => format!("Type{}", form_type_code),
+        };
+
+        let is_custom = form_data
+            .get("iscustomizable")
+            .and_then(|v| v.get("Value"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let state = form_data
+            .get("formactivationstate")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0) as i32;
+
+        let form_xml = form_data
+            .get("formxml")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        // Skip forms without FormXML (incomplete data)
+        if form_xml.is_empty() {
+            return Ok(None);
+        }
+
+        // Parse form structure from FormXML
+        let form_info = crate::dynamics::metadata::FormInfo {
+            name: name.clone(),
+            entity_name: entity_name.clone(),
+            form_type,
+            is_custom,
+            state,
+            form_xml: form_xml.clone(),
+            form_structure: None, // Will be populated when needed
+        };
+
+        // Parse the structure if possible
+        let form_with_structure = match crate::dynamics::metadata::parse_form_structure(&form_info)
+        {
+            Ok(structure) => crate::dynamics::metadata::FormInfo {
+                form_structure: Some(structure),
+                ..form_info
+            },
+            Err(_) => form_info, // Keep the form even if structure parsing fails
+        };
+
+        Ok(Some(form_with_structure))
+    }
+
+    /// Fetch a specific record by ID from Dynamics 365
+    pub async fn fetch_record_by_id(&mut self, entity_name: &str, record_id: &str) -> Result<Value> {
+        let token = self.get_access_token().await?.to_string();
+
+        // Construct the base URL
+        let mut base_url = self.auth_config.host.clone();
+        if !base_url.ends_with('/') {
+            base_url.push('/');
+        }
+
+        // Get the plural form of the entity name
+        let plural_entity_name = self.pluralize_entity_name(entity_name).await?;
+
+        // Construct the record URL
+        let record_url = format!("{}api/data/v9.2/{}({})", base_url, plural_entity_name, record_id);
+
+        info!("Fetching record from: {}", record_url);
+
+        let response = self
+            .client
+            .get(&record_url)
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Accept", "application/json")
+            .header("OData-MaxVersion", "4.0")
+            .header("OData-Version", "4.0")
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            let result: Value = response.json().await?;
+            Ok(result)
+        } else {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            Err(anyhow::anyhow!(
+                "Failed to fetch record {}: HTTP {} - {}",
+                record_id,
+                status,
+                error_text
+            ))
+        }
+    }
+
+    /// Fetch a specific record by ID from Dynamics 365 (silent mode for TUI)
+    /// This version doesn't prompt for unknown entity names
+    pub async fn fetch_record_by_id_silent(&mut self, entity_name: &str, record_id: &str) -> Result<Value> {
+        let token = self.get_access_token().await?.to_string();
+
+        // Construct the base URL
+        let mut base_url = self.auth_config.host.clone();
+        if !base_url.ends_with('/') {
+            base_url.push('/');
+        }
+
+        // Get the plural form of the entity name (silent mode - no prompts)
+        let plural_entity_name = self.pluralize_entity_name_silent(entity_name).await?;
+
+        // Construct the record URL
+        let record_url = format!("{}api/data/v9.2/{}({})", base_url, plural_entity_name, record_id);
+
+        info!("Fetching record from: {}", record_url);
+
+        let response = self
+            .client
+            .get(&record_url)
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Accept", "application/json")
+            .header("OData-MaxVersion", "4.0")
+            .header("OData-Version", "4.0")
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            let result: Value = response.json().await?;
+            Ok(result)
+        } else {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            Err(anyhow::anyhow!(
+                "Failed to fetch record {}: HTTP {} - {}",
+                record_id,
+                status,
+                error_text
+            ))
+        }
     }
 }

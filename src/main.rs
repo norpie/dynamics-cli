@@ -14,23 +14,29 @@ use cli::Cli;
 use cli::app::Commands;
 use cli::commands::auth::AuthSubcommands;
 use cli::commands::entity::EntitySubcommands;
-use cli::commands::migration::MigrationSubCommands;
 use cli::commands::query::QuerySubcommands;
 use cli::commands::settings::SettingsSubcommands;
 use commands::auth::{SetupOptions, remove_command, select_command, setup_command, status_command};
 use commands::entity::{
     add_command, list_command, remove_command as entity_remove_command, update_command,
 };
+use commands::migration;
 use commands::query::{file_command, run_command};
 use commands::settings::{
     get_command, list_mappings_command, reset_all_command, reset_command, set_command, show_command,
 };
-use commands::migration;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize logger
-    env_logger::init();
+    // Initialize logger to file (truncate on each run)
+    let log_file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open("dynamics-cli.log")?;
+    env_logger::Builder::from_default_env()
+        .target(env_logger::Target::Pipe(Box::new(log_file)))
+        .init();
 
     dotenv::dotenv().ok();
     debug!("Environment variables loaded");
@@ -100,11 +106,7 @@ async fn main() -> Result<()> {
             SettingsSubcommands::ResetAll { force } => reset_all_command(force).await?,
             SettingsSubcommands::ListMappings => list_mappings_command().await?,
         },
-        Commands::Migration(migration_commands) => match migration_commands.command {
-            MigrationSubCommands::Compare(args) => migration::execute(args).await?,
-            MigrationSubCommands::Export(args) => migration::export(args).await?,
-            MigrationSubCommands::Start => migration::start().await?,
-        },
+        Commands::Migration(_) => migration::start().await?,
     }
 
     Ok(())
