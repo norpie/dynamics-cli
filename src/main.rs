@@ -17,6 +17,7 @@ use cli::commands::entity::EntitySubcommands;
 use cli::commands::query::QuerySubcommands;
 use cli::commands::settings::SettingsSubcommands;
 use commands::auth::{SetupOptions, remove_command, select_command, setup_command, status_command};
+use commands::deadlines;
 use commands::entity::{
     add_command, list_command, remove_command as entity_remove_command, update_command,
 };
@@ -107,6 +108,7 @@ async fn main() -> Result<()> {
             SettingsSubcommands::ListMappings => list_mappings_command().await?,
         },
         Commands::Migration(_) => migration::start().await?,
+        Commands::Deadlines(_) => deadlines::start().await?,
     }
 
     Ok(())

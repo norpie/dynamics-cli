@@ -1,4 +1,5 @@
 use super::commands::auth::AuthCommands;
+use super::commands::deadlines::DeadlinesCommands;
 use super::commands::entity::EntityCommands;
 use super::commands::migration::MigrationCommands;
 use super::commands::query::QueryCommands;
@@ -25,4 +26,6 @@ pub enum Commands {
     Settings(SettingsCommands),
     /// Migration tools for comparing entities between CRM instances
     Migration(MigrationCommands),
+    /// Deadlines management and tracking
+    Deadlines(DeadlinesCommands),
 }
