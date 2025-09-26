@@ -4,6 +4,7 @@ use log::debug;
 
 use super::config::{DeadlineConfig, EnvironmentConfig};
 use super::excel_parser::SheetData;
+use super::csv_cache::CsvCacheManager;
 
 #[derive(Debug, Clone)]
 pub struct ValidationResult {
@@ -61,8 +62,8 @@ pub fn validate_excel_entities(
     let checkbox_columns = identify_checkbox_columns(&sheet_data.headers);
     debug!("Identified {} checkbox columns: {:?}", checkbox_columns.len(), checkbox_columns);
 
-    // Build entity lookup map from config
-    let entity_lookup = build_entity_lookup(env_config);
+    // Build entity lookup map from CSV cache data
+    let entity_lookup = build_entity_lookup(env_config, environment_name);
     debug!("Built entity lookup with {} entries", entity_lookup.len());
 
     // Match Excel columns against configured entities
@@ -145,14 +146,24 @@ fn identify_checkbox_columns(headers: &[String]) -> Vec<String> {
     }
 }
 
-/// Build a lookup map from logical types to entity names
-fn build_entity_lookup(env_config: &EnvironmentConfig) -> HashMap<String, String> {
+/// Build a lookup map from entity names (from CSV cache) to logical types
+fn build_entity_lookup(env_config: &EnvironmentConfig, environment_name: &str) -> HashMap<String, String> {
     let mut lookup = HashMap::new();
+    let cache_manager = CsvCacheManager::new(environment_name.to_string());
 
     for (logical_type, mapping) in &env_config.entities {
-        lookup.insert(logical_type.clone(), mapping.entity.clone());
+        // Load entity names from CSV cache
+        if let Ok(entity_names) = cache_manager.load_entity_names(&mapping.entity) {
+            for entity_name in entity_names.keys() {
+                lookup.insert(entity_name.clone(), logical_type.clone());
+            }
+        }
+        debug!("Loaded {} entity names for logical type '{}'",
+               cache_manager.load_entity_names(&mapping.entity).map(|m| m.len()).unwrap_or(0),
+               logical_type);
     }
 
+    debug!("Built entity lookup with {} total entity names", lookup.len());
     lookup
 }
 
@@ -163,33 +174,15 @@ fn find_matching_entity(
 ) -> Option<(String, String)> {
     let header_lower = column_header.to_lowercase();
 
-    // First try exact match on logical type
-    if let Some(entity_name) = entity_lookup.get(&header_lower) {
-        return Some((header_lower, entity_name.clone()));
+    // Direct lookup: column header matches entity name from CSV
+    if let Some(logical_type) = entity_lookup.get(&header_lower) {
+        return Some((logical_type.clone(), column_header.to_string()));
     }
 
-    // Try partial matches - column header contains logical type or vice versa
-    for (logical_type, entity_name) in entity_lookup {
-        let logical_lower = logical_type.to_lowercase();
-
-        // Check if column contains logical type
-        if header_lower.contains(&logical_lower) {
-            return Some((logical_type.clone(), entity_name.clone()));
-        }
-
-        // Check if logical type contains column (for abbreviations)
-        if logical_lower.contains(&header_lower) {
-            return Some((logical_type.clone(), entity_name.clone()));
-        }
-
-        // Check entity name matching
-        let entity_parts: Vec<&str> = entity_name.split('_').collect();
-        if entity_parts.len() > 1 {
-            let entity_suffix = entity_parts.last().unwrap().to_lowercase();
-            if header_lower.contains(&entity_suffix) || entity_suffix.contains(&header_lower) {
-                return Some((logical_type.clone(), entity_name.clone()));
-            }
-        }
+    // Try trimmed/cleaned version
+    let header_cleaned = header_lower.trim();
+    if let Some(logical_type) = entity_lookup.get(header_cleaned) {
+        return Some((logical_type.clone(), column_header.to_string()));
     }
 
     None

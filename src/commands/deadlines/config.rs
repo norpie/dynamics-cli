@@ -171,19 +171,39 @@ impl DiscoveredEntity {
     }
 
     pub fn guess_name_field(&self) -> Option<String> {
-        // Common name field patterns
-        let name_patterns = ["name", "title", "displayname"];
+        // Priority order: exact matches first, then broader patterns
+        let exact_patterns = [
+            format!("{}_name", self.name.replace("cgk_", "cgk_")),
+            "cgk_name".to_string(),
+            "name".to_string(),
+        ];
 
-        for pattern in &name_patterns {
+        let partial_patterns = ["title", "displayname"];
+
+        // First try exact name patterns
+        for pattern in &exact_patterns {
             if let Some(field) = self.fields.iter()
-                .find(|field| field.contains(pattern))
+                .find(|field| *field == pattern)
                 .cloned()
             {
                 return Some(field);
             }
         }
 
-        None
+        // Then try partial patterns (but exclude fields ending in "idname" which are relationships)
+        for pattern in &partial_patterns {
+            if let Some(field) = self.fields.iter()
+                .find(|field| field.contains(pattern) && !field.ends_with("idname"))
+                .cloned()
+            {
+                return Some(field);
+            }
+        }
+
+        // Finally, fallback to any field containing "name" but not ending in "idname"
+        self.fields.iter()
+            .find(|field| field.contains("name") && !field.ends_with("idname"))
+            .cloned()
     }
 }
 
