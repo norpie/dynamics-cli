@@ -161,7 +161,7 @@ async fn run_file_app(
                             } else {
                                 // File selected - return the full path
                                 let file_path = current_path.join(name);
-                                return Ok(Some(format!("Environment: {}\nFile: {}", selected_env, file_path.display())));
+                                return Ok(Some(file_path.display().to_string()));
                             }
                         }
                     }
