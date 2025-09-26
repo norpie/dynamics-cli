@@ -169,6 +169,73 @@ impl FieldRenderer {
     /// Colors: field name = match state (green/yellow/red), required * = red, arrow = gray,
     ///         target = blue, type/relationship = gray, mapping source = gray
     pub fn render_field_line(field_info: &FieldDisplayInfo) -> Line<'static> {
+        Self::render_field_line_with_context(field_info, None, false)
+    }
+
+    /// Renders a field line with contextual information for examples mode
+    ///
+    /// When examples_mode is true and is_source is provided:
+    /// - Only shows the relevant side's example value
+    /// - Hides mapping indicators and types to save space
+    /// - Shows cleaner display: "field_name: example_value"
+    pub fn render_field_line_with_context(
+        field_info: &FieldDisplayInfo,
+        is_source: Option<bool>,
+        examples_mode: bool
+    ) -> Line<'static> {
+        if examples_mode && is_source.is_some() {
+            Self::render_field_line_examples_mode(field_info, is_source.unwrap())
+        } else {
+            Self::render_field_line_normal_mode(field_info)
+        }
+    }
+
+    /// Simplified rendering for examples mode - shows only relevant side's data
+    fn render_field_line_examples_mode(field_info: &FieldDisplayInfo, is_source: bool) -> Line<'static> {
+        let mut spans = vec![];
+
+        // Field name - simpler coloring in examples mode
+        let field_name_style = match field_info.match_state {
+            MatchState::FullMatch => Style::default().fg(Color::Green),
+            MatchState::NoMatch => Style::default().fg(Color::Red),
+            _ => Style::default().fg(Color::Yellow),
+        };
+        spans.push(Span::styled(
+            field_info.field.name.clone(),
+            field_name_style,
+        ));
+
+        // Required indicator - keep this as it's important
+        if field_info.field.is_required {
+            spans.push(Span::styled(" *", Style::default().fg(Color::Red)));
+        }
+
+        // Show only the relevant side's example value
+        let example_value = if is_source {
+            &field_info.source_example_value
+        } else {
+            &field_info.target_example_value
+        };
+
+        if let Some(value) = example_value {
+            spans.push(Span::styled(": ", Style::default().fg(Color::Gray)));
+            spans.push(Span::styled(
+                truncate_value(value, 40), // More space in examples mode
+                Style::default().fg(Color::Cyan),
+            ));
+        } else {
+            spans.push(Span::styled(": ", Style::default().fg(Color::Gray)));
+            spans.push(Span::styled(
+                "[no data]",
+                Style::default().fg(Color::DarkGray),
+            ));
+        }
+
+        Line::from(spans)
+    }
+
+    /// Normal rendering mode - full field information with mappings and types
+    fn render_field_line_normal_mode(field_info: &FieldDisplayInfo) -> Line<'static> {
         let mut spans = vec![];
 
         // Field name - ALWAYS colored by match state for consistency

@@ -124,7 +124,11 @@ impl HierarchyTree {
                 };
 
                 // Use FieldRenderer for rich rendering but skip indentation (already added)
-                let field_line = FieldRenderer::render_field_line(&field_display_info);
+                let field_line = FieldRenderer::render_field_line_with_context(
+                    &field_display_info,
+                    Some(is_source),
+                    examples_state.examples_mode_enabled
+                );
 
                 // Extract spans from field rendering, skip indentation we already added
                 let field_spans: Vec<Span> = field_line.spans.into_iter().collect();
@@ -169,7 +173,11 @@ impl HierarchyTree {
                 };
 
                 // Use FieldRenderer for rich rendering
-                let field_line = FieldRenderer::render_field_line(&field_display_info);
+                let field_line = FieldRenderer::render_field_line_with_context(
+                    &field_display_info,
+                    Some(is_source),
+                    examples_state.examples_mode_enabled
+                );
 
                 // Extract spans from field rendering, skip indentation we already added
                 let field_spans: Vec<Span> = field_line.spans.into_iter().collect();
