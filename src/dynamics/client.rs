@@ -363,6 +363,50 @@ impl DynamicsClient {
         Ok(output)
     }
 
+    /// Generic GET request to Dynamics API
+    pub async fn get(&mut self, endpoint: &str) -> Result<String> {
+        let token = self.get_access_token().await?.to_string();
+
+        // Construct the full URL
+        let mut base_url = self.auth_config.host.clone();
+        if !base_url.ends_with('/') {
+            base_url.push('/');
+        }
+
+        let full_url = if endpoint.starts_with("http") {
+            endpoint.to_string()
+        } else {
+            format!("{}api/data/v9.2/{}", base_url, endpoint)
+        };
+
+        debug!("GET request to: {}", full_url);
+
+        let response = self
+            .client
+            .get(&full_url)
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Accept", "application/json")
+            .header("OData-MaxVersion", "4.0")
+            .header("OData-Version", "4.0")
+            .send()
+            .await?;
+
+        let status = response.status();
+        debug!("Response status: {}", status);
+
+        let response_text = response.text().await?;
+        debug!("Response body length: {} chars", response_text.len());
+
+        if status.is_success() {
+            Ok(response_text)
+        } else {
+            Err(anyhow::anyhow!(
+                "HTTP request failed: {} - {}",
+                status, response_text
+            ))
+        }
+    }
+
     /// Fetch entity metadata from Dynamics 365
     pub async fn fetch_metadata(&mut self) -> Result<String> {
         let token = self.get_access_token().await?.to_string();
