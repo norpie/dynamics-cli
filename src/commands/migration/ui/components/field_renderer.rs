@@ -220,7 +220,7 @@ impl FieldRenderer {
         if let Some(value) = example_value {
             spans.push(Span::styled(": ", Style::default().fg(Color::Gray)));
             spans.push(Span::styled(
-                truncate_value(value, 40), // More space in examples mode
+                truncate_value(value, 100), // Show more characters in examples mode
                 Style::default().fg(Color::Cyan),
             ));
         } else {
@@ -324,7 +324,7 @@ impl FieldRenderer {
             if let Some(source_value) = &field_info.source_example_value {
                 spans.push(Span::styled("Source: ", Style::default().fg(Color::Gray)));
                 spans.push(Span::styled(
-                    truncate_value(source_value, 20),
+                    truncate_value(source_value, 60),
                     Style::default().fg(Color::Cyan),
                 ));
             }
@@ -336,7 +336,7 @@ impl FieldRenderer {
             if let Some(target_value) = &field_info.target_example_value {
                 spans.push(Span::styled("Target: ", Style::default().fg(Color::Gray)));
                 spans.push(Span::styled(
-                    truncate_value(target_value, 20),
+                    truncate_value(target_value, 60),
                     Style::default().fg(Color::Cyan),
                 ));
             }
@@ -388,7 +388,7 @@ impl FieldRenderer {
             result.push_str(" | ");
 
             if let Some(source_value) = &field_info.source_example_value {
-                result.push_str(&format!("Source: {}", truncate_value(source_value, 20)));
+                result.push_str(&format!("Source: {}", truncate_value(source_value, 60)));
             }
 
             if field_info.source_example_value.is_some() && field_info.target_example_value.is_some() {
@@ -396,7 +396,7 @@ impl FieldRenderer {
             }
 
             if let Some(target_value) = &field_info.target_example_value {
-                result.push_str(&format!("Target: {}", truncate_value(target_value, 20)));
+                result.push_str(&format!("Target: {}", truncate_value(target_value, 60)));
             }
         }
 

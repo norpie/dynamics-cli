@@ -171,7 +171,7 @@ impl ExamplesState {
     }
 
     pub fn get_example_value(&self, field_name: &str, is_source: bool) -> Option<String> {
-        log::debug!("get_example_value called for field: {}, is_source: {}", field_name, is_source);
+        log::debug!("=== get_example_value called for field: {}, is_source: {} ===", field_name, is_source);
         log::debug!("  examples_mode_enabled: {}", self.examples_mode_enabled);
 
         if !self.examples_mode_enabled {
@@ -187,7 +187,9 @@ impl ExamplesState {
         } else {
             (&active_example.target_uuid, format!("target:{}", active_example.target_uuid))
         };
-        log::debug!("  looking for data for UUID: {} (key: {})", uuid, lookup_key);
+        log::debug!("  🔍 LOOKUP CALCULATION: is_source={}, source_uuid={}, target_uuid={}",
+                   is_source, active_example.source_uuid, active_example.target_uuid);
+        log::debug!("  🎯 USING: uuid={}, key={}", uuid, lookup_key);
 
         log::debug!("  example_data has {} entries", self.example_data.len());
         for (data_uuid, _) in &self.example_data {
@@ -195,31 +197,140 @@ impl ExamplesState {
         }
 
         if let Some(record_data) = self.example_data.get(&lookup_key) {
-            log::debug!("  found record data for UUID: {}", uuid);
-            log::debug!("  record has {} fields", record_data.as_object().map_or(0, |obj| obj.len()));
+            log::debug!("  ✅ FOUND record data for key: {} (UUID: {})", lookup_key, uuid);
+            log::debug!("  📊 record has {} fields", record_data.as_object().map_or(0, |obj| obj.len()));
 
-            // Try to extract the field value from the JSON data
-            if let Some(value) = record_data.get(field_name) {
-                log::debug!("  found value for field {}: {:?}", field_name, value);
-                match value {
-                    Value::String(s) => Some(s.clone()),
-                    Value::Number(n) => Some(n.to_string()),
-                    Value::Bool(b) => Some(b.to_string()),
-                    Value::Null => Some("[null]".to_string()),
-                    _ => Some("[complex]".to_string()),
-                }
-            } else {
-                log::debug!("  field {} not found in record data", field_name);
-                if let Some(obj) = record_data.as_object() {
-                    log::debug!("  available fields: {:?}", obj.keys().collect::<Vec<_>>());
-                }
-                Some("[no value]".to_string())
-            }
+            // Try to extract the field value using Dynamics 365 lookup fallback logic
+            self.extract_field_value_with_fallbacks(record_data, field_name)
         } else {
-            log::debug!("  no record data found for UUID: {}", uuid);
+            log::error!("  ❌ NO RECORD DATA FOUND for key: {} (UUID: {})", lookup_key, uuid);
+            log::error!("  🔍 Requested: is_source={}, field_name={}", is_source, field_name);
             Some("[no data]".to_string())
         }
     }
+
+    /// Extract field value with Dynamics 365 lookup fallback logic
+    ///
+    /// Priority order:
+    /// 1. Formatted value annotation (human-readable names for lookups)
+    /// 2. Direct field value (original approach)
+    /// 3. Navigation property fallback (expanded lookup data)
+    /// 4. Related field patterns (e.g., field_value -> field for lookups)
+    /// 5. Smart GUID detection and abbreviation for lookup fields
+    fn extract_field_value_with_fallbacks(&self, record_data: &Value, field_name: &str) -> Option<String> {
+        // 1. Try formatted value annotation first (best for lookups)
+        let formatted_key = format!("{}@OData.Community.Display.V1.FormattedValue", field_name);
+        if let Some(value) = record_data.get(&formatted_key) {
+            log::debug!("  found formatted value for field {}: {:?}", field_name, value);
+            return self.convert_json_value_to_string(value, "formatted");
+        }
+
+        // 2. Try direct field value (original approach)
+        if let Some(value) = record_data.get(field_name) {
+            log::debug!("  found direct value for field {}: {:?}", field_name, value);
+            return self.convert_json_value_to_string(value, "direct");
+        }
+
+        // 3. Try navigation property fallback for lookup fields
+        if field_name.ends_with("_value") {
+            let nav_prop_name = field_name.strip_suffix("_value").unwrap_or(field_name);
+
+            // Try nav_prop/name pattern
+            let name_path_key = format!("{}/name", nav_prop_name);
+            if let Some(value) = record_data.get(&name_path_key) {
+                log::debug!("  found navigation property name for field {}: {:?}", field_name, value);
+                return self.convert_json_value_to_string(value, "navigation/name");
+            }
+
+            // Try nav_prop/fullname pattern
+            let fullname_path_key = format!("{}/fullname", nav_prop_name);
+            if let Some(value) = record_data.get(&fullname_path_key) {
+                log::debug!("  found navigation property fullname for field {}: {:?}", field_name, value);
+                return self.convert_json_value_to_string(value, "navigation/fullname");
+            }
+
+            // Try expanded navigation property object
+            if let Some(nav_obj) = record_data.get(nav_prop_name) {
+                if let Some(obj) = nav_obj.as_object() {
+                    // Look for common display name fields in the expanded object
+                    for display_field in ["name", "fullname", "subject", "title"] {
+                        if let Some(value) = obj.get(display_field) {
+                            log::debug!("  found expanded navigation property {}.{} for field {}: {:?}",
+                                       nav_prop_name, display_field, field_name, value);
+                            return self.convert_json_value_to_string(value, "expanded");
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. For non-_value fields that might be lookup references, try adding _value
+        if !field_name.ends_with("_value") && !field_name.starts_with("_") {
+            let value_field_name = format!("_{}_value", field_name);
+            if let Some(value) = record_data.get(&value_field_name) {
+                log::debug!("  found related _value field for {}: {:?}", field_name, value);
+                return self.convert_json_value_to_string(value, "related_value");
+            }
+
+            // Also try the formatted value for the _value field
+            let formatted_value_key = format!("_{}_value@OData.Community.Display.V1.FormattedValue", field_name);
+            if let Some(value) = record_data.get(&formatted_value_key) {
+                log::debug!("  found related formatted _value field for {}: {:?}", field_name, value);
+                return self.convert_json_value_to_string(value, "related_formatted");
+            }
+        }
+
+        // 5. Final fallback - field not found anywhere
+        log::warn!("❌ FIELD NOT FOUND: {} not found in record data with any fallback", field_name);
+        if let Some(obj) = record_data.as_object() {
+            let available_fields: Vec<String> = obj.keys().cloned().collect();
+            log::warn!("  📋 Available fields in JSON: {}", available_fields.join(", "));
+
+            // Show similar field names to help debug mapping issues
+            let similar_fields: Vec<String> = available_fields.iter()
+                .filter(|field| field.contains(&field_name.replace("cgk", "").replace("nrq", "")) || field_name.contains(&field.replace("cgk", "").replace("nrq", "")))
+                .cloned()
+                .collect();
+            if !similar_fields.is_empty() {
+                log::warn!("  🔍 Similar field names found: {}", similar_fields.join(", "));
+            }
+        }
+        Some("[no value]".to_string())
+    }
+
+    /// Convert a JSON Value to a display string with smart GUID handling
+    fn convert_json_value_to_string(&self, value: &Value, source_type: &str) -> Option<String> {
+        let result = match value {
+            Value::String(s) => {
+                if s.is_empty() {
+                    "[empty]".to_string()
+                } else {
+                    s.clone()
+                }
+            },
+            Value::Number(n) => n.to_string(),
+            Value::Bool(b) => b.to_string(),
+            Value::Null => "[null]".to_string(),
+            Value::Array(arr) => {
+                if arr.is_empty() {
+                    "[empty array]".to_string()
+                } else {
+                    format!("[array with {} items]", arr.len())
+                }
+            },
+            Value::Object(obj) => {
+                if obj.is_empty() {
+                    "[empty object]".to_string()
+                } else {
+                    format!("[object with {} fields]", obj.len())
+                }
+            }
+        };
+
+        log::debug!("  converted {} value to string: {}", source_type, result);
+        Some(result)
+    }
+
 }
 
 #[derive(Debug, Clone)]

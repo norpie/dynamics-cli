@@ -97,11 +97,23 @@ impl HierarchyTree {
             if let Some(field) = fields.iter().find(|f| f.name == field_info.field_name) {
                 // Extract example values if examples mode is enabled
                 let (source_example_value, target_example_value) = if examples_state.examples_mode_enabled {
-                    let source_value = examples_state.get_example_value(&field.name, true);
-                    // For target, use the mapped field name if available
-                    let target_field_name = field_info.mapping_target.as_ref().unwrap_or(&field.name);
-                    let target_value = examples_state.get_example_value(target_field_name, false);
-                    (source_value, target_value)
+                    if is_source {
+                        // Rendering source side - current logic is correct
+                        let source_value = examples_state.get_example_value(&field.name, true);
+                        let target_field_name = field_info.mapping_target.as_ref().unwrap_or(&field.name);
+                        log::debug!("🔍 SOURCE SIDE Field {}: mapping_target = {:?}, using target_field_name = {}",
+                                   field.name, field_info.mapping_target, target_field_name);
+                        let target_value = examples_state.get_example_value(target_field_name, false);
+                        (source_value, target_value)
+                    } else {
+                        // Rendering target side - reverse the logic
+                        let target_value = examples_state.get_example_value(&field.name, false);
+                        let source_field_name = field_info.mapping_target.as_ref().unwrap_or(&field.name);
+                        log::debug!("🎯 TARGET SIDE Field {}: mapping_target = {:?}, using source_field_name = {}",
+                                   field.name, field_info.mapping_target, source_field_name);
+                        let source_value = examples_state.get_example_value(source_field_name, true);
+                        (source_value, target_value)
+                    }
                 } else {
                     (None, None)
                 };

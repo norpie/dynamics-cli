@@ -1,5 +1,6 @@
 use crate::{
     commands::migration::{
+        export::MigrationExporter,
         ui::{
             components::{ExamplesModal, ExamplesAction, FooterAction, ManualMappingModal, ModalComponent, PrefixMappingModal, hierarchy_tree::SortMode},
             screens::{
@@ -19,6 +20,7 @@ use crossterm::event::{Event, KeyCode, KeyEventKind};
 use ratatui::{Frame, layout::Rect, widgets::ListState};
 use std::collections::HashMap;
 use serde_json::Value;
+use chrono;
 
 // Type alias to avoid namespace conflict
 type CommonComparisonData = super::comparison_apps::common::ComparisonData;
@@ -263,8 +265,6 @@ impl UnifiedCompareScreen {
         }
 
         // Get selected fields from both sides
-        // For now, we'll need to add a method to get selected field names from the comparison apps
-        // This is a placeholder - we'll need to implement getting selected fields from the fields app
         if let (Some(source_field), Some(target_field)) = (
             self.get_selected_source_field(),
             self.get_selected_target_field(),
@@ -284,16 +284,22 @@ impl UnifiedCompareScreen {
         }
     }
 
-    fn get_selected_source_field(&self) -> Option<String> {
-        // TODO: Implement getting selected field from source side of fields app
-        // This would need to be implemented in the comparison apps
-        None
+    fn get_selected_source_field(&mut self) -> Option<String> {
+        // Only get selected field if we're on the Fields tab
+        if matches!(self.active_tab, ActiveTab::Fields) {
+            self.fields_app.get_selected_source_field_name()
+        } else {
+            None
+        }
     }
 
-    fn get_selected_target_field(&self) -> Option<String> {
-        // TODO: Implement getting selected field from target side of fields app
-        // This would need to be implemented in the comparison apps
-        None
+    fn get_selected_target_field(&mut self) -> Option<String> {
+        // Only get selected field if we're on the Fields tab
+        if matches!(self.active_tab, ActiveTab::Fields) {
+            self.fields_app.get_selected_target_field_name()
+        } else {
+            None
+        }
     }
 
     fn toggle_examples_mode(&mut self) {
@@ -410,6 +416,30 @@ impl UnifiedCompareScreen {
         self.relationships_app.apply_sorting(&self.sort_mode);
         self.views_app.apply_sorting(&self.sort_mode);
         self.forms_app.apply_sorting(&self.sort_mode);
+    }
+
+    /// Export current comparison data to Excel
+    fn export_to_excel(&self) {
+        if let Some(comparison_data) = &self.comparison_data {
+            // Generate filename with timestamp
+            let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+            let filename = format!("migration_analysis_{}_to_{}_{}.xlsx",
+                comparison_data.source_entity,
+                comparison_data.target_entity,
+                timestamp
+            );
+
+            match MigrationExporter::export_and_open(comparison_data, &self.shared_state, &filename) {
+                Ok(_) => {
+                    log::info!("Excel export completed successfully: {}", filename);
+                }
+                Err(e) => {
+                    log::error!("Failed to export Excel file: {}", e);
+                }
+            }
+        } else {
+            log::warn!("No comparison data available for export");
+        }
     }
 
 }
@@ -585,8 +615,12 @@ impl Screen for UnifiedCompareScreen {
                         EventHandlers::switch_side(&mut self.focused_side);
                         ScreenResult::Continue
                     }
-                    KeyCode::Char('1') | KeyCode::F(1) => {
+                    KeyCode::Char('1') => {
                         EventHandlers::switch_tab(&mut self.active_tab, 1);
+                        ScreenResult::Continue
+                    }
+                    KeyCode::F(1) => {
+                        self.export_to_excel();
                         ScreenResult::Continue
                     }
                     KeyCode::Char('2') | KeyCode::F(2) => {
@@ -754,6 +788,11 @@ impl Screen for UnifiedCompareScreen {
                 key: "E".to_string(),
                 description: "Manage Examples".to_string(),
                 enabled: true,
+            },
+            FooterAction {
+                key: "F1".to_string(),
+                description: "Export Excel".to_string(),
+                enabled: self.comparison_data.is_some(),
             },
             // System Actions (last)
             FooterAction {

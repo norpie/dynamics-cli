@@ -434,4 +434,12 @@ impl ComparisonAppTrait for ComparisonApp {
         self.source_tree.sort_nodes(sort_mode);
         self.target_tree.sort_nodes(sort_mode);
     }
+
+    fn get_selected_source_field_name(&mut self) -> Option<String> {
+        self.source_tree.get_selected_node_name()
+    }
+
+    fn get_selected_target_field_name(&mut self) -> Option<String> {
+        self.target_tree.get_selected_node_name()
+    }
 }

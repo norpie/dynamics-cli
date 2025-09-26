@@ -755,4 +755,50 @@ impl DynamicsClient {
             ))
         }
     }
+
+    /// Fetch a record by ID with formatted values for example data display
+    /// Includes OData annotations for lookup field display names
+    pub async fn fetch_example_record_by_id(&mut self, entity_name: &str, record_id: &str) -> Result<Value> {
+        let token = self.get_access_token().await?.to_string();
+
+        // Construct the base URL
+        let mut base_url = self.auth_config.host.clone();
+        if !base_url.ends_with('/') {
+            base_url.push('/');
+        }
+
+        // Get the plural form of the entity name (silent mode - no prompts)
+        let plural_entity_name = self.pluralize_entity_name_silent(entity_name).await?;
+
+        // Construct the record URL with formatted value preference
+        // The Prefer header requests formatted values for lookup fields
+        let record_url = format!("{}api/data/v9.2/{}({})", base_url, plural_entity_name, record_id);
+
+        info!("Fetching example record from: {}", record_url);
+
+        let response = self
+            .client
+            .get(&record_url)
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Accept", "application/json")
+            .header("OData-MaxVersion", "4.0")
+            .header("OData-Version", "4.0")
+            .header("Prefer", "odata.include-annotations=\"*\"")
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            let result: Value = response.json().await?;
+            Ok(result)
+        } else {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            Err(anyhow::anyhow!(
+                "Failed to fetch example record {}: HTTP {} - {}",
+                record_id,
+                status,
+                error_text
+            ))
+        }
+    }
 }

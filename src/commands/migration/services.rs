@@ -423,7 +423,7 @@ fn spawn_fetch_example_record(
 
         let mut client = DynamicsClient::new(auth);
 
-        match client.fetch_record_by_id_silent(&entity_name, &record_id).await {
+        match client.fetch_example_record_by_id(&entity_name, &record_id).await {
             Ok(record_data) => {
                 log::info!("Fetched record {} from entity {} successfully", record_id, entity_name);
                 log::debug!("  Record has {} fields", record_data.as_object().map_or(0, |obj| obj.len()));

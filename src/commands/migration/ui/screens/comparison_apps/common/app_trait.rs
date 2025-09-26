@@ -77,6 +77,18 @@ pub trait ComparisonApp: Send {
         // Default implementation - apps can override
         let _ = sort_mode;
     }
+
+    /// Get the selected field name from the source tree (for manual mapping)
+    fn get_selected_source_field_name(&mut self) -> Option<String> {
+        // Default implementation - apps can override
+        None
+    }
+
+    /// Get the selected field name from the target tree (for manual mapping)
+    fn get_selected_target_field_name(&mut self) -> Option<String> {
+        // Default implementation - apps can override
+        None
+    }
 }
 
 /// Data shared between all comparison apps

@@ -1,7 +1,7 @@
 use crate::{
     commands::migration::ui::{
         components::{
-            FooterAction, ListAction, ListComponent, ListConfig, ModalComponent, TextModalContent,
+            ConfirmationAction, ConfirmationDialog, FooterAction, ListAction, ListComponent, ListConfig, ModalComponent, TextModalContent,
         },
         screens::{EntitySelectScreen, LoadingScreen, MigrationSelectScreen, Screen, ScreenResult},
         styles::STYLES,
@@ -23,6 +23,8 @@ pub struct ComparisonSelectScreen {
     config: Config,
     show_entity_modal: bool,
     entity_modal: Option<ModalComponent<TextModalContent>>,
+    show_delete_confirmation: bool,
+    delete_confirmation_modal: Option<ModalComponent<ConfirmationDialog>>,
 }
 
 #[derive(Clone)]
@@ -70,6 +72,8 @@ impl ComparisonSelectScreen {
             config,
             show_entity_modal: false,
             entity_modal: None,
+            show_delete_confirmation: false,
+            delete_confirmation_modal: None,
         }
     }
 
@@ -127,6 +131,68 @@ impl ComparisonSelectScreen {
         self.show_entity_modal = false;
         self.entity_modal = None;
     }
+
+    fn handle_delete_selected(&mut self) -> ScreenResult {
+        if self.comparisons.is_empty() {
+            return ScreenResult::Continue;
+        }
+
+        if let Some(selected) = self.list.selected() {
+            if let Some(comparison_item) = self.list.items().get(selected) {
+                let comparison_name = format!(
+                    "{} → {}",
+                    comparison_item.comparison.source_entity,
+                    comparison_item.comparison.target_entity
+                );
+                let dialog = ConfirmationDialog::new(
+                    "Delete Comparison".to_string(),
+                    format!(
+                        "Are you sure you want to delete the comparison '{}'?\n\nThis action cannot be undone.",
+                        comparison_name
+                    ),
+                )
+                .with_buttons("Delete".to_string(), "Cancel".to_string());
+
+                self.delete_confirmation_modal = Some(ModalComponent::new(dialog));
+                self.show_delete_confirmation = true;
+            }
+        }
+        ScreenResult::Continue
+    }
+
+    fn handle_confirmation_result(&mut self, action: ConfirmationAction) -> ScreenResult {
+        if let ConfirmationAction::Confirmed = action {
+            if let Some(selected) = self.list.selected() {
+                if let Some(comparison_item) = self.list.items().get(selected) {
+                    let comparison = &comparison_item.comparison;
+
+                    // Remove from config
+                    if let Err(e) = self.config.remove_comparison_from_migration(
+                        &self.migration.name,
+                        &comparison.name,
+                    ) {
+                        log::error!("Failed to delete comparison: {}", e);
+                        self.show_delete_confirmation = false;
+                        self.delete_confirmation_modal = None;
+                        return ScreenResult::Continue;
+                    }
+
+                    // Update local state - recreate the screen with updated data
+                    // First get the updated migration from config
+                    if let Some(updated_migration) = self.config.migrations.get(&self.migration.name) {
+                        return ScreenResult::Navigate(Box::new(ComparisonSelectScreen::new(
+                            self.config.clone(),
+                            updated_migration.clone(),
+                        )));
+                    }
+                }
+            }
+        }
+
+        self.show_delete_confirmation = false;
+        self.delete_confirmation_modal = None;
+        ScreenResult::Continue
+    }
 }
 
 impl Screen for ComparisonSelectScreen {
@@ -158,9 +224,39 @@ impl Screen for ComparisonSelectScreen {
         {
             modal.render(f, area);
         }
+
+        // Render delete confirmation modal if active
+        if self.show_delete_confirmation {
+            if let Some(modal) = &mut self.delete_confirmation_modal {
+                modal.render(f, area);
+            }
+        }
     }
 
     fn handle_event(&mut self, event: Event) -> ScreenResult {
+        // Handle delete confirmation modal events first if active
+        if self.show_delete_confirmation {
+            if let Some(modal) = &mut self.delete_confirmation_modal {
+                match event {
+                    Event::Key(key) if key.kind == KeyEventKind::Press => {
+                        match modal.handle_key(key.code) {
+                            crate::commands::migration::ui::components::modal_component::ModalAction::Close => {
+                                let dialog = modal.content_mut();
+                                if let Some(action) = dialog.take_action() {
+                                    return self.handle_confirmation_result(action);
+                                }
+                                self.show_delete_confirmation = false;
+                                self.delete_confirmation_modal = None;
+                            }
+                            _ => {}
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            return ScreenResult::Continue;
+        }
+
         // Handle modal events first if modal is active
         if self.show_entity_modal {
             if let Some(ref mut modal) = self.entity_modal {
@@ -204,6 +300,9 @@ impl Screen for ComparisonSelectScreen {
                                 self.config.clone(),
                             )))
                         }
+                        KeyCode::Delete => {
+                            self.handle_delete_selected()
+                        }
                         _ => match self.list.handle_key(key.code) {
                             ListAction::Selected(index) => self.handle_comparison_selected(index),
                             ListAction::CreateNew => self.handle_create_new(),
@@ -222,7 +321,7 @@ impl Screen for ComparisonSelectScreen {
     }
 
     fn get_footer_actions(&self) -> Vec<FooterAction> {
-        if self.show_entity_modal {
+        if self.show_entity_modal || self.show_delete_confirmation {
             vec![FooterAction {
                 key: "Esc".to_string(),
                 description: "Close Modal".to_string(),
@@ -244,6 +343,11 @@ impl Screen for ComparisonSelectScreen {
                     key: "n".to_string(),
                     description: "New Comparison".to_string(),
                     enabled: true,
+                },
+                FooterAction {
+                    key: "Del".to_string(),
+                    description: "Delete Comparison".to_string(),
+                    enabled: !self.comparisons.is_empty(),
                 },
                 FooterAction {
                     key: "Esc".to_string(),
