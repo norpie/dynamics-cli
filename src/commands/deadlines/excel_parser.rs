@@ -51,6 +51,10 @@ impl ExcelWorkbook {
                 .collect();
 
             if row_idx == 0 {
+                // Skip first row - it's not headers, it's data/description
+                rows_data.push(row_values);
+            } else if row_idx == 1 {
+                // Second row contains the actual headers
                 headers = row_values;
             } else {
                 rows_data.push(row_values);

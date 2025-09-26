@@ -53,24 +53,17 @@ async fn run_file_app(
                 .margin(1)
                 .constraints([
                     Constraint::Length(3),
-                    Constraint::Length(2),
                     Constraint::Min(0),
                     Constraint::Length(3),
                 ])
                 .split(f.area());
 
-            // Title
-            let title = Paragraph::new("Select File")
+            // Title with current path
+            let title = Paragraph::new(format!("Select File - {}", current_path.display()))
                 .style(Style::default().fg(Color::Cyan))
                 .alignment(Alignment::Center)
                 .block(Block::default().borders(Borders::ALL));
             f.render_widget(title, chunks[0]);
-
-            // Current path
-            let path_display = Paragraph::new(format!("Path: {}", current_path.display()))
-                .style(Style::default().fg(Color::Yellow))
-                .block(Block::default().borders(Borders::ALL));
-            f.render_widget(path_display, chunks[1]);
 
             // File/Directory list
             let items: Vec<ListItem> = entries
@@ -99,14 +92,14 @@ async fn run_file_app(
                         .add_modifier(Modifier::BOLD)
                 )
                 .highlight_symbol("► ");
-            f.render_stateful_widget(list, chunks[2], &mut list_state);
+            f.render_stateful_widget(list, chunks[1], &mut list_state);
 
             // Instructions
             let instructions = Paragraph::new("Use ↑/↓ to navigate, Enter to select, Esc/q to quit")
                 .style(Style::default().fg(Color::Gray))
                 .alignment(Alignment::Center)
                 .block(Block::default().borders(Borders::ALL));
-            f.render_widget(instructions, chunks[3]);
+            f.render_widget(instructions, chunks[2]);
         })?;
 
         if let Event::Key(key) = event::read()? {
