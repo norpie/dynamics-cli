@@ -194,12 +194,20 @@ impl EntityDiscovery {
 
     /// Fetch sample records for an entity mapping
     pub async fn fetch_sample_records(&mut self, mapping: &EntityMapping, limit: usize) -> Result<Vec<HashMap<String, Value>>> {
+        // System entities like 'systemuser' don't have statecode, custom entities (cgk_*) do
+        let filter = if mapping.entity.starts_with("cgk_") || mapping.entity.starts_with("new_") {
+            "&$filter=statecode eq 0"
+        } else {
+            "" // No filter for system entities
+        };
+
         let query = format!(
-            "{}?$select={},{}&$filter=statecode eq 0&$top={}",
+            "{}?$select={},{}{}{}",
             mapping.endpoint,
             mapping.id_field,
             mapping.name_field,
-            limit
+            filter,
+            format!("&$top={}", limit)
         );
 
         let response = self.client.get(&query).await?;

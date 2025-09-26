@@ -58,9 +58,10 @@ pub fn validate_excel_entities(
     debug!("Found {} headers in Excel sheet", sheet_data.headers.len());
     debug!("Headers: {:?}", sheet_data.headers);
 
-    // Identify checkbox columns (after "Beslissing" column, like in Python system)
-    let checkbox_columns = identify_checkbox_columns(&sheet_data.headers);
-    debug!("Identified {} checkbox columns: {:?}", checkbox_columns.len(), checkbox_columns);
+    // Identify potential entity columns (after "Beslissing" or data columns)
+    // Only check columns that could actually be entities, not data columns
+    let entity_columns = identify_checkbox_columns(&sheet_data.headers);
+    debug!("Checking {} potential entity columns: {:?}", entity_columns.len(), entity_columns);
 
     // Build entity lookup map from CSV cache data
     let entity_lookup = build_entity_lookup(env_config, environment_name);
@@ -70,7 +71,7 @@ pub fn validate_excel_entities(
     let mut matched_entities = Vec::new();
     let mut unmatched_columns = Vec::new();
 
-    for column_header in &checkbox_columns {
+    for column_header in &entity_columns {
         if let Some((logical_type, entity_name)) = find_matching_entity(column_header, &entity_lookup) {
             matched_entities.push(EntityMatch {
                 column_header: column_header.clone(),
@@ -99,7 +100,7 @@ pub fn validate_excel_entities(
 
     Ok(ValidationResult {
         total_columns: sheet_data.headers.len(),
-        entity_columns: checkbox_columns.clone(),
+        entity_columns: entity_columns.clone(),
         matched_entities,
         unmatched_columns,
         missing_entities,
@@ -147,15 +148,29 @@ fn identify_checkbox_columns(headers: &[String]) -> Vec<String> {
 }
 
 /// Build a lookup map from entity names (from CSV cache) to logical types
+/// Only includes checkbox entity types (support, length, category, flemish_share)
+/// Commission, fund, and pillar are handled through fixed columns, not checkboxes
 fn build_entity_lookup(env_config: &EnvironmentConfig, environment_name: &str) -> HashMap<String, String> {
     let mut lookup = HashMap::new();
     let cache_manager = CsvCacheManager::new(environment_name.to_string());
 
+    // Only include checkbox entity types (matching Python logic)
+    let checkbox_entity_types = ["support", "length", "category", "flemish_share"];
+
     for (logical_type, mapping) in &env_config.entities {
+        // Skip non-checkbox entity types
+        if !checkbox_entity_types.contains(&logical_type.as_str()) {
+            debug!("Skipping non-checkbox entity type: {}", logical_type);
+            continue;
+        }
+
         // Load entity names from CSV cache
         if let Ok(entity_names) = cache_manager.load_entity_names(&mapping.entity) {
             for entity_name in entity_names.keys() {
+                // Store the full name (already lowercase from load_entity_names)
                 lookup.insert(entity_name.clone(), logical_type.clone());
+
+                // Note: No parentheses stripping here - pillar is handled via fixed columns, not checkboxes
             }
         }
         debug!("Loaded {} entity names for logical type '{}'",
@@ -172,20 +187,45 @@ fn find_matching_entity(
     column_header: &str,
     entity_lookup: &HashMap<String, String>
 ) -> Option<(String, String)> {
-    let header_lower = column_header.to_lowercase();
+    let header_lower = column_header.to_lowercase().trim().to_string();
 
-    // Direct lookup: column header matches entity name from CSV
+    // 1. Direct exact match (like Python does)
     if let Some(logical_type) = entity_lookup.get(&header_lower) {
         return Some((logical_type.clone(), column_header.to_string()));
     }
 
-    // Try trimmed/cleaned version
-    let header_cleaned = header_lower.trim();
-    if let Some(logical_type) = entity_lookup.get(header_cleaned) {
-        return Some((logical_type.clone(), column_header.to_string()));
+    // 2. Try without parentheses (like Python's parentheses stripping)
+    let header_without_parens = strip_parentheses(&header_lower);
+    if !header_without_parens.is_empty() && header_without_parens != header_lower {
+        if let Some(logical_type) = entity_lookup.get(&header_without_parens) {
+            return Some((logical_type.clone(), column_header.to_string()));
+        }
+    }
+
+    // 3. Try without trailing numbers (handle "steun voor educatieve versie2")
+    let header_without_numbers = strip_trailing_numbers(&header_lower);
+    if header_without_numbers != header_lower {
+        if let Some(logical_type) = entity_lookup.get(&header_without_numbers) {
+            return Some((logical_type.clone(), column_header.to_string()));
+        }
     }
 
     None
+}
+
+/// Strip parentheses and content within them (like Python's regex)
+fn strip_parentheses(text: &str) -> String {
+    use regex::Regex;
+    // Python: re.sub(r'\s*\([^)]*\)', '', full_name).strip()
+    let re = Regex::new(r"\s*\([^)]*\)").unwrap();
+    re.replace_all(text, "").trim().to_string()
+}
+
+/// Strip trailing numbers and whitespace
+fn strip_trailing_numbers(text: &str) -> String {
+    use regex::Regex;
+    let re = Regex::new(r"\d+\s*$").unwrap();
+    re.replace_all(text, "").trim().to_string()
 }
 
 #[cfg(test)]

@@ -473,6 +473,7 @@ dependencies = [
  "env_logger",
  "log",
  "ratatui",
+ "regex",
  "reqwest",
  "roxmltree",
  "rpassword",

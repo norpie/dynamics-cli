@@ -9,6 +9,7 @@ mod entity_discovery;
 mod setup_tui;
 mod loading_modal;
 mod validation;
+mod validation_popup;
 mod csv_cache;
 mod csv_cache_tui;
 
@@ -19,6 +20,7 @@ use excel_parser::ExcelWorkbook;
 use config::DeadlineConfig;
 use setup_tui::run_deadline_setup;
 use validation::validate_excel_entities;
+use validation_popup::show_validation_popup;
 use csv_cache_tui::run_csv_cache_check;
 
 async fn continue_with_file_selection(selected_env: String) -> Result<()> {
@@ -39,6 +41,26 @@ async fn continue_with_file_selection(selected_env: String) -> Result<()> {
             if !run_csv_cache_check(selected_env.clone(), env_config, auth_config, false).await? {
                 println!("CSV cache refresh was cancelled.");
                 return Ok(());
+            }
+
+            // Phase 5.5: Pre-validate Excel structure and show warnings
+            match ExcelWorkbook::read_sheet(&file_path, &sheet_name) {
+                Ok(sheet_data) => {
+                    // Run validation to identify missing entities
+                    if let Ok(validation_result) = validate_excel_entities(&sheet_data, &selected_env, &deadline_config) {
+                        if !validation_result.unmatched_columns.is_empty() {
+                            // Show popup with unmatched entities - user can continue or quit
+                            if !show_validation_popup(&validation_result)? {
+                                // User chose to quit
+                                return Ok(());
+                            }
+                            // User chose to continue despite unmatched entities
+                        }
+                    }
+                }
+                Err(e) => {
+                    println!("Warning: Could not pre-validate Excel file: {}", e);
+                }
             }
 
             // Phase 6: Parse sheet and validate against entity mappings
