@@ -84,14 +84,7 @@ impl Operations {
     /// - Single operation: execute individually
     /// - Multiple operations: execute as batch
     pub async fn execute(&self, client: &crate::api::DynamicsClient) -> anyhow::Result<Vec<OperationResult>> {
-        match self.operations.len() {
-            0 => Ok(Vec::new()),
-            1 => {
-                let result = self.operations[0].execute(client).await?;
-                Ok(vec![result])
-            }
-            _ => self.execute_batch(client).await,
-        }
+        client.execute_batch(&self.operations).await
     }
 
     /// Force individual execution (each operation as separate HTTP request)
@@ -108,14 +101,7 @@ impl Operations {
 
     /// Force batch execution (all operations in single HTTP request)
     pub async fn execute_batch(&self, client: &crate::api::DynamicsClient) -> anyhow::Result<Vec<OperationResult>> {
-        if self.operations.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        // TODO: Implement actual batch execution using Dynamics $batch endpoint
-        // For now, fall back to individual execution
-        log::warn!("Batch execution not yet implemented, falling back to individual execution");
-        self.execute_individual(client).await
+        client.execute_batch(&self.operations).await
     }
 
     /// Execute operations in parallel (each operation as separate concurrent HTTP request)
@@ -124,10 +110,26 @@ impl Operations {
             return Ok(Vec::new());
         }
 
-        // TODO: Implement parallel execution using tokio::spawn
-        // For now, fall back to individual execution
-        log::warn!("Parallel execution not yet implemented, falling back to individual execution");
-        self.execute_individual(client).await
+        // Use tokio to execute operations in parallel
+        let mut handles = Vec::new();
+
+        for operation in &self.operations {
+            let op_clone = operation.clone();
+            let client_clone = client.clone(); // Assuming DynamicsClient implements Clone
+
+            let handle = tokio::spawn(async move {
+                op_clone.execute(&client_clone).await
+            });
+            handles.push(handle);
+        }
+
+        let mut results = Vec::new();
+        for handle in handles {
+            let result = handle.await??;
+            results.push(result);
+        }
+
+        Ok(results)
     }
 }
 

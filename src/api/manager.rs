@@ -115,4 +115,31 @@ impl ClientManager {
     pub fn auth_manager(&self) -> &AuthManager {
         &self.auth_manager
     }
+
+    /// Get a configured DynamicsClient for the specified environment
+    pub fn get_client(&self, env_name: &str) -> anyhow::Result<DynamicsClient> {
+        let environment = self.try_select_env(env_name)?;
+
+        // Get token for this environment
+        let token_info = self.auth_manager.get_token(env_name)?;
+
+        // Check if token is still valid (basic check)
+        if let Ok(elapsed) = token_info.expires_at.elapsed() {
+            if elapsed.as_secs() > 0 {
+                anyhow::bail!("Token for environment '{}' has expired. Please re-authenticate.", env_name);
+            }
+        }
+
+        Ok(DynamicsClient::new(
+            environment.host.clone(),
+            token_info.access_token.clone(),
+        ))
+    }
+
+    /// Get a configured DynamicsClient for the current environment
+    pub fn get_current_client(&self) -> anyhow::Result<DynamicsClient> {
+        let current_env = self.current_env.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("No environment selected"))?;
+        self.get_client(current_env)
+    }
 }

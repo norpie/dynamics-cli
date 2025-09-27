@@ -115,4 +115,24 @@ impl AuthManager {
             }
         }
     }
+
+    /// Get token for environment (used by ClientManager)
+    pub fn get_token(&self, env_name: &str) -> anyhow::Result<&TokenInfo> {
+        self.tokens.get(env_name)
+            .ok_or_else(|| anyhow::anyhow!("No token found for environment '{}'", env_name))
+    }
+
+    /// Check if token exists and is valid for environment
+    pub fn has_valid_token(&self, env_name: &str) -> bool {
+        if let Some(token_info) = self.tokens.get(env_name) {
+            // Check if token is still valid
+            if let Ok(elapsed) = token_info.expires_at.elapsed() {
+                elapsed.as_secs() == 0 // Token is valid if it hasn't elapsed
+            } else {
+                true // If we can't determine elapsed time, assume valid
+            }
+        } else {
+            false
+        }
+    }
 }

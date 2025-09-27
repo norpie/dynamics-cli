@@ -133,16 +133,7 @@ impl Operation {
 
     /// Execute this operation individually against a Dynamics client
     pub async fn execute(&self, client: &crate::api::DynamicsClient) -> anyhow::Result<OperationResult> {
-        // TODO: Implement actual execution logic
-        // For now, return a placeholder success result
-        Ok(OperationResult {
-            operation: self.clone(),
-            success: true,
-            data: Some(serde_json::json!({"id": "placeholder-guid"})),
-            error: None,
-            status_code: Some(200),
-            headers: HashMap::new(),
-        })
+        client.execute(self).await
     }
 }
 

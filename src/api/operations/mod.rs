@@ -4,7 +4,9 @@
 //! that can be executed individually or in batches.
 
 pub mod operation;
+pub mod operations;
 pub mod batch;
 
 pub use operation::{Operation, OperationResult};
-pub use batch::Operations;
+pub use operations::Operations;
+pub use batch::{BatchRequest, BatchRequestBuilder, BatchResponseParser};
