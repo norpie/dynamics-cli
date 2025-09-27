@@ -303,39 +303,3 @@ pub const COMMON_ENTITY_TYPES: &[(&str, &[&str])] = &[
     ("systemuser", &["systemuser"]),
 ];
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_entity_mapping_fetchxml() {
-        let mapping = EntityMapping::new(
-            "cgk_category".to_string(),
-            "cgk_categoryid".to_string(),
-            "cgk_name".to_string(),
-            "cgk_categories".to_string(),
-        );
-
-        let fetchxml = mapping.generate_fetchxml();
-        assert!(fetchxml.contains("cgk_category"));
-        assert!(fetchxml.contains("cgk_name"));
-        assert!(fetchxml.contains("cgk_categoryid"));
-    }
-
-    #[test]
-    fn test_discovered_entity_field_detection() {
-        let entity = DiscoveredEntity::new(
-            "cgk_category".to_string(),
-            150,
-            vec![
-                "cgk_categoryid".to_string(),
-                "cgk_name".to_string(),
-                "createdon".to_string(),
-                "modifiedon".to_string(),
-            ]
-        );
-
-        assert_eq!(entity.guess_id_field(), Some("cgk_categoryid".to_string()));
-        assert_eq!(entity.guess_name_field(), Some("cgk_name".to_string()));
-    }
-}

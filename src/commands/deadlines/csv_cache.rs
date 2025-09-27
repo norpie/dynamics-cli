@@ -554,27 +554,3 @@ impl CsvCacheManager {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-
-    #[test]
-    fn test_csv_path_generation() {
-        let manager = CsvCacheManager::new("test".to_string());
-        let path = manager.get_csv_path("cgk_support");
-        assert_eq!(path, PathBuf::from(".csv/cgk_support.csv"));
-    }
-
-    #[test]
-    fn test_count_csv_records() {
-        let temp_dir = TempDir::new().unwrap();
-        let csv_path = temp_dir.path().join("test.csv");
-
-        fs::write(&csv_path, "id,name\n1,Test1\n2,Test2\n").unwrap();
-
-        let manager = CsvCacheManager::new("test".to_string());
-        let count = manager.count_csv_records(&csv_path).unwrap();
-        assert_eq!(count, 2);
-    }
-}

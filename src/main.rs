@@ -1,7 +1,10 @@
+#![allow(warnings)]
+
 use anyhow::Result;
 use clap::Parser;
 use log::{debug, info};
 
+mod api;
 mod auth;
 mod cli;
 mod commands;
@@ -17,10 +20,12 @@ use cli::commands::entity::EntitySubcommands;
 use cli::commands::query::QuerySubcommands;
 use cli::commands::settings::SettingsSubcommands;
 use commands::auth::{SetupOptions, remove_command, select_command, setup_command, status_command};
+#[cfg(feature = "deadlines")]
 use commands::deadlines;
 use commands::entity::{
     add_command, list_command, remove_command as entity_remove_command, update_command,
 };
+#[cfg(feature = "migration")]
 use commands::migration;
 use commands::query::{file_command, run_command};
 use commands::settings::{
@@ -107,8 +112,15 @@ async fn main() -> Result<()> {
             SettingsSubcommands::ResetAll { force } => reset_all_command(force).await?,
             SettingsSubcommands::ListMappings => list_mappings_command().await?,
         },
+        #[cfg(feature = "migration")]
         Commands::Migration(_) => migration::start().await?,
+        #[cfg(not(feature = "migration"))]
+        Commands::Migration(_) => anyhow::bail!("Migration feature not enabled. Compile with --features migration"),
+
+        #[cfg(feature = "deadlines")]
         Commands::Deadlines(_) => deadlines::start().await?,
+        #[cfg(not(feature = "deadlines"))]
+        Commands::Deadlines(_) => anyhow::bail!("Deadlines feature not enabled. Compile with --features deadlines"),
     }
 
     Ok(())

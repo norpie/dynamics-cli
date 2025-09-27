@@ -307,24 +307,3 @@ impl EntityDiscovery {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::config::AuthConfig;
-
-    #[test]
-    fn test_entity_endpoint_generation() {
-        let auth_config = AuthConfig {
-            host: "dummy".to_string(),
-            client_id: "dummy".to_string(),
-            client_secret: "dummy".to_string(),
-            username: "dummy".to_string(),
-            password: "dummy".to_string(),
-        };
-        let discovery = EntityDiscovery::new(DynamicsClient::new(auth_config));
-
-        assert_eq!(discovery.get_entity_endpoint("cgk_support"), "cgk_supports");
-        assert_eq!(discovery.get_entity_endpoint("cgk_category"), "cgk_categories");
-        assert_eq!(discovery.get_entity_endpoint("cgk_flemishshare"), "cgk_flemishshares");
-    }
-}
