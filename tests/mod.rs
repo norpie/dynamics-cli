@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 mod api;
 mod error_handling;
 /// Test modules for dynamics-cli

@@ -9,8 +9,10 @@ pub mod auth;
 pub mod client;
 pub mod manager;
 pub mod models;
+pub mod operations;
 
 pub use auth::AuthManager;
 pub use client::DynamicsClient;
 pub use manager::ClientManager;
 pub use models::{Environment, CredentialSet, TokenInfo};
+pub use operations::{Operation, OperationResult, Operations};
