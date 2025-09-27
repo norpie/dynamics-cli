@@ -15,6 +15,15 @@ pub struct EnvironmentConfig {
     pub prefix: String,
     pub main_entity: String,
     pub entities: HashMap<String, EntityMapping>,
+    pub board_meeting: Option<BoardMeetingConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BoardMeetingConfig {
+    pub entity_type: String,        // "cgk_deadline" or "nrq_boardofdirectorsmeeting"
+    pub csv_name: String,           // "bestuur_deadlines.csv" or "boardofdirectorsmeeting.csv"
+    pub relationship_field: String, // Field name for the relationship
+    pub lookup_by: String,          // "date" or "name"
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,10 +106,32 @@ impl DeadlineConfig {
 
 impl EnvironmentConfig {
     pub fn new(prefix: String, main_entity: String) -> Self {
+        // Auto-detect board meeting configuration based on prefix
+        let board_meeting = Self::detect_board_meeting_config(&prefix);
+
         Self {
             prefix,
             main_entity,
             entities: HashMap::new(),
+            board_meeting,
+        }
+    }
+
+    fn detect_board_meeting_config(prefix: &str) -> Option<BoardMeetingConfig> {
+        match prefix {
+            p if p.starts_with("cgk") => Some(BoardMeetingConfig {
+                entity_type: "cgk_deadline".to_string(),
+                csv_name: "bestuur_deadlines.csv".to_string(),
+                relationship_field: "cgk_raadvanbestuur_cgk_deadline".to_string(),
+                lookup_by: "date".to_string(),
+            }),
+            p if p.starts_with("nrq") => Some(BoardMeetingConfig {
+                entity_type: "nrq_boardofdirectorsmeeting".to_string(),
+                csv_name: "boardofdirectorsmeeting.csv".to_string(),
+                relationship_field: "nrq_boardmeetingid".to_string(),
+                lookup_by: "date".to_string(),
+            }),
+            _ => None, // Unknown prefix, no board meeting support
         }
     }
 
@@ -118,9 +149,32 @@ impl EnvironmentConfig {
     }
 
     pub fn get_all_csv_filenames(&self) -> Vec<String> {
-        self.entities.values()
+        let mut filenames: Vec<String> = self.entities.values()
             .map(|mapping| format!("{}.csv", mapping.entity))
-            .collect()
+            .collect();
+
+        // Add board meeting CSV if configured
+        if let Some(board_config) = &self.board_meeting {
+            filenames.push(board_config.csv_name.clone());
+        }
+
+        filenames
+    }
+
+    pub fn has_board_meeting_support(&self) -> bool {
+        self.board_meeting.is_some()
+    }
+
+    pub fn get_board_meeting_config(&self) -> Option<&BoardMeetingConfig> {
+        self.board_meeting.as_ref()
+    }
+
+    pub fn is_cgk_environment(&self) -> bool {
+        self.prefix.starts_with("cgk_")
+    }
+
+    pub fn is_nrq_environment(&self) -> bool {
+        self.prefix.starts_with("nrq_")
     }
 }
 
@@ -171,12 +225,36 @@ impl DiscoveredEntity {
     }
 
     pub fn guess_name_field(&self) -> Option<String> {
+        // Special handling for systemuser - always use domainname for email lookups
+        if self.name == "systemuser" {
+            return Some("domainname".to_string());
+        }
+
         // Priority order: exact matches first, then broader patterns
-        let exact_patterns = [
-            format!("{}_name", self.name.replace("cgk_", "cgk_")),
-            "cgk_name".to_string(),
-            "name".to_string(),
-        ];
+        let exact_patterns = if self.name.starts_with("nrq_") {
+            // For NRQ entities, try multiple naming patterns
+            // Extract the entity name part after the prefix
+            let entity_part = self.name.strip_prefix("nrq_").unwrap_or(&self.name);
+            vec![
+                format!("nrq_{}name", entity_part),  // e.g., nrq_deadlinename, nrq_categoryname
+                "nrq_name".to_string(),              // Generic nrq_name
+                format!("{}_name", self.name),       // e.g., nrq_deadline_name
+                "name".to_string(),                  // Generic name
+            ]
+        } else if self.name.starts_with("cgk_") {
+            // For CGK entities, use the existing pattern
+            vec![
+                format!("{}_name", self.name.replace("cgk_", "cgk_")),
+                "cgk_name".to_string(),
+                "name".to_string(),
+            ]
+        } else {
+            // For other entities, use generic pattern
+            vec![
+                format!("{}_name", self.name),
+                "name".to_string(),
+            ]
+        };
 
         let partial_patterns = ["title", "displayname"];
 
@@ -200,9 +278,15 @@ impl DiscoveredEntity {
             }
         }
 
-        // Finally, fallback to any field containing "name" but not ending in "idname"
+        // Finally, fallback to any field containing "name" but exclude system fields
         self.fields.iter()
-            .find(|field| field.contains("name") && !field.ends_with("idname"))
+            .find(|field| {
+                field.contains("name")
+                && !field.ends_with("idname")
+                && *field != "createdbyname"   // Exclude system field
+                && *field != "modifiedbyname"  // Exclude system field
+                && *field != "owneridname"     // Exclude system field
+            })
             .cloned()
     }
 }
@@ -216,6 +300,7 @@ pub const COMMON_ENTITY_TYPES: &[(&str, &[&str])] = &[
     ("fund", &["fund"]),
     ("pillar", &["pillar", "domain"]), // pillar aka domain
     ("flemish_share", &["flemish_share", "flemishshare"]),
+    ("systemuser", &["systemuser"]),
 ];
 
 #[cfg(test)]

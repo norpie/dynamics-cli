@@ -326,7 +326,19 @@ async fn run_setup_app(
         if let Event::Key(key) = event::read()? {
             debug!("Key event received in step {:?}: {:?}", state.step, key.code);
             match key.code {
-                KeyCode::Char('q') | KeyCode::Esc => {
+                KeyCode::Char('q') => {
+                    // Allow 'q' to be typed in prefix input mode
+                    if state.step == SetupStep::PrefixInput {
+                        state.prefix_input.insert(state.cursor_position, 'q');
+                        state.cursor_position += 1;
+                    } else if state.show_entity_selector {
+                        state.show_entity_selector = false;
+                        continue;
+                    } else {
+                        return Ok(None);
+                    }
+                }
+                KeyCode::Esc => {
                     if state.show_entity_selector {
                         state.show_entity_selector = false;
                         continue;
@@ -429,8 +441,13 @@ async fn run_setup_app(
                     }
                 }
                 KeyCode::Char('n') => {
+                    // Only handle as navigation if NOT in prefix input mode
                     if state.step == SetupStep::EntityMapping {
                         state.step = SetupStep::Validation;
+                    } else if state.step == SetupStep::PrefixInput {
+                        // Allow 'n' to be typed in prefix input
+                        state.prefix_input.insert(state.cursor_position, 'n');
+                        state.cursor_position += 1;
                     }
                 }
                 KeyCode::Char('s') => {
@@ -442,7 +459,8 @@ async fn run_setup_app(
                     }
                 }
                 KeyCode::Char(c) => {
-                    if state.step == SetupStep::PrefixInput && c != 'q' {
+                    if state.step == SetupStep::PrefixInput && c != 'q' && c != 'n' {
+                        // 'q' and 'n' are handled separately above to avoid conflicts
                         state.prefix_input.insert(state.cursor_position, c);
                         state.cursor_position += 1;
                     }
@@ -522,7 +540,7 @@ fn draw_ui(f: &mut ratatui::Frame, state: &mut SetupState) {
 
     // Instructions
     let instructions = match state.step {
-        SetupStep::PrefixInput => "Type entity prefix, Press Enter to discover entities, Esc/q to quit",
+        SetupStep::PrefixInput => "Type entity prefix, Press Enter to discover entities, Esc to quit",
         SetupStep::EntityMapping => "Use ↑/↓ to navigate, Enter to map, 's' to skip, 'n' for next step",
         SetupStep::Validation => "Press Enter to validate configuration",
         SetupStep::Complete => "Press Enter to save configuration",

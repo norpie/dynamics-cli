@@ -108,7 +108,7 @@ pub fn validate_excel_entities(
 }
 
 /// Identify checkbox columns (after "Beslissing" column, like in Python system)
-fn identify_checkbox_columns(headers: &[String]) -> Vec<String> {
+pub fn identify_checkbox_columns(headers: &[String]) -> Vec<String> {
     // Find the "Beslissing" column index
     let beslissing_index = headers.iter()
         .position(|h| h.to_lowercase().contains("beslissing"));

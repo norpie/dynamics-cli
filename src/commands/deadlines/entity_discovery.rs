@@ -41,8 +41,8 @@ impl EntityDiscovery {
             for entity in entities {
                 if let Some(logical_name) = entity["LogicalName"].as_str() {
                     debug!("Checking entity: {}", logical_name);
-                    // Skip system entities and focus on custom entities
-                    if logical_name.starts_with(&format!("{}_", prefix)) {
+                    // Include custom entities with prefix and systemuser for user lookups
+                    if logical_name.starts_with(&format!("{}_", prefix)) || logical_name == "systemuser" {
                         debug!("Entity '{}' matches prefix '{}', getting details", logical_name, prefix);
                         match self.get_entity_details(logical_name).await {
                             Ok(details) => {
@@ -192,6 +192,74 @@ impl EntityDiscovery {
         }
     }
 
+    /// Fetch all records for an entity mapping with pagination support
+    pub async fn fetch_all_records(&mut self, mapping: &EntityMapping) -> Result<Vec<HashMap<String, Value>>> {
+        let mut all_records = Vec::new();
+        let mut next_link: Option<String> = None;
+        let page_size = 5000; // Dynamics 365 max page size
+
+        loop {
+            let query = if let Some(next_url) = &next_link {
+                // Use the next link provided by OData
+                next_url.clone()
+            } else {
+                // Build initial query
+                let filter = if mapping.entity.starts_with("cgk_") || mapping.entity.starts_with("new_") {
+                    "&$filter=statecode eq 0"
+                } else {
+                    "" // No filter for system entities
+                };
+
+                // Special handling for systemuser - fetch domainname instead of name field
+                let name_field_to_fetch = if mapping.entity == "systemuser" {
+                    "domainname"
+                } else {
+                    &mapping.name_field
+                };
+
+                format!(
+                    "{}?$select={},{}{}{}",
+                    mapping.endpoint,
+                    mapping.id_field,
+                    name_field_to_fetch,
+                    filter,
+                    format!("&$top={}", page_size)
+                )
+            };
+
+            let response = self.client.get(&query).await?;
+
+            let data: Value = serde_json::from_str(&response)?;
+
+            // Process records from this page
+            if let Some(value_array) = data["value"].as_array() {
+                for record in value_array {
+                    if let Some(obj) = record.as_object() {
+                        let mut record_map = HashMap::new();
+                        for (key, value) in obj {
+                            if key != "@odata.etag" {
+                                record_map.insert(key.clone(), value.clone());
+                            }
+                        }
+                        all_records.push(record_map);
+                    }
+                }
+            }
+
+            // Check for pagination
+            if let Some(next_url) = data["@odata.nextLink"].as_str() {
+                next_link = Some(next_url.to_string());
+                debug!("Found next page link for {}: {} total records so far", mapping.entity, all_records.len());
+            } else {
+                // No more pages
+                break;
+            }
+        }
+
+        debug!("Fetched {} total records for entity {}", all_records.len(), mapping.entity);
+        Ok(all_records)
+    }
+
     /// Fetch sample records for an entity mapping
     pub async fn fetch_sample_records(&mut self, mapping: &EntityMapping, limit: usize) -> Result<Vec<HashMap<String, Value>>> {
         // System entities like 'systemuser' don't have statecode, custom entities (cgk_*) do
@@ -201,11 +269,18 @@ impl EntityDiscovery {
             "" // No filter for system entities
         };
 
+        // Special handling for systemuser - fetch domainname instead of name field
+        let name_field_to_fetch = if mapping.entity == "systemuser" {
+            "domainname"
+        } else {
+            &mapping.name_field
+        };
+
         let query = format!(
             "{}?$select={},{}{}{}",
             mapping.endpoint,
             mapping.id_field,
-            mapping.name_field,
+            name_field_to_fetch,
             filter,
             format!("&$top={}", limit)
         );

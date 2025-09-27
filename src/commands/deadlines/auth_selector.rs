@@ -141,7 +141,7 @@ async fn run_auth_app(
             } else {
                 match key.code {
                     KeyCode::Char('q') | KeyCode::Esc => return Ok(AuthSelectorResult::Cancelled),
-                    KeyCode::Down | KeyCode::Char('j') => {
+                    KeyCode::Down => {
                         let i = match list_state.selected() {
                             Some(i) => {
                                 if i >= environments.len() - 1 {
@@ -154,7 +154,7 @@ async fn run_auth_app(
                         };
                         list_state.select(Some(i));
                     }
-                    KeyCode::Up | KeyCode::Char('k') => {
+                    KeyCode::Up => {
                         let i = match list_state.selected() {
                             Some(i) => {
                                 if i == 0 {

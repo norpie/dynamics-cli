@@ -120,7 +120,7 @@ async fn run_sheet_app(
         if let Event::Key(key) = event::read()? {
             match key.code {
                 KeyCode::Char('q') | KeyCode::Esc => return Ok(None),
-                KeyCode::Down | KeyCode::Char('j') => {
+                KeyCode::Down => {
                     let i = match list_state.selected() {
                         Some(i) => {
                             if i >= sheets.len() - 1 {
@@ -133,7 +133,7 @@ async fn run_sheet_app(
                     };
                     list_state.select(Some(i));
                 }
-                KeyCode::Up | KeyCode::Char('k') => {
+                KeyCode::Up => {
                     let i = match list_state.selected() {
                         Some(i) => {
                             if i == 0 {

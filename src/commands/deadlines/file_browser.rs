@@ -38,11 +38,15 @@ pub async fn run_file_browser(selected_env: String) -> Result<Option<String>> {
 
 async fn run_file_app(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
-    selected_env: String,
+    _selected_env: String,
 ) -> Result<Option<String>> {
     let mut current_path = std::env::current_dir()?;
     let mut list_state = ListState::default();
-    list_state.select(Some(0));
+
+    // Initial cursor positioning
+    let entries = get_directory_entries(&current_path)?;
+    let initial_selection = find_first_excel_file(&entries).unwrap_or(0);
+    list_state.select(Some(initial_selection));
 
     loop {
         let entries = get_directory_entries(&current_path)?;
@@ -105,7 +109,7 @@ async fn run_file_app(
         if let Event::Key(key) = event::read()? {
             match key.code {
                 KeyCode::Char('q') | KeyCode::Esc => return Ok(None),
-                KeyCode::Down | KeyCode::Char('j') => {
+                KeyCode::Down => {
                     if !entries.is_empty() {
                         let i = match list_state.selected() {
                             Some(i) => {
@@ -120,7 +124,7 @@ async fn run_file_app(
                         list_state.select(Some(i));
                     }
                 }
-                KeyCode::Up | KeyCode::Char('k') => {
+                KeyCode::Up => {
                     if !entries.is_empty() {
                         let i = match list_state.selected() {
                             Some(i) => {
@@ -150,7 +154,10 @@ async fn run_file_app(
                                     // Enter directory
                                     current_path = current_path.join(name);
                                 }
-                                list_state.select(Some(0));
+                                // Refresh entries and position cursor on first Excel file
+                                let new_entries = get_directory_entries(&current_path)?;
+                                let excel_selection = find_first_excel_file(&new_entries).unwrap_or(0);
+                                list_state.select(Some(excel_selection));
                             } else {
                                 // File selected - return the full path
                                 let file_path = current_path.join(name);
@@ -204,4 +211,14 @@ fn get_directory_entries(path: &PathBuf) -> Result<Vec<(String, bool)>> {
     entries.extend(files);
 
     Ok(entries)
+}
+
+fn find_first_excel_file(entries: &[(String, bool)]) -> Option<usize> {
+    entries.iter().position(|(name, is_dir)| {
+        !is_dir && (
+            name.to_lowercase().ends_with(".xlsx") ||
+            name.to_lowercase().ends_with(".xls") ||
+            name.to_lowercase().ends_with(".xlsm")
+        )
+    })
 }
