@@ -132,8 +132,8 @@ impl Operation {
     }
 
     /// Execute this operation individually against a Dynamics client
-    pub async fn execute(&self, client: &crate::api::DynamicsClient) -> anyhow::Result<OperationResult> {
-        client.execute(self).await
+    pub async fn execute(&self, client: &crate::api::DynamicsClient, resilience: &crate::api::ResilienceConfig) -> anyhow::Result<OperationResult> {
+        client.execute(self, resilience).await
     }
 }
 

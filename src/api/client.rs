@@ -2,6 +2,7 @@ use crate::config::AuthConfig;
 use super::constants::{self, headers, methods};
 use super::operations::{Operation, OperationResult, BatchRequestBuilder, BatchResponseParser};
 use super::query::{Query, QueryResult, QueryResponse};
+use super::resilience::{RetryPolicy, RetryConfig, ResilienceConfig, RateLimiter, ApiLogger, OperationContext, OperationMetrics, MetricsCollector};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -12,9 +13,28 @@ pub struct DynamicsClient {
     base_url: String,
     http_client: reqwest::Client,
     access_token: String,
+    retry_policy: RetryPolicy, // Default retry policy for backwards compatibility
+    rate_limiter: RateLimiter, // Global rate limiter for this client instance
+    api_logger: ApiLogger, // Structured logger for operations
+    metrics_collector: MetricsCollector, // Performance metrics collector
 }
 
 impl DynamicsClient {
+    /// Apply rate limiting using the client's global rate limiter
+    async fn apply_rate_limiting(&self) -> anyhow::Result<()> {
+        self.rate_limiter.acquire().await;
+        Ok(())
+    }
+
+    /// Get rate limiter statistics for monitoring
+    pub fn rate_limiter_stats(&self) -> crate::api::resilience::RateLimiterStats {
+        self.rate_limiter.stats()
+    }
+
+    /// Get performance metrics snapshot
+    pub fn metrics_snapshot(&self) -> crate::api::resilience::MetricsSnapshot {
+        self.metrics_collector.snapshot()
+    }
     pub fn new(base_url: String, access_token: String) -> Self {
         let http_client = reqwest::Client::builder()
             .pool_max_idle_per_host(10)           // Max idle connections per host
@@ -29,6 +49,10 @@ impl DynamicsClient {
             base_url,
             http_client,
             access_token,
+            retry_policy: RetryPolicy::default(),
+            rate_limiter: RateLimiter::new(ResilienceConfig::default().rate_limit),
+            api_logger: ApiLogger::new(ResilienceConfig::default().monitoring),
+            metrics_collector: MetricsCollector::new(ResilienceConfig::default().monitoring),
         }
     }
 
@@ -38,33 +62,59 @@ impl DynamicsClient {
             base_url,
             http_client,
             access_token,
+            retry_policy: RetryPolicy::default(),
+            rate_limiter: RateLimiter::new(ResilienceConfig::default().rate_limit),
+            api_logger: ApiLogger::new(ResilienceConfig::default().monitoring),
+            metrics_collector: MetricsCollector::new(ResilienceConfig::default().monitoring),
+        }
+    }
+
+    /// Create a new client with custom retry policy
+    pub fn with_retry_policy(base_url: String, access_token: String, retry_config: RetryConfig) -> Self {
+        let http_client = reqwest::Client::builder()
+            .pool_max_idle_per_host(10)
+            .pool_idle_timeout(Duration::from_secs(90))
+            .timeout(Duration::from_secs(30))
+            .connect_timeout(Duration::from_secs(10))
+            .user_agent("dynamics-cli/1.0")
+            .build()
+            .expect("Failed to build HTTP client");
+
+        Self {
+            base_url,
+            http_client,
+            access_token,
+            retry_policy: RetryPolicy::new(retry_config),
+            rate_limiter: RateLimiter::new(ResilienceConfig::default().rate_limit),
+            api_logger: ApiLogger::new(ResilienceConfig::default().monitoring),
+            metrics_collector: MetricsCollector::new(ResilienceConfig::default().monitoring),
         }
     }
 
     /// Execute a single operation
-    pub async fn execute(&self, operation: &Operation) -> anyhow::Result<OperationResult> {
+    pub async fn execute(&self, operation: &Operation, resilience: &ResilienceConfig) -> anyhow::Result<OperationResult> {
         match operation {
-            Operation::Create { entity, data } => self.create_record(entity, data).await,
-            Operation::Update { entity, id, data } => self.update_record(entity, id, data).await,
-            Operation::Delete { entity, id } => self.delete_record(entity, id).await,
+            Operation::Create { entity, data } => self.create_record(entity, data, resilience).await,
+            Operation::Update { entity, id, data } => self.update_record(entity, id, data, resilience).await,
+            Operation::Delete { entity, id } => self.delete_record(entity, id, resilience).await,
             Operation::Upsert { entity, key_field, key_value, data } => {
-                self.upsert_record(entity, key_field, key_value, data).await
+                self.upsert_record(entity, key_field, key_value, data, resilience).await
             }
         }
     }
 
     /// Execute multiple operations as a batch
-    pub async fn execute_batch(&self, operations: &[Operation]) -> anyhow::Result<Vec<OperationResult>> {
+    pub async fn execute_batch(&self, operations: &[Operation], resilience: &ResilienceConfig) -> anyhow::Result<Vec<OperationResult>> {
         if operations.is_empty() {
             return Ok(Vec::new());
         }
 
         if operations.len() == 1 {
-            let result = self.execute(&operations[0]).await?;
+            let result = self.execute(&operations[0], resilience).await?;
             return Ok(vec![result]);
         }
 
-        self.execute_batch_request(operations).await
+        self.execute_batch_request(operations, resilience).await
     }
 
     /// Execute an OData query
@@ -72,65 +122,122 @@ impl DynamicsClient {
         let url = constants::entity_endpoint(&self.base_url, &query.entity);
         let params = query.to_query_params();
 
-        let response = self.http_client
-            .get(&url)
-            .bearer_auth(&self.access_token)
-            .header("Accept", headers::CONTENT_TYPE_JSON)
-            .header("OData-Version", headers::ODATA_VERSION)
-            .query(&params)
-            .send()
-            .await?;
+        let response = self.retry_policy.execute(|| async {
+            self.http_client
+                .get(&url)
+                .bearer_auth(&self.access_token)
+                .header("Accept", headers::CONTENT_TYPE_JSON)
+                .header("OData-Version", headers::ODATA_VERSION)
+                .query(&params)
+                .send()
+                .await
+        }).await?;
 
         self.parse_query_response(response).await
     }
 
     /// Execute the next page of results using @odata.nextLink
     pub async fn execute_next_page(&self, next_link: &str) -> anyhow::Result<QueryResult> {
-        let response = self.http_client
-            .get(next_link)
-            .bearer_auth(&self.access_token)
-            .header("Accept", headers::CONTENT_TYPE_JSON)
-            .header("OData-Version", headers::ODATA_VERSION)
-            .send()
-            .await?;
+        let response = self.retry_policy.execute(|| async {
+            self.http_client
+                .get(next_link)
+                .bearer_auth(&self.access_token)
+                .header("Accept", headers::CONTENT_TYPE_JSON)
+                .header("OData-Version", headers::ODATA_VERSION)
+                .send()
+                .await
+        }).await?;
 
         self.parse_query_response(response).await
     }
 
     /// Create a new record
-    async fn create_record(&self, entity: &str, data: &Value) -> anyhow::Result<OperationResult> {
+    async fn create_record(&self, entity: &str, data: &Value, resilience: &ResilienceConfig) -> anyhow::Result<OperationResult> {
         let url = constants::entity_endpoint(&self.base_url, entity);
+        let correlation_id = uuid::Uuid::new_v4().to_string();
 
-        let response = self.http_client
-            .post(&url)
-            .bearer_auth(&self.access_token)
-            .header("Content-Type", headers::CONTENT_TYPE_JSON)
-            .header("OData-Version", headers::ODATA_VERSION)
-            .header("Prefer", headers::PREFER_RETURN_REPRESENTATION)
-            .json(data)
-            .send()
-            .await?;
+        // Start operation tracking
+        let logger = ApiLogger::new(resilience.monitoring.clone());
+        let mut context = logger.start_operation("create", entity, &correlation_id);
 
-        self.parse_response(Operation::Create {
+        // Apply rate limiting before making the request
+        self.apply_rate_limiting().await?;
+
+        // Log request details
+        let mut request_headers = HashMap::new();
+        request_headers.insert("Content-Type".to_string(), headers::CONTENT_TYPE_JSON.to_string());
+        request_headers.insert("OData-Version".to_string(), headers::ODATA_VERSION.to_string());
+        request_headers.insert(headers::X_CORRELATION_ID.to_string(), correlation_id.clone());
+        logger.log_request(&context, "POST", &url, &request_headers);
+
+        let retry_policy = crate::api::resilience::RetryPolicy::new(resilience.retry.clone());
+        let request_start = std::time::Instant::now();
+        let response = retry_policy.execute(|| async {
+            self.http_client
+                .post(&url)
+                .bearer_auth(&self.access_token)
+                .header("Content-Type", headers::CONTENT_TYPE_JSON)
+                .header("OData-Version", headers::ODATA_VERSION)
+                .header("Prefer", headers::PREFER_RETURN_REPRESENTATION)
+                .header(headers::X_CORRELATION_ID, &correlation_id)
+                .json(data)
+                .send()
+                .await
+        }).await?;
+
+        // Log response details
+        let request_duration = request_start.elapsed();
+        let status_code = response.status().as_u16();
+        let mut response_headers = HashMap::new();
+        for (name, value) in response.headers() {
+            if let Ok(value_str) = value.to_str() {
+                response_headers.insert(name.to_string(), value_str.to_string());
+            }
+        }
+        logger.log_response(&context, status_code, &response_headers, request_duration);
+
+        // Parse response and complete operation logging
+        let result = self.parse_response(Operation::Create {
             entity: entity.to_string(),
             data: data.clone(),
-        }, response).await
+        }, response).await;
+
+        // Log operation completion and collect metrics
+        let metrics = context.create_metrics(
+            result.is_ok(),
+            Some(status_code),
+            result.as_ref().err().map(|e| e.to_string())
+        );
+        logger.complete_operation(&context, &metrics);
+
+        // Collect performance metrics using the client's global collector
+        self.metrics_collector.record_operation("create", entity, &metrics);
+
+        result
     }
 
     /// Update an existing record
-    async fn update_record(&self, entity: &str, id: &str, data: &Value) -> anyhow::Result<OperationResult> {
+    async fn update_record(&self, entity: &str, id: &str, data: &Value, resilience: &ResilienceConfig) -> anyhow::Result<OperationResult> {
         let url = constants::entity_record_endpoint(&self.base_url, entity, id);
+        let correlation_id = uuid::Uuid::new_v4().to_string();
 
-        let response = self.http_client
-            .patch(&url)
-            .bearer_auth(&self.access_token)
-            .header("Content-Type", headers::CONTENT_TYPE_JSON)
-            .header("OData-Version", headers::ODATA_VERSION)
-            .header("If-Match", headers::IF_MATCH_ANY)
-            .header("Prefer", headers::PREFER_RETURN_REPRESENTATION)
-            .json(data)
-            .send()
-            .await?;
+        // Apply rate limiting before making the request
+        self.apply_rate_limiting().await?;
+
+        let retry_policy = crate::api::resilience::RetryPolicy::new(resilience.retry.clone());
+        let response = retry_policy.execute(|| async {
+            self.http_client
+                .patch(&url)
+                .bearer_auth(&self.access_token)
+                .header("Content-Type", headers::CONTENT_TYPE_JSON)
+                .header("OData-Version", headers::ODATA_VERSION)
+                .header("If-Match", headers::IF_MATCH_ANY)
+                .header("Prefer", headers::PREFER_RETURN_REPRESENTATION)
+                .header(headers::X_CORRELATION_ID, &correlation_id)
+                .json(data)
+                .send()
+                .await
+        }).await?;
 
         self.parse_response(Operation::Update {
             entity: entity.to_string(),
@@ -140,15 +247,23 @@ impl DynamicsClient {
     }
 
     /// Delete a record
-    async fn delete_record(&self, entity: &str, id: &str) -> anyhow::Result<OperationResult> {
+    async fn delete_record(&self, entity: &str, id: &str, resilience: &ResilienceConfig) -> anyhow::Result<OperationResult> {
         let url = constants::entity_record_endpoint(&self.base_url, entity, id);
+        let correlation_id = uuid::Uuid::new_v4().to_string();
 
-        let response = self.http_client
-            .delete(&url)
-            .bearer_auth(&self.access_token)
-            .header("OData-Version", headers::ODATA_VERSION)
-            .send()
-            .await?;
+        // Apply rate limiting before making the request
+        self.apply_rate_limiting().await?;
+
+        let retry_policy = crate::api::resilience::RetryPolicy::new(resilience.retry.clone());
+        let response = retry_policy.execute(|| async {
+            self.http_client
+                .delete(&url)
+                .bearer_auth(&self.access_token)
+                .header("OData-Version", headers::ODATA_VERSION)
+                .header(headers::X_CORRELATION_ID, &correlation_id)
+                .send()
+                .await
+        }).await?;
 
         self.parse_response(Operation::Delete {
             entity: entity.to_string(),
@@ -157,18 +272,26 @@ impl DynamicsClient {
     }
 
     /// Upsert a record using alternate key
-    async fn upsert_record(&self, entity: &str, key_field: &str, key_value: &str, data: &Value) -> anyhow::Result<OperationResult> {
+    async fn upsert_record(&self, entity: &str, key_field: &str, key_value: &str, data: &Value, resilience: &ResilienceConfig) -> anyhow::Result<OperationResult> {
         let url = constants::upsert_endpoint(&self.base_url, entity, key_field, key_value);
+        let correlation_id = uuid::Uuid::new_v4().to_string();
 
-        let response = self.http_client
-            .patch(&url)
-            .bearer_auth(&self.access_token)
-            .header("Content-Type", headers::CONTENT_TYPE_JSON)
-            .header("OData-Version", headers::ODATA_VERSION)
-            .header("Prefer", headers::PREFER_RETURN_REPRESENTATION)
-            .json(data)
-            .send()
-            .await?;
+        // Apply rate limiting before making the request
+        self.apply_rate_limiting().await?;
+
+        let retry_policy = crate::api::resilience::RetryPolicy::new(resilience.retry.clone());
+        let response = retry_policy.execute(|| async {
+            self.http_client
+                .patch(&url)
+                .bearer_auth(&self.access_token)
+                .header("Content-Type", headers::CONTENT_TYPE_JSON)
+                .header("OData-Version", headers::ODATA_VERSION)
+                .header("Prefer", headers::PREFER_RETURN_REPRESENTATION)
+                .header(headers::X_CORRELATION_ID, &correlation_id)
+                .json(data)
+                .send()
+                .await
+        }).await?;
 
         self.parse_response(Operation::Upsert {
             entity: entity.to_string(),
@@ -179,8 +302,12 @@ impl DynamicsClient {
     }
 
     /// Execute operations using the $batch endpoint
-    async fn execute_batch_request(&self, operations: &[Operation]) -> anyhow::Result<Vec<OperationResult>> {
+    async fn execute_batch_request(&self, operations: &[Operation], resilience: &ResilienceConfig) -> anyhow::Result<Vec<OperationResult>> {
         let url = constants::batch_endpoint(&self.base_url);
+        let correlation_id = uuid::Uuid::new_v4().to_string();
+
+        // Apply rate limiting before making the request
+        self.apply_rate_limiting().await?;
 
         // Build the batch request using the proper builder
         let batch_request = BatchRequestBuilder::new(&self.base_url)
@@ -190,14 +317,18 @@ impl DynamicsClient {
         let content_type = batch_request.content_type().to_string();
         let body = batch_request.body().to_string();
 
-        let response = self.http_client
-            .post(&url)
-            .bearer_auth(&self.access_token)
-            .header("Content-Type", content_type)
-            .header("OData-Version", headers::ODATA_VERSION)
-            .body(body)
-            .send()
-            .await?;
+        let retry_policy = crate::api::resilience::RetryPolicy::new(resilience.retry.clone());
+        let response = retry_policy.execute(|| async {
+            self.http_client
+                .post(&url)
+                .bearer_auth(&self.access_token)
+                .header("Content-Type", content_type.clone())
+                .header("OData-Version", headers::ODATA_VERSION)
+                .header(headers::X_CORRELATION_ID, &correlation_id)
+                .body(body.clone())
+                .send()
+                .await
+        }).await?;
 
         if response.status().is_success() {
             let response_text = response.text().await?;

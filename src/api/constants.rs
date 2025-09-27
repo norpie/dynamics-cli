@@ -42,6 +42,9 @@ pub mod headers {
 
     /// If-Match header for updates (any version)
     pub const IF_MATCH_ANY: &str = "*";
+
+    /// Correlation ID header for request tracking
+    pub const X_CORRELATION_ID: &str = "x-correlation-id";
 }
 
 /// HTTP methods for operations

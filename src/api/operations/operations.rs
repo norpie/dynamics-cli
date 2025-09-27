@@ -83,16 +83,16 @@ impl Operations {
     /// Execute operations with smart strategy selection
     /// - Single operation: execute individually
     /// - Multiple operations: execute as batch
-    pub async fn execute(&self, client: &crate::api::DynamicsClient) -> anyhow::Result<Vec<OperationResult>> {
-        client.execute_batch(&self.operations).await
+    pub async fn execute(&self, client: &crate::api::DynamicsClient, resilience: &crate::api::ResilienceConfig) -> anyhow::Result<Vec<OperationResult>> {
+        client.execute_batch(&self.operations, resilience).await
     }
 
     /// Force individual execution (each operation as separate HTTP request)
-    pub async fn execute_individual(&self, client: &crate::api::DynamicsClient) -> anyhow::Result<Vec<OperationResult>> {
+    pub async fn execute_individual(&self, client: &crate::api::DynamicsClient, resilience: &crate::api::ResilienceConfig) -> anyhow::Result<Vec<OperationResult>> {
         let mut results = Vec::with_capacity(self.operations.len());
 
         for operation in &self.operations {
-            let result = operation.execute(client).await?;
+            let result = operation.execute(client, resilience).await?;
             results.push(result);
         }
 
@@ -100,12 +100,12 @@ impl Operations {
     }
 
     /// Force batch execution (all operations in single HTTP request)
-    pub async fn execute_batch(&self, client: &crate::api::DynamicsClient) -> anyhow::Result<Vec<OperationResult>> {
-        client.execute_batch(&self.operations).await
+    pub async fn execute_batch(&self, client: &crate::api::DynamicsClient, resilience: &crate::api::ResilienceConfig) -> anyhow::Result<Vec<OperationResult>> {
+        client.execute_batch(&self.operations, resilience).await
     }
 
     /// Execute operations in parallel (each operation as separate concurrent HTTP request)
-    pub async fn execute_parallel(&self, client: &crate::api::DynamicsClient) -> anyhow::Result<Vec<OperationResult>> {
+    pub async fn execute_parallel(&self, client: &crate::api::DynamicsClient, resilience: &crate::api::ResilienceConfig) -> anyhow::Result<Vec<OperationResult>> {
         if self.operations.is_empty() {
             return Ok(Vec::new());
         }
@@ -117,8 +117,9 @@ impl Operations {
             let op_clone = operation.clone();
             let client_clone = client.clone(); // Assuming DynamicsClient implements Clone
 
+            let resilience_clone = resilience.clone();
             let handle = tokio::spawn(async move {
-                op_clone.execute(&client_clone).await
+                op_clone.execute(&client_clone, &resilience_clone).await
             });
             handles.push(handle);
         }
