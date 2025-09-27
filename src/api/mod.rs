@@ -11,9 +11,11 @@ pub mod constants;
 pub mod manager;
 pub mod models;
 pub mod operations;
+pub mod query;
 
 pub use auth::AuthManager;
 pub use client::DynamicsClient;
 pub use manager::ClientManager;
 pub use models::{Environment, CredentialSet, TokenInfo};
 pub use operations::{Operation, OperationResult, Operations};
+pub use query::{Query, QueryBuilder, QueryResult, Filter, FilterValue, OrderBy};

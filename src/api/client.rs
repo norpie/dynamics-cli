@@ -1,6 +1,7 @@
 use crate::config::AuthConfig;
 use super::constants::{self, headers, methods};
 use super::operations::{Operation, OperationResult, BatchRequestBuilder, BatchResponseParser};
+use super::query::{Query, QueryResult, QueryResponse};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -64,6 +65,36 @@ impl DynamicsClient {
         }
 
         self.execute_batch_request(operations).await
+    }
+
+    /// Execute an OData query
+    pub async fn execute_query(&self, query: &Query) -> anyhow::Result<QueryResult> {
+        let url = constants::entity_endpoint(&self.base_url, &query.entity);
+        let params = query.to_query_params();
+
+        let response = self.http_client
+            .get(&url)
+            .bearer_auth(&self.access_token)
+            .header("Accept", headers::CONTENT_TYPE_JSON)
+            .header("OData-Version", headers::ODATA_VERSION)
+            .query(&params)
+            .send()
+            .await?;
+
+        self.parse_query_response(response).await
+    }
+
+    /// Execute the next page of results using @odata.nextLink
+    pub async fn execute_next_page(&self, next_link: &str) -> anyhow::Result<QueryResult> {
+        let response = self.http_client
+            .get(next_link)
+            .bearer_auth(&self.access_token)
+            .header("Accept", headers::CONTENT_TYPE_JSON)
+            .header("OData-Version", headers::ODATA_VERSION)
+            .send()
+            .await?;
+
+        self.parse_query_response(response).await
     }
 
     /// Create a new record
@@ -226,6 +257,51 @@ impl DynamicsClient {
                 status_code: Some(status_code),
                 headers,
             })
+        }
+    }
+
+    /// Parse HTTP response into QueryResult
+    async fn parse_query_response(&self, response: reqwest::Response) -> anyhow::Result<QueryResult> {
+        let status_code = response.status().as_u16();
+        let mut headers = HashMap::new();
+
+        // Extract useful headers
+        for (name, value) in response.headers() {
+            if let Ok(value_str) = value.to_str() {
+                headers.insert(name.to_string(), value_str.to_string());
+            }
+        }
+
+        if response.status().is_success() {
+            let text = response.text().await.unwrap_or_default();
+            if text.is_empty() {
+                return Ok(QueryResult::error(
+                    "Empty response from server".to_string(),
+                    Some(status_code),
+                    headers,
+                ));
+            }
+
+            match serde_json::from_str::<Value>(&text) {
+                Ok(json) => {
+                    match QueryResponse::from_json(json) {
+                        Ok(query_response) => Ok(QueryResult::success(query_response, status_code, headers)),
+                        Err(e) => Ok(QueryResult::error(
+                            format!("Failed to parse OData response: {}", e),
+                            Some(status_code),
+                            headers,
+                        )),
+                    }
+                },
+                Err(e) => Ok(QueryResult::error(
+                    format!("Invalid JSON response: {}", e),
+                    Some(status_code),
+                    headers,
+                )),
+            }
+        } else {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            Ok(QueryResult::error(error_text, Some(status_code), headers))
         }
     }
 }
