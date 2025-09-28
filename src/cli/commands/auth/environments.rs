@@ -8,8 +8,7 @@ use super::EnvironmentCommands;
 use colored::*;
 
 /// Handle non-interactive environment commands
-pub async fn handle_environment_command(cmd: EnvironmentCommands) -> Result<()> {
-    let config = Config::load().await?;
+pub async fn handle_environment_command(cmd: EnvironmentCommands, client_manager: &crate::api::ClientManager) -> Result<()> {
 
     match cmd {
         EnvironmentCommands::Add {
@@ -18,38 +17,38 @@ pub async fn handle_environment_command(cmd: EnvironmentCommands) -> Result<()> 
             credentials,
             set_current,
         } => {
-            add_environment_noninteractive(&config, name, host, credentials, set_current).await
+            add_environment_noninteractive(client_manager, name, host, credentials, set_current).await
         }
-        EnvironmentCommands::List => list_environments_interactive(&config).await,
+        EnvironmentCommands::List => list_environments_interactive(client_manager).await,
         EnvironmentCommands::SetCredentials { name, credentials } => {
-            set_credentials_by_name(&config, &name, &credentials).await
+            set_credentials_by_name(client_manager, &name, &credentials).await
         }
         EnvironmentCommands::Select { name } => {
             if let Some(name) = name {
-                select_environment_by_name(&config, &name).await
+                select_environment_by_name(client_manager, &name).await
             } else {
-                select_environment_interactive(&config).await
+                select_environment_interactive(client_manager).await
             }
         }
         EnvironmentCommands::Rename { old_name, new_name } => {
-            rename_environment_noninteractive(&config, &old_name, new_name).await
+            rename_environment_noninteractive(client_manager, &old_name, new_name).await
         }
         EnvironmentCommands::Remove { name, force } => {
-            remove_environment_by_name(&config, &name, force).await
+            remove_environment_by_name(client_manager, &name, force).await
         }
     }
 }
 
 /// Add environment non-interactively (CLI args)
 async fn add_environment_noninteractive(
-    config: &Config,
+    client_manager: &crate::api::ClientManager,
     name: String,
     host: String,
     credentials: String,
     set_current: bool,
 ) -> Result<()> {
     // Validate that credentials exist
-    if config.get_credentials(&credentials).await?.is_none() {
+    if client_manager.get_credentials(&credentials).await?.is_none() {
         anyhow::bail!("Credentials '{}' not found. Create them first with 'dynamics-cli auth creds add'", credentials);
     }
 
@@ -59,11 +58,11 @@ async fn add_environment_noninteractive(
         credentials_ref: credentials,
     };
 
-    config.add_environment(environment).await?;
+    client_manager.add_environment_to_config(name.clone(), environment).await?;
     println!("{} Environment '{}' added successfully", "✓".bright_green().bold(), name.bright_green().bold());
 
     if set_current {
-        config.set_current_environment(name.clone()).await?;
+        client_manager.set_current_environment_in_config(name.clone()).await?;
         println!("{} Set '{}' as current environment", "✓".bright_green().bold(), name.bright_green().bold());
     }
 
@@ -71,9 +70,9 @@ async fn add_environment_noninteractive(
 }
 
 /// List environments (works for both interactive and non-interactive)
-pub async fn list_environments_interactive(config: &Config) -> Result<()> {
-    let environments = config.list_environments().await?;
-    let current_env = config.get_current_environment().await?;
+pub async fn list_environments_interactive(client_manager: &crate::api::ClientManager) -> Result<()> {
+    let environments = client_manager.list_environments().await;
+    let current_env = client_manager.get_current_environment_name().await?;
 
     if environments.is_empty() {
         println!("  {}", "⚠️  No environments configured".bright_yellow().bold());
@@ -84,8 +83,8 @@ pub async fn list_environments_interactive(config: &Config) -> Result<()> {
     println!();
     println!("  {}", "Configured environments:".bright_white().bold());
     for env_name in &environments {
-        if let Some(environment) = config.get_environment(env_name).await? {
-            let (marker, env_color, current_text) = if current_env.as_ref() == Some(env_name) {
+        if let Some(environment) = client_manager.get_environment(env_name).await? {
+            let (marker, env_color, current_text) = if current_env.as_ref() == Some(&env_name.to_string()) {
                 ("●", env_name.bright_green().bold(), " (current)".bright_green())
             } else {
                 ("○", env_name.white(), "".white())
@@ -104,7 +103,7 @@ pub async fn list_environments_interactive(config: &Config) -> Result<()> {
 }
 
 /// Add environment interactively
-pub async fn add_environment_interactive(config: &Config) -> Result<()> {
+pub async fn add_environment_interactive(client_manager: &crate::api::ClientManager) -> Result<()> {
     println!();
     println!("Add New Environment");
     println!("==================");
@@ -115,7 +114,7 @@ pub async fn add_environment_interactive(config: &Config) -> Result<()> {
         .interact()?;
 
     // Check if exists
-    if config.get_environment(&name).await?.is_some() {
+    if client_manager.get_environment(&name).await?.is_some() {
         let overwrite = Confirm::new()
             .with_prompt(format!("Environment '{}' already exists. Overwrite?", name))
             .default(false)
@@ -133,7 +132,7 @@ pub async fn add_environment_interactive(config: &Config) -> Result<()> {
         .interact()?;
 
     // Select credentials
-    let credentials_list = config.list_credentials().await?;
+    let credentials_list = client_manager.list_credentials().await?;
     if credentials_list.is_empty() {
         println!("  {} No credentials configured. Please add credentials first.", "⚠️".bright_yellow().bold());
         return Ok(());
@@ -148,7 +147,7 @@ pub async fn add_environment_interactive(config: &Config) -> Result<()> {
     let credentials_ref = credentials_list[cred_selection].clone();
 
     // Ask if this should be the current environment
-    let set_current = if config.get_current_environment().await?.is_none() {
+    let set_current = if client_manager.get_current_environment_name().await?.is_none() {
         // No current environment, default to yes
         Confirm::new()
             .with_prompt("Set as current environment?")
@@ -168,11 +167,11 @@ pub async fn add_environment_interactive(config: &Config) -> Result<()> {
         credentials_ref,
     };
 
-    config.add_environment(environment).await?;
+    client_manager.add_environment_to_config(name.clone(), environment).await?;
     println!("{} Environment '{}' saved successfully", "✓".bright_green().bold(), name.bright_green().bold());
 
     if set_current {
-        config.set_current_environment(name.clone()).await?;
+        client_manager.set_current_environment_in_config(name.clone()).await?;
         println!("{} Set '{}' as current environment", "✓".bright_green().bold(), name.bright_green().bold());
     }
 
@@ -180,9 +179,9 @@ pub async fn add_environment_interactive(config: &Config) -> Result<()> {
 }
 
 /// Select environment interactively
-pub async fn select_environment_interactive(config: &Config) -> Result<()> {
-    let environments = config.list_environments().await?;
-    let current_env = config.get_current_environment().await?;
+pub async fn select_environment_interactive(client_manager: &crate::api::ClientManager) -> Result<()> {
+    let environments = client_manager.list_environments().await;
+    let current_env = client_manager.get_current_environment_name().await?;
 
     if environments.is_empty() {
         println!("  {} No environments configured to select.", "⚠️".bright_yellow().bold());
@@ -194,10 +193,10 @@ pub async fn select_environment_interactive(config: &Config) -> Result<()> {
     // Build display items with current marker
     let mut display_items = Vec::new();
     for env_name in &environments {
-        if current_env.as_ref() == Some(env_name) {
+        if current_env.as_ref() == Some(&env_name.to_string()) {
             display_items.push(format!("{} (current)", env_name));
         } else {
-            display_items.push(env_name.clone());
+            display_items.push(env_name.to_string());
         }
     }
 
@@ -207,26 +206,26 @@ pub async fn select_environment_interactive(config: &Config) -> Result<()> {
         .default(0)
         .interact()?;
 
-    let selected_env = &environments[env_selection];
+    let selected_env = environments[env_selection].clone();
 
-    select_environment_by_name(config, selected_env).await
+    select_environment_by_name(client_manager, &selected_env).await
 }
 
 /// Select environment by name
-async fn select_environment_by_name(config: &Config, name: &str) -> Result<()> {
+async fn select_environment_by_name(client_manager: &crate::api::ClientManager, name: &str) -> Result<()> {
     // Validate environment exists
-    if config.get_environment(name).await?.is_none() {
+    if client_manager.get_environment(name).await?.is_none() {
         anyhow::bail!("Environment '{}' not found", name);
     }
 
-    config.set_current_environment(name.to_string()).await?;
+    client_manager.set_current_environment_in_config(name.to_string()).await?;
     println!("{} Selected environment: {}", "✓".bright_cyan().bold(), name.bright_green().bold());
     Ok(())
 }
 
 /// Rename environment interactively
-pub async fn rename_environment_interactive(config: &Config) -> Result<()> {
-    let environments = config.list_environments().await?;
+pub async fn rename_environment_interactive(client_manager: &crate::api::ClientManager) -> Result<()> {
+    let environments = client_manager.list_environments().await;
 
     if environments.is_empty() {
         println!("  {} No environments configured to rename.", "⚠️".bright_yellow().bold());
@@ -240,26 +239,26 @@ pub async fn rename_environment_interactive(config: &Config) -> Result<()> {
         .default(0)
         .interact()?;
 
-    let old_name = &environments[env_selection];
+    let old_name = environments[env_selection].clone();
 
     let new_name: String = Input::new()
         .with_prompt(format!("New name for '{}'", old_name))
         .interact()?;
 
-    rename_environment_noninteractive(config, old_name, new_name).await
+    rename_environment_noninteractive(client_manager, &old_name, new_name).await
 }
 
 /// Rename environment non-interactively
-async fn rename_environment_noninteractive(config: &Config, old_name: &str, new_name: String) -> Result<()> {
-    config.rename_environment(old_name, new_name.clone()).await?;
+async fn rename_environment_noninteractive(client_manager: &crate::api::ClientManager, old_name: &str, new_name: String) -> Result<()> {
+    client_manager.rename_environment_in_config(old_name, new_name.clone()).await?;
     println!("{} Environment renamed from '{}' to '{}'", "✓".bright_green().bold(), old_name.bright_green(), new_name.bright_green().bold());
     Ok(())
 }
 
 /// Remove environment interactively
-pub async fn remove_environment_interactive(config: &Config) -> Result<()> {
-    let environments = config.list_environments().await?;
-    let current_env = config.get_current_environment().await?;
+pub async fn remove_environment_interactive(client_manager: &crate::api::ClientManager) -> Result<()> {
+    let environments = client_manager.list_environments().await;
+    let current_env = client_manager.get_current_environment_name().await?;
 
     if environments.is_empty() {
         println!("  {} No environments configured to remove.", "⚠️".bright_yellow().bold());
@@ -273,10 +272,10 @@ pub async fn remove_environment_interactive(config: &Config) -> Result<()> {
         .default(0)
         .interact()?;
 
-    let env_name = &environments[env_selection];
+    let env_name = environments[env_selection].clone();
 
     // Warn if removing current environment
-    if current_env.as_ref() == Some(env_name) {
+    if current_env.as_deref() == Some(&env_name) {
         println!("  {} Warning: '{}' is the current environment", "⚠️".bright_yellow().bold(), env_name.bright_green().bold());
     }
 
@@ -290,12 +289,12 @@ pub async fn remove_environment_interactive(config: &Config) -> Result<()> {
         return Ok(());
     }
 
-    remove_environment_by_name(config, env_name, true).await
+    remove_environment_by_name(client_manager, &env_name, true).await
 }
 
 /// Remove environment by name
-async fn remove_environment_by_name(config: &Config, name: &str, force: bool) -> Result<()> {
-    let current_env = config.get_current_environment().await?;
+async fn remove_environment_by_name(client_manager: &crate::api::ClientManager, name: &str, force: bool) -> Result<()> {
+    let current_env = client_manager.get_current_environment_name().await?;
 
     if !force {
         // Warn if removing current environment
@@ -314,11 +313,11 @@ async fn remove_environment_by_name(config: &Config, name: &str, force: bool) ->
         }
     }
 
-    config.delete_environment(name).await?;
+    client_manager.remove_environment_from_config(name).await?;
     println!("{} Environment '{}' removed successfully", "✓".bright_green().bold(), name.bright_green().bold());
 
     // Show current status after removal
-    if let Some(current) = config.get_current_environment().await? {
+    if let Some(current) = client_manager.get_current_environment_name().await? {
         if current != name {
             println!("Current environment: {}", current);
         } else {
@@ -332,8 +331,8 @@ async fn remove_environment_by_name(config: &Config, name: &str, force: bool) ->
 }
 
 /// Set credentials for environment interactively
-pub async fn set_credentials_interactive(config: &Config) -> Result<()> {
-    let environments = config.list_environments().await?;
+pub async fn set_credentials_interactive(client_manager: &crate::api::ClientManager) -> Result<()> {
+    let environments = client_manager.list_environments().await;
 
     if environments.is_empty() {
         println!("  {} No environments configured to update.", "⚠️".bright_yellow().bold());
@@ -343,10 +342,10 @@ pub async fn set_credentials_interactive(config: &Config) -> Result<()> {
     // Build display items with current credentials
     let mut display_items = Vec::new();
     for env_name in &environments {
-        if let Some(environment) = config.get_environment(env_name).await? {
+        if let Some(environment) = client_manager.get_environment(env_name).await? {
             display_items.push(format!("{} [{}]", env_name, environment.credentials_ref));
         } else {
-            display_items.push(env_name.clone());
+            display_items.push(env_name.to_string());
         }
     }
 
@@ -357,10 +356,10 @@ pub async fn set_credentials_interactive(config: &Config) -> Result<()> {
         .default(0)
         .interact()?;
 
-    let env_name = &environments[env_selection];
+    let env_name = environments[env_selection].clone();
 
     // Select new credentials
-    let credentials_list = config.list_credentials().await?;
+    let credentials_list = client_manager.list_credentials().await?;
     if credentials_list.is_empty() {
         println!("  {} No credentials configured. Please add credentials first.", "⚠️".bright_yellow().bold());
         return Ok(());
@@ -372,25 +371,25 @@ pub async fn set_credentials_interactive(config: &Config) -> Result<()> {
         .default(0)
         .interact()?;
 
-    let new_credentials = &credentials_list[cred_selection];
+    let new_credentials = credentials_list[cred_selection].clone();
 
-    set_credentials_by_name(config, env_name, new_credentials).await
+    set_credentials_by_name(client_manager, &env_name, &new_credentials).await
 }
 
 /// Set credentials for environment by name
-async fn set_credentials_by_name(config: &Config, env_name: &str, credentials: &str) -> Result<()> {
+async fn set_credentials_by_name(client_manager: &crate::api::ClientManager, env_name: &str, credentials: &str) -> Result<()> {
     // Validate environment exists
-    let mut environment = config.get_environment(env_name).await?
+    let mut environment = client_manager.get_environment(env_name).await?
         .ok_or_else(|| anyhow::anyhow!("Environment '{}' not found", env_name))?;
 
     // Validate credentials exist
-    if config.get_credentials(credentials).await?.is_none() {
+    if client_manager.get_credentials(credentials).await?.is_none() {
         anyhow::bail!("Credentials '{}' not found", credentials);
     }
 
     // Update the environment
     environment.credentials_ref = credentials.to_string();
-    config.add_environment(environment).await?;
+    client_manager.add_environment_to_config(env_name.to_string(), environment).await?;
 
     println!("{} Environment '{}' now uses credentials '{}'", "✓".bright_green().bold(), env_name.bright_green().bold(), credentials.bright_yellow().bold());
     Ok(())

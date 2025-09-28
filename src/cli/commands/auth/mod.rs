@@ -144,16 +144,16 @@ pub enum CredentialType {
 }
 
 /// Main auth command handler with TTY detection
-pub async fn auth_command(args: AuthCommands) -> Result<()> {
+pub async fn auth_command(args: AuthCommands, client_manager: &crate::api::ClientManager) -> Result<()> {
     // If no subcommand and we're in an interactive terminal, show the menu
     if args.command.is_none() && std::io::stdin().is_terminal() {
-        interactive::run_main_menu().await
+        interactive::run_main_menu(client_manager).await
     } else {
         // Non-interactive mode or subcommand provided
         match args.command {
             Some(AuthSubcommands::Status) => status::status_command().await,
-            Some(AuthSubcommands::Creds(cmd)) => credentials::handle_credential_command(cmd).await,
-            Some(AuthSubcommands::Env(cmd)) => environments::handle_environment_command(cmd).await,
+            Some(AuthSubcommands::Creds(cmd)) => credentials::handle_credential_command(cmd, client_manager).await,
+            Some(AuthSubcommands::Env(cmd)) => environments::handle_environment_command(cmd, client_manager).await,
             None => {
                 // Non-interactive mode without subcommand - show help
                 println!("Authentication management for Dynamics CLI");

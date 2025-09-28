@@ -135,6 +135,43 @@ impl DynamicsClient {
         self.parse_query_response(response).await
     }
 
+    /// Execute FetchXML query directly (for FQL compatibility)
+    pub async fn execute_fetchxml(&self, fetchxml: &str) -> anyhow::Result<Value> {
+        self.apply_rate_limiting().await?;
+
+        let encoded_fetchxml = urlencoding::encode(fetchxml);
+
+        let response = self.retry_policy.execute(|| async {
+            self.http_client
+                .get(&format!("{}{}?fetchXml={}", self.base_url, constants::api_path(), encoded_fetchxml))
+                .bearer_auth(&self.access_token)
+                .header("Accept", headers::CONTENT_TYPE_JSON)
+                .header("OData-Version", headers::ODATA_VERSION)
+                .header("OData-MaxVersion", headers::ODATA_VERSION)
+                .header("Prefer", headers::PREFER_INCLUDE_ANNOTATIONS)
+                .send()
+                .await
+        }).await?;
+
+        let query_result = self.parse_query_response(response).await?;
+        match query_result.data {
+            Some(query_response) => {
+                // Return the structured OData response
+                let mut result = serde_json::json!({
+                    "value": query_response.value
+                });
+                if let Some(count) = query_response.count {
+                    result["@odata.count"] = serde_json::Value::from(count);
+                }
+                if let Some(next_link) = query_response.next_link {
+                    result["@odata.nextLink"] = serde_json::Value::from(next_link);
+                }
+                Ok(result)
+            },
+            None => Ok(serde_json::json!({"value": []}))
+        }
+    }
+
     /// Execute the next page of results using @odata.nextLink
     pub async fn execute_next_page(&self, next_link: &str) -> anyhow::Result<QueryResult> {
         let response = self.retry_policy.execute(|| async {

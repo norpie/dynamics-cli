@@ -25,7 +25,15 @@ use anyhow::Result;
 /// }
 /// ```
 pub fn to_fetchxml(query: Query) -> Result<String> {
-    let mut generator = XmlGenerator::new();
+    to_fetchxml_with_options(query, false)
+}
+
+pub fn to_fetchxml_pretty(query: Query) -> Result<String> {
+    to_fetchxml_with_options(query, true)
+}
+
+fn to_fetchxml_with_options(query: Query, pretty: bool) -> Result<String> {
+    let mut generator = XmlGenerator::new_with_options(pretty);
     generator.generate(query)
 }
 
@@ -34,13 +42,19 @@ pub fn to_fetchxml(query: Query) -> Result<String> {
 struct XmlGenerator {
     indent_level: usize,
     buffer: String,
+    pretty: bool,
 }
 
 impl XmlGenerator {
     fn new() -> Self {
+        Self::new_with_options(false)
+    }
+
+    fn new_with_options(pretty: bool) -> Self {
         Self {
             indent_level: 0,
             buffer: String::new(),
+            pretty,
         }
     }
 
@@ -631,7 +645,9 @@ impl XmlGenerator {
     fn add_line(&mut self, content: &str) {
         self.buffer.push_str(&self.get_indent());
         self.buffer.push_str(content);
-        self.buffer.push('\n');
+        if self.pretty {
+            self.buffer.push('\n');
+        }
     }
 
     /// Add opening tag
@@ -677,7 +693,11 @@ impl XmlGenerator {
 
     /// Get current indentation string
     fn get_indent(&self) -> String {
-        "  ".repeat(self.indent_level)
+        if self.pretty {
+            "  ".repeat(self.indent_level)
+        } else {
+            String::new()
+        }
     }
 
     /// Escape XML special characters

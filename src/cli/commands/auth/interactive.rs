@@ -90,8 +90,7 @@ impl std::fmt::Display for EnvironmentMenuOption {
 }
 
 /// Run the main interactive menu
-pub async fn run_main_menu() -> Result<()> {
-    let config = Config::load().await?;
+pub async fn run_main_menu(client_manager: &crate::api::ClientManager) -> Result<()> {
 
     loop {
         clear_screen();
@@ -101,7 +100,7 @@ pub async fn run_main_menu() -> Result<()> {
         println!();
 
         // Show current status at the top
-        let current_env = config.get_current_environment().await.unwrap_or_default();
+        let current_env = client_manager.get_current_environment_name().await.unwrap_or_default();
         if let Some(env_name) = &current_env {
             println!("  {} {}", "Current Environment:".dimmed(), env_name.bright_white().bold());
         } else {
@@ -130,13 +129,13 @@ pub async fn run_main_menu() -> Result<()> {
                 pause_for_user();
             }
             MainMenuOption::Credentials => {
-                if let Err(e) = run_credentials_menu(&config).await {
+                if let Err(e) = run_credentials_menu(client_manager).await {
                     println!("Error: {}", e);
                     pause_for_user();
                 }
             }
             MainMenuOption::Environments => {
-                if let Err(e) = run_environments_menu(&config).await {
+                if let Err(e) = run_environments_menu(client_manager).await {
                     println!("Error: {}", e);
                     pause_for_user();
                 }
@@ -152,7 +151,7 @@ pub async fn run_main_menu() -> Result<()> {
 }
 
 /// Run the credentials management menu
-async fn run_credentials_menu(config: &Config) -> Result<()> {
+async fn run_credentials_menu(client_manager: &crate::api::ClientManager) -> Result<()> {
     loop {
         clear_screen();
         println!();
@@ -177,31 +176,31 @@ async fn run_credentials_menu(config: &Config) -> Result<()> {
 
         match options[selection] {
             CredentialMenuOption::List => {
-                super::credentials::list_credentials_interactive(config).await.unwrap_or_else(|e| {
+                super::credentials::list_credentials_interactive(client_manager).await.unwrap_or_else(|e| {
                     println!("Error: {}", e);
                 });
                 pause_for_user();
             }
             CredentialMenuOption::Add => {
-                super::credentials::add_credentials_interactive(config).await.unwrap_or_else(|e| {
+                super::credentials::add_credentials_interactive(client_manager).await.unwrap_or_else(|e| {
                     println!("Error: {}", e);
                 });
                 pause_for_user();
             }
             CredentialMenuOption::Test => {
-                super::credentials::test_credentials_interactive(config).await.unwrap_or_else(|e| {
+                super::credentials::test_credentials_interactive(client_manager).await.unwrap_or_else(|e| {
                     println!("Error: {}", e);
                 });
                 pause_for_user();
             }
             CredentialMenuOption::Rename => {
-                super::credentials::rename_credentials_interactive(config).await.unwrap_or_else(|e| {
+                super::credentials::rename_credentials_interactive(client_manager).await.unwrap_or_else(|e| {
                     println!("Error: {}", e);
                 });
                 pause_for_user();
             }
             CredentialMenuOption::Remove => {
-                super::credentials::remove_credentials_interactive(config).await.unwrap_or_else(|e| {
+                super::credentials::remove_credentials_interactive(client_manager).await.unwrap_or_else(|e| {
                     println!("Error: {}", e);
                 });
                 pause_for_user();
@@ -216,7 +215,7 @@ async fn run_credentials_menu(config: &Config) -> Result<()> {
 }
 
 /// Run the environments management menu
-async fn run_environments_menu(config: &Config) -> Result<()> {
+async fn run_environments_menu(client_manager: &crate::api::ClientManager) -> Result<()> {
     loop {
         clear_screen();
         println!();
@@ -242,37 +241,37 @@ async fn run_environments_menu(config: &Config) -> Result<()> {
 
         match options[selection] {
             EnvironmentMenuOption::List => {
-                super::environments::list_environments_interactive(config).await.unwrap_or_else(|e| {
+                super::environments::list_environments_interactive(client_manager).await.unwrap_or_else(|e| {
                     println!("Error: {}", e);
                 });
                 pause_for_user();
             }
             EnvironmentMenuOption::Add => {
-                super::environments::add_environment_interactive(config).await.unwrap_or_else(|e| {
+                super::environments::add_environment_interactive(client_manager).await.unwrap_or_else(|e| {
                     println!("Error: {}", e);
                 });
                 pause_for_user();
             }
             EnvironmentMenuOption::SetCredentials => {
-                super::environments::set_credentials_interactive(config).await.unwrap_or_else(|e| {
+                super::environments::set_credentials_interactive(client_manager).await.unwrap_or_else(|e| {
                     println!("Error: {}", e);
                 });
                 pause_for_user();
             }
             EnvironmentMenuOption::Select => {
-                super::environments::select_environment_interactive(config).await.unwrap_or_else(|e| {
+                super::environments::select_environment_interactive(client_manager).await.unwrap_or_else(|e| {
                     println!("Error: {}", e);
                 });
                 pause_for_user();
             }
             EnvironmentMenuOption::Rename => {
-                super::environments::rename_environment_interactive(config).await.unwrap_or_else(|e| {
+                super::environments::rename_environment_interactive(client_manager).await.unwrap_or_else(|e| {
                     println!("Error: {}", e);
                 });
                 pause_for_user();
             }
             EnvironmentMenuOption::Remove => {
-                super::environments::remove_environment_interactive(config).await.unwrap_or_else(|e| {
+                super::environments::remove_environment_interactive(client_manager).await.unwrap_or_else(|e| {
                     println!("Error: {}", e);
                 });
                 pause_for_user();

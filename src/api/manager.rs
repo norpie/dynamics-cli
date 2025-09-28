@@ -1,19 +1,26 @@
 use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use super::client::DynamicsClient;
 use super::auth::AuthManager;
-use super::models::{Environment, CredentialSet};
+use super::models::{Environment, CredentialSet, TokenInfo};
 
 
 /// Manages multiple Dynamics client instances for different environments
 pub struct ClientManager {
-    clients: HashMap<String, DynamicsClient>,
+    clients: Arc<RwLock<HashMap<String, DynamicsClient>>>,
     auth_manager: AuthManager,
     config: crate::config::Config,
-    environments: HashMap<String, Environment>,
-    current_env: Option<String>,
+    environments: Arc<RwLock<HashMap<String, Environment>>>,
+    current_env: Arc<RwLock<Option<String>>>,
+    tokens: Arc<RwLock<HashMap<String, TokenInfo>>>,
 }
 
 impl ClientManager {
+    /// Get reference to the internal config
+    pub fn config(&self) -> &crate::config::Config {
+        &self.config
+    }
     pub async fn from_env() -> anyhow::Result<Self> {
         // Load .env file if it exists
         dotenvy::dotenv().ok();
@@ -55,11 +62,12 @@ impl ClientManager {
         environments.insert(".env".to_string(), environment);
 
         Ok(Self {
-            clients: HashMap::new(),
+            clients: Arc::new(RwLock::new(HashMap::new())),
             auth_manager,
             config,
-            environments,
-            current_env: Some(".env".to_string()),
+            environments: Arc::new(RwLock::new(environments)),
+            current_env: Arc::new(RwLock::new(Some(".env".to_string()))),
+            tokens: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
@@ -75,7 +83,7 @@ impl ClientManager {
             if let Some(environment) = config.get_environment(&env_name).await? {
                 // Load credentials for this environment
                 if let Some(credentials) = config.get_credentials(&environment.credentials_ref).await? {
-                    auth_manager.add_credentials(environment.credentials_ref.clone(), credentials);
+                    auth_manager.add_credentials(environment.credentials_ref.clone(), credentials).await;
                 }
                 environments.insert(env_name, environment);
             }
@@ -84,46 +92,82 @@ impl ClientManager {
         // Get current environment
         let current_env = config.get_current_environment().await?;
 
+        // Load valid tokens from database
+        let mut tokens = HashMap::new();
+        for env_name in environments.keys() {
+            if let Some(token) = config.get_token(env_name).await? {
+                // Only load non-expired tokens
+                if let Ok(elapsed) = token.expires_at.elapsed() {
+                    if elapsed.as_secs() == 0 {
+                        log::debug!("Loaded valid token for environment: {}", env_name);
+                        tokens.insert(env_name.clone(), token);
+                    } else {
+                        log::debug!("Skipping expired token for environment: {}", env_name);
+                        // Clean up expired token from database
+                        let _ = config.delete_token(env_name).await;
+                    }
+                } else {
+                    // If we can't determine expiration, assume it's valid
+                    log::debug!("Loaded token for environment (unknown expiration): {}", env_name);
+                    tokens.insert(env_name.clone(), token);
+                }
+            }
+        }
+
         Ok(Self {
-            clients: HashMap::new(),
+            clients: Arc::new(RwLock::new(HashMap::new())),
             auth_manager,
             config,
-            environments,
-            current_env,
+            environments: Arc::new(RwLock::new(environments)),
+            current_env: Arc::new(RwLock::new(current_env)),
+            tokens: Arc::new(RwLock::new(tokens)),
         })
     }
 
-    pub async fn authenticate(&mut self) -> anyhow::Result<()> {
-        let current_env = self.current_env.as_ref()
+    pub async fn authenticate(&self) -> anyhow::Result<()> {
+        let current_env = self.current_env.read().await
+            .as_ref()
             .ok_or_else(|| anyhow::anyhow!("No environment selected"))?
             .clone();
 
-        let environment = self.try_select_env(&current_env)?;
+        let environment = self.try_select_env(&current_env).await?;
         let host = environment.host.clone();
         let credentials_ref = environment.credentials_ref.clone();
-        let credentials = self.auth_manager.try_select_credentials(&credentials_ref)?.clone();
+        let credentials = self.auth_manager.try_select_credentials(&credentials_ref).await?;
 
+        // Get the token from auth_manager and store it in our tokens cache
         self.auth_manager
             .authenticate(&current_env, &host, &credentials)
-            .await
+            .await?;
+
+        // Copy token from auth_manager to our local cache and save to database
+        if let Ok(token) = self.auth_manager.get_token(&current_env).await {
+            // Save to memory cache
+            self.tokens.write().await.insert(current_env.clone(), token.clone());
+
+            // Save to database for persistence
+            self.config.save_token(current_env, token).await?;
+        }
+
+        Ok(())
     }
 
     // Environment management
-    pub async fn add_environment(&mut self, name: String, environment: Environment) -> anyhow::Result<()> {
+    pub async fn add_environment(&self, name: String, environment: Environment) -> anyhow::Result<()> {
         // Save to config database
         self.config.add_environment(environment.clone()).await?;
 
         // Update local cache
-        self.environments.insert(name, environment);
+        self.environments.write().await.insert(name, environment);
         Ok(())
     }
 
-    pub async fn add_credentials(&mut self, name: String, credentials: CredentialSet) -> anyhow::Result<()> {
+    pub async fn add_credentials(&self, name: String, credentials: CredentialSet) -> anyhow::Result<()> {
         // Save to config database
         self.config.add_credentials(name.clone(), credentials.clone()).await?;
 
         // Update auth manager
-        self.auth_manager.add_credentials(name, credentials);
+        self.auth_manager.add_credentials(name, credentials).await;
         Ok(())
     }
 
@@ -137,39 +181,130 @@ impl ClientManager {
         temp_auth_manager.authenticate("test", &environment.host, credentials).await
     }
 
-    pub fn try_select_env(&self, name: &str) -> anyhow::Result<&Environment> {
-        self.environments.get(name)
+    /// List all available credentials
+    pub async fn list_credentials(&self) -> anyhow::Result<Vec<String>> {
+        self.config.list_credentials().await
+    }
+
+    /// Remove credentials
+    pub async fn remove_credentials(&self, name: &str) -> anyhow::Result<()> {
+        // Remove from config database
+        self.config.delete_credentials(name).await?;
+        // Remove from auth manager
+        self.auth_manager.delete_credentials(name).await?;
+        Ok(())
+    }
+
+    /// Rename credentials
+    pub async fn rename_credentials(&self, old_name: &str, new_name: String) -> anyhow::Result<()> {
+        // Rename in config database
+        self.config.rename_credentials(old_name, new_name.clone()).await?;
+        // Rename in auth manager
+        self.auth_manager.rename_credentials(old_name, new_name).await?;
+        Ok(())
+    }
+
+    /// Get credentials by name
+    pub async fn get_credentials(&self, name: &str) -> anyhow::Result<Option<CredentialSet>> {
+        self.config.get_credentials(name).await
+    }
+
+    /// Add environment
+    pub async fn add_environment_to_config(&self, name: String, environment: Environment) -> anyhow::Result<()> {
+        // Save to config database
+        let mut api_env = environment.clone();
+        api_env.name = name.clone(); // Ensure name is set
+        self.config.add_environment(api_env).await?;
+        // Update local cache
+        self.environments.write().await.insert(name, environment);
+        Ok(())
+    }
+
+    /// Remove environment from config
+    pub async fn remove_environment_from_config(&self, name: &str) -> anyhow::Result<()> {
+        // Remove from config database
+        self.config.delete_environment(name).await?;
+        // Remove from local cache
+        self.environments.write().await.remove(name);
+        Ok(())
+    }
+
+    /// Rename environment in config
+    pub async fn rename_environment_in_config(&self, old_name: &str, new_name: String) -> anyhow::Result<()> {
+        // Rename in config database
+        self.config.rename_environment(old_name, new_name.clone()).await?;
+        // Update local cache
+        let mut environments = self.environments.write().await;
+        if let Some(env) = environments.remove(old_name) {
+            environments.insert(new_name, env);
+        }
+        Ok(())
+    }
+
+    /// Set current environment in config
+    pub async fn set_current_environment_in_config(&self, name: String) -> anyhow::Result<()> {
+        self.config.set_current_environment(name.clone()).await?;
+        *self.current_env.write().await = Some(name);
+        Ok(())
+    }
+
+    /// Set credentials for environment
+    pub async fn set_environment_credentials(&self, env_name: &str, credentials_name: String) -> anyhow::Result<()> {
+        // This functionality might need to be implemented in Config
+        // For now, we'll need to get the environment, update it, and save it back
+        if let Some(mut api_env) = self.config.get_environment(env_name).await? {
+            api_env.credentials_ref = credentials_name;
+            self.config.add_environment(api_env).await // This overwrites the existing one
+        } else {
+            anyhow::bail!("Environment '{}' not found", env_name)
+        }
+    }
+
+    /// Get environment by name
+    pub async fn get_environment(&self, name: &str) -> anyhow::Result<Option<Environment>> {
+        Ok(self.config.get_environment(name).await?)
+    }
+
+    /// Get current environment name (returns String for compatibility)
+    pub async fn get_current_environment_name(&self) -> anyhow::Result<Option<String>> {
+        self.config.get_current_environment().await
+    }
+
+    pub async fn try_select_env(&self, name: &str) -> anyhow::Result<Environment> {
+        self.environments.read().await.get(name)
+            .cloned()
             .ok_or_else(|| anyhow::anyhow!("Environment '{}' not found", name))
     }
 
-    pub fn list_environments(&self) -> Vec<&str> {
-        self.environments.keys().map(|s| s.as_str()).collect()
+    pub async fn list_environments(&self) -> Vec<String> {
+        self.environments.read().await.keys().cloned().collect()
     }
 
-    pub fn delete_environment(&mut self, name: &str) -> anyhow::Result<()> {
-        self.environments.remove(name)
+    pub async fn delete_environment(&self, name: &str) -> anyhow::Result<()> {
+        self.environments.write().await.remove(name)
             .ok_or_else(|| anyhow::anyhow!("Environment '{}' not found", name))?;
         Ok(())
     }
 
-    pub fn rename_environment(&mut self, old_name: &str, new_name: String) -> anyhow::Result<()> {
-        let mut environment = self.environments.remove(old_name)
+    pub async fn rename_environment(&self, old_name: &str, new_name: String) -> anyhow::Result<()> {
+        let mut environments = self.environments.write().await;
+        let mut environment = environments.remove(old_name)
             .ok_or_else(|| anyhow::anyhow!("Environment '{}' not found", old_name))?;
         environment.name = new_name.clone();
-        self.environments.insert(new_name, environment);
+        environments.insert(new_name, environment);
         Ok(())
     }
 
     // Selection methods
-    pub fn select_environment(&mut self, name: &str) -> anyhow::Result<()> {
+    pub async fn select_environment(&self, name: &str) -> anyhow::Result<()> {
         // Verify environment exists
-        self.try_select_env(name)?;
-        self.current_env = Some(name.to_string());
+        self.try_select_env(name).await?;
+        *self.current_env.write().await = Some(name.to_string());
         Ok(())
     }
 
-    pub fn get_current_environment(&self) -> Option<&str> {
-        self.current_env.as_deref()
+    pub async fn get_current_environment(&self) -> Option<String> {
+        self.current_env.read().await.clone()
     }
 
     // Expose auth_manager for testing
@@ -177,30 +312,92 @@ impl ClientManager {
         &self.auth_manager
     }
 
-    /// Get a configured DynamicsClient for the specified environment
-    pub fn get_client(&self, env_name: &str) -> anyhow::Result<DynamicsClient> {
-        let environment = self.try_select_env(env_name)?;
+    /// Check if a token is expired
+    fn is_expired(token: &TokenInfo) -> bool {
+        if let Ok(elapsed) = token.expires_at.elapsed() {
+            elapsed.as_secs() > 0
+        } else {
+            false // If we can't determine elapsed time, assume valid
+        }
+    }
 
-        // Get token for this environment
-        let token_info = self.auth_manager.get_token(env_name)?;
-
-        // Check if token is still valid (basic check)
-        if let Ok(elapsed) = token_info.expires_at.elapsed() {
-            if elapsed.as_secs() > 0 {
-                anyhow::bail!("Token for environment '{}' has expired. Please re-authenticate.", env_name);
+    /// Get or refresh token for environment, with automatic authentication
+    async fn get_or_refresh_token(&self, env_name: &str) -> anyhow::Result<TokenInfo> {
+        // 1. Check memory cache first
+        if let Some(token) = self.tokens.read().await.get(env_name) {
+            if !Self::is_expired(token) {
+                log::debug!("Using cached token for environment: {}", env_name);
+                return Ok(token.clone());
+            } else {
+                log::debug!("Cached token expired for environment: {}", env_name);
             }
         }
 
+        // 2. Check database for persisted token
+        if let Some(token) = self.config.get_token(env_name).await? {
+            if !Self::is_expired(&token) {
+                log::debug!("Found valid token in database for environment: {}", env_name);
+                // Update memory cache
+                self.tokens.write().await.insert(env_name.to_string(), token.clone());
+                return Ok(token);
+            } else {
+                log::debug!("Database token expired for environment: {}", env_name);
+                // Clean up expired token
+                let _ = self.config.delete_token(env_name).await;
+            }
+        }
+
+        // 3. Auto-authenticate
+        log::info!("Auto-authenticating for environment: {}", env_name);
+        self.authenticate_environment(env_name).await?;
+
+        // 4. Get the newly created token
+        self.tokens.read().await.get(env_name)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("Authentication succeeded but token not found"))
+    }
+
+    /// Authenticate a specific environment
+    async fn authenticate_environment(&self, env_name: &str) -> anyhow::Result<()> {
+        let environment = self.try_select_env(env_name).await?;
+        let credentials = self.auth_manager.try_select_credentials(&environment.credentials_ref).await?;
+
+        // Authenticate
+        self.auth_manager.authenticate(env_name, &environment.host, &credentials).await?;
+
+        // Get token and save to both memory and database
+        if let Ok(token) = self.auth_manager.get_token(env_name).await {
+            // Save to memory cache
+            self.tokens.write().await.insert(env_name.to_string(), token.clone());
+
+            // Save to database for persistence
+            self.config.save_token(env_name.to_string(), token).await?;
+
+            log::info!("Successfully authenticated and cached token for environment: {}", env_name);
+        }
+
+        Ok(())
+    }
+
+    /// Get a configured DynamicsClient for the specified environment
+    pub async fn get_client(&self, env_name: &str) -> anyhow::Result<DynamicsClient> {
+        let environment = self.try_select_env(env_name).await?;
+
+        // Get or refresh token with automatic authentication
+        let token_info = self.get_or_refresh_token(env_name).await?;
+
         Ok(DynamicsClient::new(
             environment.host.clone(),
-            token_info.access_token.clone(),
+            token_info.access_token,
         ))
     }
 
     /// Get a configured DynamicsClient for the current environment
-    pub fn get_current_client(&self) -> anyhow::Result<DynamicsClient> {
-        let current_env = self.current_env.as_ref()
-            .ok_or_else(|| anyhow::anyhow!("No environment selected"))?;
-        self.get_client(current_env)
+    pub async fn get_current_client(&self) -> anyhow::Result<DynamicsClient> {
+        let current_env = self.current_env.read().await
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("No environment selected"))?
+            .clone();
+        self.get_client(&current_env).await
     }
 }

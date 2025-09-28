@@ -5,4 +5,4 @@ pub mod xml;
 
 pub use lexer::tokenize;
 pub use parser::parse;
-pub use xml::to_fetchxml;
+pub use xml::{to_fetchxml, to_fetchxml_pretty};

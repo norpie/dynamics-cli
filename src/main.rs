@@ -44,22 +44,25 @@ async fn main() -> Result<()> {
         .target(env_logger::Target::Pipe(Box::new(log_file)))
         .init();
 
-    // Initialize config system and run migrations first
-    let config = config::Config::load().await?;
-
     let cli = Cli::parse();
     info!("Starting dynamics-cli");
+
+    // Initialize ClientManager once (contains config internally)
+    let client_manager = api::ClientManager::new().await?;
 
     // Handle commands
     use cli::app::Commands;
     match cli.command {
         Commands::Auth(auth_args) => {
-            cli::commands::auth_command(auth_args).await?;
+            cli::commands::auth_command(auth_args, &client_manager).await?;
+        }
+        Commands::Query(query_args) => {
+            cli::commands::handle_query_command(query_args, &client_manager).await?;
         }
         _ => {
-            println!("Most commands are temporarily disabled during the config system rewrite.");
-            println!("Only 'auth' command is currently available.");
-            println!("Use 'dynamics-cli auth --help' for authentication management.");
+            println!("Some commands are temporarily disabled during the config system rewrite.");
+            println!("Available commands: auth, query");
+            println!("Use --help with any command for more information.");
         }
     }
 

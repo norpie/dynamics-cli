@@ -9,8 +9,7 @@ use super::{CredentialCommands, CredentialType};
 use colored::*;
 
 /// Handle non-interactive credential commands
-pub async fn handle_credential_command(cmd: CredentialCommands) -> Result<()> {
-    let config = Config::load().await?;
+pub async fn handle_credential_command(cmd: CredentialCommands, client_manager: &crate::api::ClientManager) -> Result<()> {
 
     match cmd {
         CredentialCommands::Add {
@@ -24,25 +23,25 @@ pub async fn handle_credential_command(cmd: CredentialCommands) -> Result<()> {
             cert_path,
         } => {
             add_credentials_noninteractive(
-                &config, name, r#type, username, password, client_id, client_secret, tenant_id, cert_path,
+                client_manager, name, r#type, username, password, client_id, client_secret, tenant_id, cert_path,
             ).await
         }
-        CredentialCommands::List => list_credentials_interactive(&config).await,
+        CredentialCommands::List => list_credentials_interactive(client_manager).await,
         CredentialCommands::Test { name, host } => {
-            test_credentials_by_name(&config, &name, &host).await
+            test_credentials_by_name(client_manager, &name, &host).await
         }
         CredentialCommands::Rename { old_name, new_name } => {
-            rename_credentials_noninteractive(&config, &old_name, new_name).await
+            rename_credentials_noninteractive(client_manager, &old_name, new_name).await
         }
         CredentialCommands::Remove { name, force } => {
-            remove_credentials_by_name(&config, &name, force).await
+            remove_credentials_by_name(client_manager, &name, force).await
         }
     }
 }
 
 /// Add credentials non-interactively (CLI args)
 async fn add_credentials_noninteractive(
-    config: &Config,
+    client_manager: &crate::api::ClientManager,
     name: String,
     cred_type: CredentialType,
     username: Option<String>,
@@ -99,14 +98,14 @@ async fn add_credentials_noninteractive(
         }
     };
 
-    config.add_credentials(name.clone(), credentials).await?;
+    client_manager.add_credentials(name.clone(), credentials).await?;
     println!("{} Credentials '{}' added successfully", "✓".bright_green().bold(), name.bright_yellow().bold());
     Ok(())
 }
 
 /// List credentials (works for both interactive and non-interactive)
-pub async fn list_credentials_interactive(config: &Config) -> Result<()> {
-    let credentials = config.list_credentials().await?;
+pub async fn list_credentials_interactive(client_manager: &crate::api::ClientManager) -> Result<()> {
+    let credentials = client_manager.list_credentials().await?;
 
     if credentials.is_empty() {
         println!("  {}", "⚠️  No credentials configured".bright_yellow().bold());
@@ -117,7 +116,7 @@ pub async fn list_credentials_interactive(config: &Config) -> Result<()> {
     println!();
     println!("  {}", "Configured credentials:".bright_white().bold());
     for cred_name in &credentials {
-        if let Some(creds) = config.get_credentials(cred_name).await? {
+        if let Some(creds) = client_manager.get_credentials(cred_name).await? {
             let cred_type = match creds {
                 CredentialSet::UsernamePassword { .. } => "Username/Password".bright_blue(),
                 CredentialSet::ClientCredentials { .. } => "Client Credentials".bright_blue(),
@@ -133,7 +132,7 @@ pub async fn list_credentials_interactive(config: &Config) -> Result<()> {
 }
 
 /// Add credentials interactively
-pub async fn add_credentials_interactive(config: &Config) -> Result<()> {
+pub async fn add_credentials_interactive(client_manager: &crate::api::ClientManager) -> Result<()> {
     println!();
     println!("Add New Credentials");
     println!("==================");
@@ -144,7 +143,7 @@ pub async fn add_credentials_interactive(config: &Config) -> Result<()> {
         .interact()?;
 
     // Check if exists
-    if config.get_credentials(&name).await?.is_some() {
+    if client_manager.get_credentials(&name).await?.is_some() {
         let overwrite = Confirm::new()
             .with_prompt(format!("Credentials '{}' already exist. Overwrite?", name))
             .default(false)
@@ -221,15 +220,15 @@ pub async fn add_credentials_interactive(config: &Config) -> Result<()> {
     };
 
     // Save credentials
-    config.add_credentials(name.clone(), credentials).await?;
+    client_manager.add_credentials(name.clone(), credentials).await?;
     println!("{} Credentials '{}' saved successfully", "✓".bright_green().bold(), name.bright_yellow().bold());
 
     Ok(())
 }
 
 /// Test credentials interactively
-pub async fn test_credentials_interactive(config: &Config) -> Result<()> {
-    let credentials = config.list_credentials().await?;
+pub async fn test_credentials_interactive(client_manager: &crate::api::ClientManager) -> Result<()> {
+    let credentials = client_manager.list_credentials().await?;
 
     if credentials.is_empty() {
         println!("  {}", "⚠️  No credentials configured to test".bright_yellow().bold());
@@ -246,7 +245,7 @@ pub async fn test_credentials_interactive(config: &Config) -> Result<()> {
     let cred_name = &credentials[cred_selection];
 
     // Check if there are any environments
-    let environments = config.list_environments().await?;
+    let environments = client_manager.list_environments().await;
     let host = if environments.is_empty() {
         // No environments, ask for URL manually
         Input::new()
@@ -270,10 +269,9 @@ pub async fn test_credentials_interactive(config: &Config) -> Result<()> {
                 .interact()?;
 
             let env_name = &environments[env_selection];
-            let environment = config.get_environment(env_name).await?
-                .ok_or_else(|| anyhow::anyhow!("Environment '{}' not found", env_name))?;
+            let environment = client_manager.try_select_env(env_name).await?;
 
-            environment.host
+            environment.host.clone()
         } else {
             // Manual URL entry
             Input::new()
@@ -282,12 +280,12 @@ pub async fn test_credentials_interactive(config: &Config) -> Result<()> {
         }
     };
 
-    test_credentials_by_name(config, cred_name, &host).await
+    test_credentials_by_name(client_manager, cred_name, &host).await
 }
 
 /// Test specific credentials by name
-async fn test_credentials_by_name(config: &Config, name: &str, host: &str) -> Result<()> {
-    let credentials = config.get_credentials(name).await?
+async fn test_credentials_by_name(client_manager: &crate::api::ClientManager, name: &str, host: &str) -> Result<()> {
+    let credentials = client_manager.get_credentials(name).await?
         .ok_or_else(|| anyhow::anyhow!("Credentials '{}' not found", name))?;
 
     let result = with_spinner("Testing authentication...", async {
@@ -319,8 +317,8 @@ async fn test_credentials_by_name(config: &Config, name: &str, host: &str) -> Re
 }
 
 /// Rename credentials interactively
-pub async fn rename_credentials_interactive(config: &Config) -> Result<()> {
-    let credentials = config.list_credentials().await?;
+pub async fn rename_credentials_interactive(client_manager: &crate::api::ClientManager) -> Result<()> {
+    let credentials = client_manager.list_credentials().await?;
 
     if credentials.is_empty() {
         println!("No credentials configured to rename.");
@@ -340,19 +338,19 @@ pub async fn rename_credentials_interactive(config: &Config) -> Result<()> {
         .with_prompt(format!("New name for '{}'", old_name))
         .interact()?;
 
-    rename_credentials_noninteractive(config, old_name, new_name).await
+    rename_credentials_noninteractive(client_manager, old_name, new_name).await
 }
 
 /// Rename credentials non-interactively
-async fn rename_credentials_noninteractive(config: &Config, old_name: &str, new_name: String) -> Result<()> {
-    config.rename_credentials(old_name, new_name.clone()).await?;
+async fn rename_credentials_noninteractive(client_manager: &crate::api::ClientManager, old_name: &str, new_name: String) -> Result<()> {
+    client_manager.rename_credentials(old_name, new_name.clone()).await?;
     println!("{} Credentials renamed from '{}' to '{}'", "✓".bright_green().bold(), old_name.bright_yellow(), new_name.bright_yellow().bold());
     Ok(())
 }
 
 /// Remove credentials interactively
-pub async fn remove_credentials_interactive(config: &Config) -> Result<()> {
-    let credentials = config.list_credentials().await?;
+pub async fn remove_credentials_interactive(client_manager: &crate::api::ClientManager) -> Result<()> {
+    let credentials = client_manager.list_credentials().await?;
 
     if credentials.is_empty() {
         println!("No credentials configured to remove.");
@@ -378,17 +376,17 @@ pub async fn remove_credentials_interactive(config: &Config) -> Result<()> {
         return Ok(());
     }
 
-    remove_credentials_by_name(config, cred_name, true).await
+    remove_credentials_by_name(client_manager, cred_name, true).await
 }
 
 /// Remove credentials by name
-async fn remove_credentials_by_name(config: &Config, name: &str, force: bool) -> Result<()> {
+async fn remove_credentials_by_name(client_manager: &crate::api::ClientManager, name: &str, force: bool) -> Result<()> {
     // Check if credentials are in use by any environments
-    let environments = config.list_environments().await?;
+    let environments = client_manager.list_environments().await;
     let mut using_environments = Vec::new();
 
     for env_name in environments {
-        if let Some(environment) = config.get_environment(&env_name).await? {
+        if let Some(environment) = client_manager.try_select_env(&env_name).await.ok() {
             if environment.credentials_ref == name {
                 using_environments.push(env_name);
             }
@@ -416,7 +414,7 @@ async fn remove_credentials_by_name(config: &Config, name: &str, force: bool) ->
         }
     }
 
-    config.delete_credentials(name).await?;
+    client_manager.remove_credentials(name).await?;
     println!("{} Credentials '{}' removed successfully", "✓".bright_green().bold(), name.bright_yellow().bold());
     Ok(())
 }

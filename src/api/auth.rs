@@ -1,51 +1,55 @@
 use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use super::models::{CredentialSet, TokenInfo};
 
 /// Manages authentication tokens and credentials for multiple environments
 pub struct AuthManager {
-    credentials: HashMap<String, CredentialSet>,
-    tokens: HashMap<String, TokenInfo>,
+    credentials: Arc<RwLock<HashMap<String, CredentialSet>>>,
+    tokens: Arc<RwLock<HashMap<String, TokenInfo>>>,
 }
 
 impl AuthManager {
     pub fn new() -> Self {
         Self {
-            credentials: HashMap::new(),
-            tokens: HashMap::new(),
+            credentials: Arc::new(RwLock::new(HashMap::new())),
+            tokens: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
-    pub fn add_credentials(&mut self, name: String, credentials: CredentialSet) {
-        self.credentials.insert(name, credentials);
+    pub async fn add_credentials(&self, name: String, credentials: CredentialSet) {
+        self.credentials.write().await.insert(name, credentials);
     }
 
-    pub fn try_select_credentials(&self, name: &str) -> anyhow::Result<&CredentialSet> {
-        self.credentials.get(name)
+    pub async fn try_select_credentials(&self, name: &str) -> anyhow::Result<CredentialSet> {
+        self.credentials.read().await.get(name)
+            .cloned()
             .ok_or_else(|| anyhow::anyhow!("Credentials '{}' not found", name))
     }
 
     // List methods
-    pub fn list_credentials(&self) -> Vec<&str> {
-        self.credentials.keys().map(|s| s.as_str()).collect()
+    pub async fn list_credentials(&self) -> Vec<String> {
+        self.credentials.read().await.keys().cloned().collect()
     }
 
     // Delete methods
-    pub fn delete_credentials(&mut self, name: &str) -> anyhow::Result<()> {
-        self.credentials.remove(name)
+    pub async fn delete_credentials(&self, name: &str) -> anyhow::Result<()> {
+        self.credentials.write().await.remove(name)
             .ok_or_else(|| anyhow::anyhow!("Credentials '{}' not found", name))?;
         Ok(())
     }
 
     // Rename methods
-    pub fn rename_credentials(&mut self, old_name: &str, new_name: String) -> anyhow::Result<()> {
-        let credentials = self.credentials.remove(old_name)
+    pub async fn rename_credentials(&self, old_name: &str, new_name: String) -> anyhow::Result<()> {
+        let mut credentials = self.credentials.write().await;
+        let creds = credentials.remove(old_name)
             .ok_or_else(|| anyhow::anyhow!("Credentials '{}' not found", old_name))?;
-        self.credentials.insert(new_name, credentials);
+        credentials.insert(new_name, creds);
         Ok(())
     }
 
     // Authentication methods
-    pub async fn authenticate(&mut self, env_name: &str, host: &str, credentials: &CredentialSet) -> anyhow::Result<()> {
+    pub async fn authenticate(&self, env_name: &str, host: &str, credentials: &CredentialSet) -> anyhow::Result<()> {
         use std::time::{SystemTime, Duration};
 
         log::info!("Authenticating to {} for environment {}", host, env_name);
@@ -98,7 +102,7 @@ impl AuthManager {
                             refresh_token,
                         };
 
-                        self.tokens.insert(env_name.to_string(), token_info);
+                        self.tokens.write().await.insert(env_name.to_string(), token_info);
 
                         log::info!("Successfully authenticated for environment {}", env_name);
                         Ok(())
@@ -117,14 +121,15 @@ impl AuthManager {
     }
 
     /// Get token for environment (used by ClientManager)
-    pub fn get_token(&self, env_name: &str) -> anyhow::Result<&TokenInfo> {
-        self.tokens.get(env_name)
+    pub async fn get_token(&self, env_name: &str) -> anyhow::Result<TokenInfo> {
+        self.tokens.read().await.get(env_name)
+            .cloned()
             .ok_or_else(|| anyhow::anyhow!("No token found for environment '{}'", env_name))
     }
 
     /// Check if token exists and is valid for environment
-    pub fn has_valid_token(&self, env_name: &str) -> bool {
-        if let Some(token_info) = self.tokens.get(env_name) {
+    pub async fn has_valid_token(&self, env_name: &str) -> bool {
+        if let Some(token_info) = self.tokens.read().await.get(env_name) {
             // Check if token is still valid
             if let Ok(elapsed) = token_info.expires_at.elapsed() {
                 elapsed.as_secs() == 0 // Token is valid if it hasn't elapsed

@@ -1,36 +1,45 @@
-use clap::{Args, Subcommand};
+use clap::{Args, ValueEnum};
 use std::path::PathBuf;
 
 #[derive(Args)]
 pub struct QueryCommands {
-    #[command(subcommand)]
-    pub command: QuerySubcommands,
+    /// FQL query string to execute (e.g., '.account | .name, .revenue | limit(10)')
+    #[arg(help = "FQL query string")]
+    pub query: Option<String>,
+
+    /// Execute FQL query from a file instead of command line
+    #[arg(short, long, help = "Path to file containing FQL query")]
+    pub file: Option<PathBuf>,
+
+    /// Output format
+    #[arg(long, default_value = "json", help = "Output format")]
+    pub format: OutputFormat,
+
+    /// Pretty print the output
+    #[arg(short, long, help = "Pretty print the output")]
+    pub pretty: bool,
+
+    /// Show generated FetchXML without executing the query
+    #[arg(long, help = "Show FetchXML without executing (dry run)")]
+    pub dry: bool,
+
+    /// Save query results to file
+    #[arg(short, long, help = "Save results to file")]
+    pub output: Option<PathBuf>,
+
+    /// Show query execution time and statistics
+    #[arg(long, help = "Show execution statistics")]
+    pub stats: bool,
 }
 
-#[derive(Subcommand)]
-pub enum QuerySubcommands {
-    /// Execute an FQL query directly from command line
-    Run {
-        /// FQL query string to execute
-        #[arg(help = "FQL query string (e.g., '.account | .name, .revenue | limit(10)')")]
-        query: String,
-        /// Output format (xml, json, table)
-        #[arg(short, long, default_value = "xml")]
-        format: String,
-        /// Pretty print the output
-        #[arg(short, long)]
-        pretty: bool,
-    },
-    /// Execute an FQL query from a file
-    File {
-        /// Path to file containing FQL query
-        #[arg(help = "Path to file containing FQL query")]
-        path: PathBuf,
-        /// Output format (xml, json, table)
-        #[arg(short, long, default_value = "xml")]
-        format: String,
-        /// Pretty print the output
-        #[arg(short, long)]
-        pretty: bool,
-    },
+#[derive(Debug, Clone, ValueEnum)]
+pub enum OutputFormat {
+    /// JSON format (default)
+    Json,
+    /// XML format
+    Xml,
+    /// CSV format
+    Csv,
+    /// Raw FetchXML (for debugging)
+    FetchXml,
 }
