@@ -29,6 +29,7 @@
               })
               openssl
               pkg-config
+              sqlite
             ];
 
             shellHook = ''

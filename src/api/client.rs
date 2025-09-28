@@ -1,4 +1,3 @@
-use crate::config::AuthConfig;
 use super::constants::{self, headers, methods};
 use super::operations::{Operation, OperationResult, BatchRequestBuilder, BatchResponseParser};
 use super::query::{Query, QueryResult, QueryResponse};

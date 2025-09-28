@@ -1,4 +1,4 @@
-use crate::config::{AuthConfig, Config};
+use crate::config_legacy::{AuthConfig, Config};
 use crate::ui::prompts::text_input;
 use anyhow::Result;
 use log::{debug, info};

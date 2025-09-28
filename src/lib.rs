@@ -2,9 +2,12 @@
 
 pub mod api;
 pub mod auth;
-#[cfg(any(feature = "migration", feature = "deadlines"))]
-pub mod commands;
+// Disabled during config rewrite
+// #[cfg(any(feature = "migration", feature = "deadlines"))]
+// pub mod commands;
 pub mod config;
-pub mod dynamics;
+mod config_legacy;
+// Disabled during config rewrite - uses old config API
+// pub mod dynamics;
 pub mod fql;
 pub mod ui;
