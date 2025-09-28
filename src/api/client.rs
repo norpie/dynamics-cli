@@ -136,14 +136,17 @@ impl DynamicsClient {
     }
 
     /// Execute FetchXML query directly (for FQL compatibility)
-    pub async fn execute_fetchxml(&self, fetchxml: &str) -> anyhow::Result<Value> {
+    pub async fn execute_fetchxml(&self, entity_name: &str, fetchxml: &str) -> anyhow::Result<Value> {
         self.apply_rate_limiting().await?;
 
         let encoded_fetchxml = urlencoding::encode(fetchxml);
 
+        // Pluralize entity name for the endpoint
+        let plural_entity = super::pluralization::pluralize_entity_name(entity_name);
+
         let response = self.retry_policy.execute(|| async {
             self.http_client
-                .get(&format!("{}{}?fetchXml={}", self.base_url, constants::api_path(), encoded_fetchxml))
+                .get(&format!("{}{}/{}?fetchXml={}", self.base_url, constants::api_path(), plural_entity, encoded_fetchxml))
                 .bearer_auth(&self.access_token)
                 .header("Accept", headers::CONTENT_TYPE_JSON)
                 .header("OData-Version", headers::ODATA_VERSION)

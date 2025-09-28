@@ -57,6 +57,9 @@ pub async fn handle_query_command(args: QueryCommands) -> Result<()> {
     let ast = parse(tokens, &query_text)
         .context("Failed to parse FQL query")?;
 
+    // Extract entity name from AST for pluralization
+    let entity_name = ast.entity.name.clone();
+
     let fetchxml = if args.pretty && args.dry {
         to_fetchxml_pretty(ast)
     } else {
@@ -91,8 +94,8 @@ pub async fn handle_query_command(args: QueryCommands) -> Result<()> {
 
     let client = client_manager.get_client(&current_env).await?;
 
-    // Execute the query using the new API client
-    let result = client.execute_fetchxml(&fetchxml).await
+    // Execute the query using the new API client with entity name
+    let result = client.execute_fetchxml(&entity_name, &fetchxml).await
         .context("Failed to execute query")?;
 
     let exec_duration = start_exec.elapsed();

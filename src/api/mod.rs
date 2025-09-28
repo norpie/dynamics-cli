@@ -11,6 +11,7 @@ pub mod constants;
 pub mod manager;
 pub mod models;
 pub mod operations;
+pub mod pluralization;
 pub mod query;
 pub mod resilience;
 
