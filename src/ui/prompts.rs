@@ -124,6 +124,7 @@ pub fn prompt_environment_selection(
     let selection = Select::new()
         .with_prompt("Select environment")
         .items(&items)
+        .default(0)
         .interact()?;
 
     Ok(env_names[selection].clone())

@@ -1,4 +1,4 @@
-use super::commands::auth::AuthCommands;
+use super::commands::AuthCommands;
 use super::commands::deadlines::DeadlinesCommands;
 use super::commands::entity::EntityCommands;
 use super::commands::migration::MigrationCommands;

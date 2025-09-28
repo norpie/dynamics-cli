@@ -47,13 +47,21 @@ async fn main() -> Result<()> {
     // Initialize config system and run migrations first
     let config = config::Config::load().await?;
 
-    // Test spinner
-    cli::ui::with_spinner("Testing spinner", async {
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-    }).await;
-
     let cli = Cli::parse();
     info!("Starting dynamics-cli");
+
+    // Handle commands
+    use cli::app::Commands;
+    match cli.command {
+        Commands::Auth(auth_args) => {
+            cli::commands::auth_command(auth_args).await?;
+        }
+        _ => {
+            println!("Most commands are temporarily disabled during the config system rewrite.");
+            println!("Only 'auth' command is currently available.");
+            println!("Use 'dynamics-cli auth --help' for authentication management.");
+        }
+    }
 
     Ok(())
 }

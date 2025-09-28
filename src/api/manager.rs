@@ -127,6 +127,16 @@ impl ClientManager {
         Ok(())
     }
 
+    /// Test authentication with specific credentials and environment
+    pub async fn test_auth_with_credentials(&self, environment: &Environment, credentials: &CredentialSet) -> anyhow::Result<()> {
+        // Create a temporary auth manager for testing
+        let mut temp_auth_manager = AuthManager::new();
+        temp_auth_manager.add_credentials("test".to_string(), credentials.clone());
+
+        // Test authentication
+        temp_auth_manager.authenticate("test", &environment.host, credentials).await
+    }
+
     pub fn try_select_env(&self, name: &str) -> anyhow::Result<&Environment> {
         self.environments.get(name)
             .ok_or_else(|| anyhow::anyhow!("Environment '{}' not found", name))
