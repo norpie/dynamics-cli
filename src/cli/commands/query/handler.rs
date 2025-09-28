@@ -8,7 +8,7 @@ use std::time::Instant;
 use crate::api::ClientManager;
 use crate::config::Config;
 use crate::fql::{parse, to_fetchxml, to_fetchxml_pretty, tokenize};
-use super::query::{OutputFormat, QueryCommands};
+use super::{OutputFormat, QueryCommands};
 
 /// Handle the query command with the new streamlined interface
 pub async fn handle_query_command(args: QueryCommands) -> Result<()> {

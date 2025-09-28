@@ -1,5 +1,9 @@
+pub mod handler;
+
 use clap::{Args, ValueEnum};
 use std::path::PathBuf;
+
+pub use handler::handle_query_command;
 
 #[derive(Args)]
 pub struct QueryCommands {
