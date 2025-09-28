@@ -44,20 +44,16 @@ async fn main() -> Result<()> {
         .target(env_logger::Target::Pipe(Box::new(log_file)))
         .init();
 
-    dotenv::dotenv().ok();
-    debug!("Environment variables loaded");
-
     // Initialize config system and run migrations first
     let config = config::Config::load().await?;
 
+    // Test spinner
+    cli::ui::with_spinner("Testing spinner", async {
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }).await;
 
     let cli = Cli::parse();
     info!("Starting dynamics-cli");
-
-    // All commands disabled during config rewrite
-    println!("All commands are temporarily disabled during the config system rewrite.");
-    println!("The new SQLite-based configuration system with proper migrations is being implemented.");
-    println!("CLI functionality will be restored once the architecture changes are complete.");
 
     Ok(())
 }
