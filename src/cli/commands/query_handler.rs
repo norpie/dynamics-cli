@@ -11,7 +11,8 @@ use crate::fql::{parse, to_fetchxml, to_fetchxml_pretty, tokenize};
 use super::query::{OutputFormat, QueryCommands};
 
 /// Handle the query command with the new streamlined interface
-pub async fn handle_query_command(args: QueryCommands, client_manager: &crate::api::ClientManager) -> Result<()> {
+pub async fn handle_query_command(args: QueryCommands) -> Result<()> {
+    let client_manager = crate::client_manager();
     // Validate arguments
     if args.query.is_none() && args.file.is_none() {
         anyhow::bail!("Either provide a query string or use --file to specify a query file");

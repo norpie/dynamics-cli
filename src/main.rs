@@ -3,6 +3,7 @@
 use anyhow::Result;
 use clap::Parser;
 use log::{debug, info};
+use once_cell::sync::OnceCell;
 
 mod api;
 mod auth;
@@ -12,6 +13,14 @@ mod config;
 // mod dynamics; // Disabled during config rewrite
 mod fql;
 mod ui;
+
+// Global ClientManager instance
+static CLIENT_MANAGER: OnceCell<api::ClientManager> = OnceCell::new();
+
+/// Get a reference to the global ClientManager
+pub fn client_manager() -> &'static api::ClientManager {
+    CLIENT_MANAGER.get().expect("ClientManager not initialized")
+}
 
 use cli::Cli;
 // use cli::app::Commands;
@@ -47,17 +56,18 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     info!("Starting dynamics-cli");
 
-    // Initialize ClientManager once (contains config internally)
+    // Initialize global ClientManager once (contains config internally)
     let client_manager = api::ClientManager::new().await?;
+    CLIENT_MANAGER.set(client_manager).map_err(|_| anyhow::anyhow!("Failed to initialize global ClientManager"))?;
 
     // Handle commands
     use cli::app::Commands;
     match cli.command {
         Commands::Auth(auth_args) => {
-            cli::commands::auth_command(auth_args, &client_manager).await?;
+            cli::commands::auth_command(auth_args).await?;
         }
         Commands::Query(query_args) => {
-            cli::commands::handle_query_command(query_args, &client_manager).await?;
+            cli::commands::handle_query_command(query_args).await?;
         }
         _ => {
             println!("Some commands are temporarily disabled during the config system rewrite.");

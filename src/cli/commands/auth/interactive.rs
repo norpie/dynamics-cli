@@ -90,7 +90,8 @@ impl std::fmt::Display for EnvironmentMenuOption {
 }
 
 /// Run the main interactive menu
-pub async fn run_main_menu(client_manager: &crate::api::ClientManager) -> Result<()> {
+pub async fn run_main_menu() -> Result<()> {
+    let client_manager = crate::client_manager();
 
     loop {
         clear_screen();
@@ -129,13 +130,13 @@ pub async fn run_main_menu(client_manager: &crate::api::ClientManager) -> Result
                 pause_for_user();
             }
             MainMenuOption::Credentials => {
-                if let Err(e) = run_credentials_menu(client_manager).await {
+                if let Err(e) = run_credentials_menu().await {
                     println!("Error: {}", e);
                     pause_for_user();
                 }
             }
             MainMenuOption::Environments => {
-                if let Err(e) = run_environments_menu(client_manager).await {
+                if let Err(e) = run_environments_menu().await {
                     println!("Error: {}", e);
                     pause_for_user();
                 }
@@ -151,7 +152,8 @@ pub async fn run_main_menu(client_manager: &crate::api::ClientManager) -> Result
 }
 
 /// Run the credentials management menu
-async fn run_credentials_menu(client_manager: &crate::api::ClientManager) -> Result<()> {
+async fn run_credentials_menu() -> Result<()> {
+    let client_manager = crate::client_manager();
     loop {
         clear_screen();
         println!();
@@ -176,31 +178,31 @@ async fn run_credentials_menu(client_manager: &crate::api::ClientManager) -> Res
 
         match options[selection] {
             CredentialMenuOption::List => {
-                super::credentials::list_credentials_interactive(client_manager).await.unwrap_or_else(|e| {
+                super::credentials::list_credentials_interactive().await.unwrap_or_else(|e| {
                     println!("Error: {}", e);
                 });
                 pause_for_user();
             }
             CredentialMenuOption::Add => {
-                super::credentials::add_credentials_interactive(client_manager).await.unwrap_or_else(|e| {
+                super::credentials::add_credentials_interactive().await.unwrap_or_else(|e| {
                     println!("Error: {}", e);
                 });
                 pause_for_user();
             }
             CredentialMenuOption::Test => {
-                super::credentials::test_credentials_interactive(client_manager).await.unwrap_or_else(|e| {
+                super::credentials::test_credentials_interactive().await.unwrap_or_else(|e| {
                     println!("Error: {}", e);
                 });
                 pause_for_user();
             }
             CredentialMenuOption::Rename => {
-                super::credentials::rename_credentials_interactive(client_manager).await.unwrap_or_else(|e| {
+                super::credentials::rename_credentials_interactive().await.unwrap_or_else(|e| {
                     println!("Error: {}", e);
                 });
                 pause_for_user();
             }
             CredentialMenuOption::Remove => {
-                super::credentials::remove_credentials_interactive(client_manager).await.unwrap_or_else(|e| {
+                super::credentials::remove_credentials_interactive().await.unwrap_or_else(|e| {
                     println!("Error: {}", e);
                 });
                 pause_for_user();
@@ -215,7 +217,8 @@ async fn run_credentials_menu(client_manager: &crate::api::ClientManager) -> Res
 }
 
 /// Run the environments management menu
-async fn run_environments_menu(client_manager: &crate::api::ClientManager) -> Result<()> {
+async fn run_environments_menu() -> Result<()> {
+    let client_manager = crate::client_manager();
     loop {
         clear_screen();
         println!();
@@ -241,37 +244,37 @@ async fn run_environments_menu(client_manager: &crate::api::ClientManager) -> Re
 
         match options[selection] {
             EnvironmentMenuOption::List => {
-                super::environments::list_environments_interactive(client_manager).await.unwrap_or_else(|e| {
+                super::environments::list_environments_interactive().await.unwrap_or_else(|e| {
                     println!("Error: {}", e);
                 });
                 pause_for_user();
             }
             EnvironmentMenuOption::Add => {
-                super::environments::add_environment_interactive(client_manager).await.unwrap_or_else(|e| {
+                super::environments::add_environment_interactive().await.unwrap_or_else(|e| {
                     println!("Error: {}", e);
                 });
                 pause_for_user();
             }
             EnvironmentMenuOption::SetCredentials => {
-                super::environments::set_credentials_interactive(client_manager).await.unwrap_or_else(|e| {
+                super::environments::set_credentials_interactive().await.unwrap_or_else(|e| {
                     println!("Error: {}", e);
                 });
                 pause_for_user();
             }
             EnvironmentMenuOption::Select => {
-                super::environments::select_environment_interactive(client_manager).await.unwrap_or_else(|e| {
+                super::environments::select_environment_interactive().await.unwrap_or_else(|e| {
                     println!("Error: {}", e);
                 });
                 pause_for_user();
             }
             EnvironmentMenuOption::Rename => {
-                super::environments::rename_environment_interactive(client_manager).await.unwrap_or_else(|e| {
+                super::environments::rename_environment_interactive().await.unwrap_or_else(|e| {
                     println!("Error: {}", e);
                 });
                 pause_for_user();
             }
             EnvironmentMenuOption::Remove => {
-                super::environments::remove_environment_interactive(client_manager).await.unwrap_or_else(|e| {
+                super::environments::remove_environment_interactive().await.unwrap_or_else(|e| {
                     println!("Error: {}", e);
                 });
                 pause_for_user();
