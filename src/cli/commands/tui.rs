@@ -11,7 +11,7 @@ use ratatui::{
 };
 use std::io;
 
-use crate::tui::TuiOrchestrator;
+use crate::tui::MultiAppRuntime;
 
 #[derive(Args)]
 pub struct TuiCommands {
@@ -42,11 +42,11 @@ async fn launch_tui() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // Create TUI orchestrator
-    let mut tui_orchestrator = TuiOrchestrator::new().await?;
+    // Create multi-app runtime
+    let mut runtime = MultiAppRuntime::new();
 
     // Run the TUI loop
-    let result = run_tui(&mut terminal, &mut tui_orchestrator).await;
+    let result = run_tui(&mut terminal, &mut runtime).await;
 
     // Restore terminal
     disable_raw_mode()?;
@@ -62,30 +62,40 @@ async fn launch_tui() -> Result<()> {
 
 async fn run_tui<B: Backend>(
     terminal: &mut Terminal<B>,
-    tui_orchestrator: &mut TuiOrchestrator,
+    runtime: &mut MultiAppRuntime,
 ) -> Result<()> {
     loop {
         // Render the TUI
         terminal.draw(|frame| {
-            tui_orchestrator.render(frame);
+            runtime.render(frame);
         })?;
+
+        // Poll async commands
+        runtime.poll_async().await?;
 
         // Handle events
         if event::poll(std::time::Duration::from_millis(100))? {
-            let event = event::read()?;
+            let event_result = event::read()?;
 
             // Handle global shortcuts first
-            if let Event::Key(key) = &event {
+            if let Event::Key(key) = &event_result {
                 if key.code == crossterm::event::KeyCode::Char('q')
                     && key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL)
                 {
                     break;
                 }
+
+                // Pass key event to runtime
+                if !runtime.handle_key(*key)? {
+                    break;
+                }
             }
 
-            // Pass event to orchestrator (now async)
-            if !tui_orchestrator.handle_event(event).await? {
-                break;
+            // Handle mouse events
+            if let Event::Mouse(mouse) = &event_result {
+                if !runtime.handle_mouse(*mouse)? {
+                    break;
+                }
             }
         }
     }
