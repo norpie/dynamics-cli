@@ -4,35 +4,38 @@ use ratatui::style::Style;
 use ratatui::prelude::Stylize;
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
 use anyhow::Result;
+use std::collections::HashMap;
 
-use crate::tui::{AppId, Runtime, apps::{Example1, Example2, LoadingScreen}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App};
+use crate::tui::{AppId, Runtime, AppRuntime, apps::{Example1, Example2, LoadingScreen}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App};
 use crate::tui::element::{ColumnBuilder, RowBuilder};
 
 /// Manages multiple app runtimes and handles navigation between them
 pub struct MultiAppRuntime {
-    example1: Runtime<Example1>,
-    example2: Runtime<Example2>,
-    loading_screen: Runtime<LoadingScreen>,
+    /// All registered app runtimes, stored as trait objects for type erasure
+    runtimes: HashMap<AppId, Box<dyn AppRuntime>>,
+
+    /// Currently active app
     active_app: AppId,
 
     // Global UI state
     help_menu_open: bool,
     help_scroll_offset: usize,
-
-    // Pending global events to broadcast
-    pending_events: Vec<(String, serde_json::Value)>,
 }
 
 impl MultiAppRuntime {
     pub fn new() -> Self {
+        let mut runtimes: HashMap<AppId, Box<dyn AppRuntime>> = HashMap::new();
+
+        // Register all apps here - this is the ONLY place you need to add new apps!
+        runtimes.insert(AppId::Example1, Box::new(Runtime::<Example1>::new()));
+        runtimes.insert(AppId::Example2, Box::new(Runtime::<Example2>::new()));
+        runtimes.insert(AppId::LoadingScreen, Box::new(Runtime::<LoadingScreen>::new()));
+
         Self {
-            example1: Runtime::new(),
-            example2: Runtime::new(),
-            loading_screen: Runtime::new(),
+            runtimes,
             active_app: AppId::Example1,
             help_menu_open: false,
             help_scroll_offset: 0,
-            pending_events: Vec::new(),
         }
     }
 
@@ -75,49 +78,25 @@ impl MultiAppRuntime {
         }
 
         // Normal: delegate to active app
-        match self.active_app {
-            AppId::Example1 => {
-                let result = self.example1.handle_key(key_event)?;
-                self.broadcast_events()?;
-                self.check_navigation()?;
-                Ok(result)
-            }
-            AppId::Example2 => {
-                let result = self.example2.handle_key(key_event)?;
-                self.broadcast_events()?;
-                self.check_navigation()?;
-                Ok(result)
-            }
-            AppId::LoadingScreen => {
-                let result = self.loading_screen.handle_key(key_event)?;
-                self.broadcast_events()?;
-                self.check_navigation()?;
-                Ok(result)
-            }
-        }
+        let result = self.runtimes
+            .get_mut(&self.active_app)
+            .expect("Active app not found in runtimes")
+            .handle_key(key_event)?;
+
+        self.broadcast_events()?;
+        self.check_navigation()?;
+        Ok(result)
     }
 
     pub fn handle_mouse(&mut self, mouse_event: MouseEvent) -> Result<bool> {
-        match self.active_app {
-            AppId::Example1 => {
-                let result = self.example1.handle_mouse(mouse_event)?;
-                self.broadcast_events()?;
-                self.check_navigation()?;
-                Ok(result)
-            }
-            AppId::Example2 => {
-                let result = self.example2.handle_mouse(mouse_event)?;
-                self.broadcast_events()?;
-                self.check_navigation()?;
-                Ok(result)
-            }
-            AppId::LoadingScreen => {
-                let result = self.loading_screen.handle_mouse(mouse_event)?;
-                self.broadcast_events()?;
-                self.check_navigation()?;
-                Ok(result)
-            }
-        }
+        let result = self.runtimes
+            .get_mut(&self.active_app)
+            .expect("Active app not found in runtimes")
+            .handle_mouse(mouse_event)?;
+
+        self.broadcast_events()?;
+        self.check_navigation()?;
+        Ok(result)
     }
 
     pub fn render(&mut self, frame: &mut Frame) {
@@ -140,19 +119,16 @@ impl MultiAppRuntime {
         };
 
         // Render global header
-        let (app_title, app_status) = match self.active_app {
-            AppId::Example1 => (self.example1.get_title(), self.example1.get_status()),
-            AppId::Example2 => (self.example2.get_title(), self.example2.get_status()),
-            AppId::LoadingScreen => (self.loading_screen.get_title(), self.loading_screen.get_status()),
-        };
+        let active_runtime = self.runtimes.get(&self.active_app)
+            .expect("Active app not found in runtimes");
+        let app_title = active_runtime.get_title();
+        let app_status = active_runtime.get_status();
         self.render_header(frame, header_area, app_title, app_status, &theme);
 
         // Render active app content
-        match self.active_app {
-            AppId::Example1 => self.example1.render_to_area(frame, app_area),
-            AppId::Example2 => self.example2.render_to_area(frame, app_area),
-            AppId::LoadingScreen => self.loading_screen.render_to_area(frame, app_area),
-        }
+        self.runtimes.get_mut(&self.active_app)
+            .expect("Active app not found in runtimes")
+            .render_to_area(frame, app_area);
 
         // If help menu is open, overlay it on top
         if self.help_menu_open {
@@ -201,17 +177,22 @@ impl MultiAppRuntime {
             (KeyCode::Esc, "Close help menu".to_string()),
         ];
 
-        // Get all apps' key bindings and names
-        let example1_bindings = self.example1.get_key_bindings();
-        let example2_bindings = self.example2.get_key_bindings();
-        let loading_screen_bindings = self.loading_screen.get_key_bindings();
+        // Get all apps' key bindings
+        let mut all_app_bindings: Vec<(AppId, &'static str, Vec<(KeyCode, String)>)> = vec![];
+        for (app_id, runtime) in &self.runtimes {
+            let title = runtime.get_title();
+            let bindings = runtime.get_key_bindings();
+            all_app_bindings.push((*app_id, title, bindings));
+        }
 
-        // Determine current and other apps
-        let (current_app_name, current_app_bindings, other_apps) = match self.active_app {
-            AppId::Example1 => ("Example 1", &example1_bindings, vec![("Example 2", &example2_bindings), ("Loading Screen", &loading_screen_bindings)]),
-            AppId::Example2 => ("Example 2", &example2_bindings, vec![("Example 1", &example1_bindings), ("Loading Screen", &loading_screen_bindings)]),
-            AppId::LoadingScreen => ("Loading Screen", &loading_screen_bindings, vec![("Example 1", &example1_bindings), ("Example 2", &example2_bindings)]),
-        };
+        // Separate current app from others
+        let current_app_data = all_app_bindings.iter()
+            .find(|(id, _, _)| *id == self.active_app)
+            .expect("Active app not found");
+
+        let other_apps: Vec<_> = all_app_bindings.iter()
+            .filter(|(id, _, _)| *id != self.active_app)
+            .collect();
 
         // Build help content
         let mut help_items = vec![
@@ -259,11 +240,11 @@ impl MultiAppRuntime {
             skipped += 1;
         } else {
             help_items.push(Element::styled_text(Line::from(vec![
-                Span::styled(format!("▼ {}", current_app_name), Style::default().fg(theme.blue).bold())
+                Span::styled(format!("▼ {}", current_app_data.1), Style::default().fg(theme.blue).bold())
             ])));
         }
 
-        for (key, description) in current_app_bindings {
+        for (key, description) in &current_app_data.2 {
             if skipped < skip_target {
                 skipped += 1;
                 continue;
@@ -284,12 +265,12 @@ impl MultiAppRuntime {
         }
 
         // Section 3: Other Apps
-        for (app_name, app_bindings) in other_apps {
+        for (_, app_title, app_bindings) in other_apps {
             if skipped < skip_target {
                 skipped += 1;
             } else {
                 help_items.push(Element::styled_text(Line::from(vec![
-                    Span::styled(format!("▼ {}", app_name), Style::default().fg(theme.overlay1).bold())
+                    Span::styled(format!("▼ {}", app_title), Style::default().fg(theme.overlay1).bold())
                 ])));
             }
 
@@ -348,29 +329,27 @@ impl MultiAppRuntime {
     /// Poll async commands for all apps
     pub async fn poll_async(&mut self) -> Result<()> {
         // Poll all apps regardless of which is active
-        self.example1.poll_async().await?;
-        self.example2.poll_async().await?;
-        self.loading_screen.poll_async().await?;
+        for runtime in self.runtimes.values_mut() {
+            runtime.poll_async().await?;
+        }
         Ok(())
     }
 
     /// Poll timer subscriptions for all apps
     pub fn poll_timers(&mut self) -> Result<()> {
         // Poll all apps regardless of which is active
-        self.example1.poll_timers()?;
-        self.example2.poll_timers()?;
-        self.loading_screen.poll_timers()?;
+        for runtime in self.runtimes.values_mut() {
+            runtime.poll_timers()?;
+        }
         Ok(())
     }
 
     /// Check if any navigation commands were issued
     fn check_navigation(&mut self) -> Result<()> {
-        // Check if navigation was requested
-        let nav_target = match self.active_app {
-            AppId::Example1 => self.example1.take_navigation(),
-            AppId::Example2 => self.example2.take_navigation(),
-            AppId::LoadingScreen => self.loading_screen.take_navigation(),
-        };
+        // Check if navigation was requested from active app
+        let nav_target = self.runtimes.get_mut(&self.active_app)
+            .expect("Active app not found in runtimes")
+            .take_navigation();
 
         if let Some(target) = nav_target {
             self.active_app = target;
@@ -383,15 +362,15 @@ impl MultiAppRuntime {
     fn broadcast_events(&mut self) -> Result<()> {
         // Collect all pending publishes from all apps
         let mut all_events = Vec::new();
-        all_events.extend(self.example1.take_publishes());
-        all_events.extend(self.example2.take_publishes());
-        all_events.extend(self.loading_screen.take_publishes());
+        for runtime in self.runtimes.values_mut() {
+            all_events.extend(runtime.take_publishes());
+        }
 
         // Broadcast each event to all apps
         for (topic, data) in all_events {
-            self.example1.handle_publish(&topic, data.clone())?;
-            self.example2.handle_publish(&topic, data.clone())?;
-            self.loading_screen.handle_publish(&topic, data)?;
+            for runtime in self.runtimes.values_mut() {
+                runtime.handle_publish(&topic, data.clone())?;
+            }
         }
 
         Ok(())

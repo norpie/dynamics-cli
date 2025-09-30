@@ -4,8 +4,25 @@ use anyhow::Result;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use serde_json::Value;
+use std::pin::Pin;
+use std::future::Future;
 
 use crate::tui::{App, AppId, Command, Renderer, InteractionRegistry, Theme, ThemeVariant, Subscription};
+
+/// Trait for runtime operations, allowing type-erased storage of different Runtime<A> types
+pub trait AppRuntime {
+    fn handle_key(&mut self, key_event: KeyEvent) -> Result<bool>;
+    fn handle_mouse(&mut self, mouse_event: MouseEvent) -> Result<bool>;
+    fn render_to_area(&mut self, frame: &mut Frame, area: ratatui::layout::Rect);
+    fn get_title(&self) -> &'static str;
+    fn get_status(&self) -> Option<ratatui::text::Line<'static>>;
+    fn get_key_bindings(&self) -> Vec<(KeyCode, String)>;
+    fn poll_timers(&mut self) -> Result<()>;
+    fn poll_async(&mut self) -> Pin<Box<dyn Future<Output = Result<()>> + '_>>;
+    fn take_navigation(&mut self) -> Option<AppId>;
+    fn take_publishes(&mut self) -> Vec<(String, Value)>;
+    fn handle_publish(&mut self, topic: &str, data: Value) -> Result<()>;
+}
 
 /// The runtime manages app lifecycle, event routing, and command execution
 pub struct Runtime<A: App> {
@@ -312,5 +329,57 @@ impl<A: App> Runtime<A> {
 
         // Render the view
         Renderer::render(frame, &self.theme, &mut self.registry, &view, area);
+    }
+}
+
+/// Blanket implementation of AppRuntime for Runtime<A>
+/// This allows different Runtime<App> types to be stored in a type-erased collection
+impl<A: App + 'static> AppRuntime for Runtime<A>
+where
+    A::State: 'static,
+    A::Msg: 'static,
+{
+    fn handle_key(&mut self, key_event: KeyEvent) -> Result<bool> {
+        Runtime::handle_key(self, key_event)
+    }
+
+    fn handle_mouse(&mut self, mouse_event: MouseEvent) -> Result<bool> {
+        Runtime::handle_mouse(self, mouse_event)
+    }
+
+    fn render_to_area(&mut self, frame: &mut Frame, area: ratatui::layout::Rect) {
+        Runtime::render_to_area(self, frame, area)
+    }
+
+    fn get_title(&self) -> &'static str {
+        Runtime::get_title(self)
+    }
+
+    fn get_status(&self) -> Option<ratatui::text::Line<'static>> {
+        Runtime::get_status(self)
+    }
+
+    fn get_key_bindings(&self) -> Vec<(KeyCode, String)> {
+        Runtime::get_key_bindings(self)
+    }
+
+    fn poll_timers(&mut self) -> Result<()> {
+        Runtime::poll_timers(self)
+    }
+
+    fn poll_async(&mut self) -> Pin<Box<dyn Future<Output = Result<()>> + '_>> {
+        Box::pin(Runtime::poll_async(self))
+    }
+
+    fn take_navigation(&mut self) -> Option<AppId> {
+        Runtime::take_navigation(self)
+    }
+
+    fn take_publishes(&mut self) -> Vec<(String, Value)> {
+        Runtime::take_publishes(self)
+    }
+
+    fn handle_publish(&mut self, topic: &str, data: Value) -> Result<()> {
+        Runtime::handle_publish(self, topic, data)
     }
 }

@@ -14,5 +14,5 @@ pub use element::{Element, LayoutConstraint, Layer, Alignment};
 pub use subscription::Subscription;
 pub use app::App;
 pub use renderer::{Renderer, InteractionRegistry};
-pub use runtime::Runtime;
+pub use runtime::{Runtime, AppRuntime};
 pub use multi_runtime::MultiAppRuntime;
