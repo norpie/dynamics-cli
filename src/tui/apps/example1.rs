@@ -124,9 +124,9 @@ impl App for Example1 {
 
     fn subscriptions(_state: &State) -> Vec<Subscription<Msg>> {
         vec![
-            Subscription::keyboard(KeyCode::Char('2'), Msg::NavigateToExample2),
-            Subscription::keyboard(KeyCode::Char('l'), Msg::LoadData),
-            Subscription::keyboard(KeyCode::Char('L'), Msg::LoadData),
+            Subscription::keyboard(KeyCode::Char('2'), "Navigate to Example 2", Msg::NavigateToExample2),
+            Subscription::keyboard(KeyCode::Char('l'), "Load data asynchronously", Msg::LoadData),
+            Subscription::keyboard(KeyCode::Char('L'), "Load data asynchronously", Msg::LoadData),
         ]
     }
 }

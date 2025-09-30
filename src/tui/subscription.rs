@@ -6,7 +6,11 @@ use std::time::Duration;
 /// They are registered via the subscriptions() function.
 pub enum Subscription<Msg> {
     /// Subscribe to a specific keyboard key
-    Keyboard { key: KeyCode, msg: Msg },
+    Keyboard {
+        key: KeyCode,
+        msg: Msg,
+        description: String,
+    },
 
     /// Subscribe to periodic timer events
     Timer { interval: Duration, msg: Msg },
@@ -20,8 +24,12 @@ pub enum Subscription<Msg> {
 
 impl<Msg> Subscription<Msg> {
     /// Helper to create a keyboard subscription
-    pub fn keyboard(key: KeyCode, msg: Msg) -> Self {
-        Subscription::Keyboard { key, msg }
+    pub fn keyboard(key: KeyCode, description: impl Into<String>, msg: Msg) -> Self {
+        Subscription::Keyboard {
+            key,
+            msg,
+            description: description.into(),
+        }
     }
 
     /// Helper to create a timer subscription

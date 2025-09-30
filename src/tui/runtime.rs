@@ -100,7 +100,8 @@ impl<A: App> Runtime<A> {
         let subscriptions = A::subscriptions(&self.state);
         for sub in subscriptions {
             match sub {
-                Subscription::Keyboard { key, msg } => {
+                Subscription::Keyboard { key, msg, description: _ } => {
+                    // description is used for help menus, not for runtime lookup
                     self.key_subscriptions.insert(key, msg);
                 }
                 Subscription::Subscribe { topic, handler } => {

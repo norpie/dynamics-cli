@@ -89,6 +89,7 @@ impl App for Example2 {
     fn subscriptions(_state: &State) -> Vec<Subscription<Msg>> {
         vec![Subscription::keyboard(
             KeyCode::Char('1'),
+            "Navigate to Example 1 (with confirmation)",
             Msg::RequestNavigate,
         )]
     }
