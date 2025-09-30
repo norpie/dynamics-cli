@@ -12,6 +12,7 @@ mod cli;
 mod config;
 // mod dynamics; // Disabled during config rewrite
 mod fql;
+mod tui;
 mod ui;
 
 // Global ClientManager instance
@@ -69,9 +70,12 @@ async fn main() -> Result<()> {
         Commands::Query(query_args) => {
             cli::commands::handle_query_command(query_args).await?;
         }
+        Commands::Tui(tui_args) => {
+            cli::commands::tui_command(tui_args).await?;
+        }
         _ => {
             println!("Some commands are temporarily disabled during the config system rewrite.");
-            println!("Available commands: auth, query");
+            println!("Available commands: auth, query, tui");
             println!("Use --help with any command for more information.");
         }
     }

@@ -4,6 +4,7 @@ use super::commands::entity::EntityCommands;
 use super::commands::migration::MigrationCommands;
 use super::commands::query::QueryCommands;
 use super::commands::settings::SettingsCommands;
+use super::commands::tui::TuiCommands;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -28,4 +29,6 @@ pub enum Commands {
     Migration(MigrationCommands),
     /// Deadlines management and tracking
     Deadlines(DeadlinesCommands),
+    /// Launch interactive TUI interface
+    Tui(TuiCommands),
 }
