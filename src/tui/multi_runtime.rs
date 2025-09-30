@@ -65,6 +65,11 @@ impl MultiAppRuntime {
         Ok(())
     }
 
+    /// Check if any app has pending async commands
+    pub fn has_pending_async(&self) -> bool {
+        self.example1.has_pending_async() || self.example2.has_pending_async()
+    }
+
     /// Check if any navigation commands were issued
     fn check_navigation(&mut self) -> Result<()> {
         // Check if navigation was requested
