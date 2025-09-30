@@ -1,5 +1,5 @@
 use crossterm::event::KeyCode;
-use crate::tui::{App, AppId, Command, Element, Subscription, Theme};
+use crate::tui::{App, AppId, Command, Element, Subscription, Theme, LayoutConstraint};
 
 pub struct Example1;
 
@@ -68,29 +68,58 @@ impl App for Example1 {
             "No data loaded yet"
         };
 
-        Element::column(vec![
-            Element::text("Example 1 - New Architecture!"),
-            Element::text(""),
-            Element::button("[ Press 2 or click to go to Example 2 ]")
-                .on_press(Msg::NavigateToExample2)
-                .on_hover(Msg::ButtonHovered)
-                .on_hover_exit(Msg::ButtonUnhovered)
-                .style(button_style)
+        // Demonstrate new constraint-based layout system
+        use crate::tui::element::ColumnBuilder;
+
+        ColumnBuilder::new()
+            // Fixed header (3 lines)
+            .add(
+                Element::text("Example 1 - New Constraint Layout System"),
+                LayoutConstraint::Length(3),
+            )
+            // Navigation button (3 lines)
+            .add(
+                Element::button("[ Press 2 or click to go to Example 2 ]")
+                    .on_press(Msg::NavigateToExample2)
+                    .on_hover(Msg::ButtonHovered)
+                    .on_hover_exit(Msg::ButtonUnhovered)
+                    .style(button_style)
+                    .build(),
+                LayoutConstraint::Length(3),
+            )
+            // Load button (3 lines)
+            .add(
+                Element::button("[ Press L to load data async ]")
+                    .on_press(Msg::LoadData)
+                    .build(),
+                LayoutConstraint::Length(3),
+            )
+            // Flexible content area - fills remaining space
+            .add(
+                Element::column(vec![
+                    Element::text(""),
+                    Element::text(format!("Status: {}", data_display)),
+                    Element::text(""),
+                    Element::text("Layout Features:"),
+                    Element::text("✓ Fixed-size header and buttons"),
+                    Element::text("✓ This content area fills remaining space"),
+                    Element::text("✓ Automatic space distribution"),
+                    Element::text("✓ LayoutConstraint::Length(n) for fixed"),
+                    Element::text("✓ LayoutConstraint::Fill(weight) for flexible"),
+                    Element::text("✓ LayoutConstraint::Min(n) for minimum"),
+                    Element::text(""),
+                    Element::text("Try resizing your terminal!"),
+                ])
                 .build(),
-            Element::text(""),
-            Element::button("[ Press L to load data async ]")
-                .on_press(Msg::LoadData)
-                .build(),
-            Element::text(""),
-            Element::text(format!("Status: {}", data_display)),
-            Element::text(""),
-            Element::text("This demonstrates:"),
-            Element::text("- Declarative UI with Element tree"),
-            Element::text("- Message-driven state updates"),
-            Element::text("- Co-located event handlers"),
-            Element::text("- Async command execution"),
-        ])
-        .build()
+                LayoutConstraint::Fill(1),
+            )
+            // Fixed footer (1 line)
+            .add(
+                Element::text("Footer: Constraint-based layouts make real apps possible!"),
+                LayoutConstraint::Length(1),
+            )
+            .spacing(0)
+            .build()
     }
 
     fn subscriptions(_state: &State) -> Vec<Subscription<Msg>> {

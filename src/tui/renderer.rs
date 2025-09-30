@@ -5,7 +5,7 @@ use ratatui::{
     style::Style,
 };
 use std::collections::HashMap;
-use crate::tui::{Element, Theme};
+use crate::tui::{Element, Theme, LayoutConstraint};
 
 /// Stores interaction handlers for UI elements
 /// Maps (Rect, InteractionType) -> Message
@@ -88,6 +88,45 @@ impl Renderer {
         Self::render_element(frame, theme, registry, element, area);
     }
 
+    /// Calculate ratatui Constraints from our LayoutConstraints
+    fn calculate_constraints<Msg>(
+        items: &[(LayoutConstraint, Element<Msg>)],
+        available_space: u16,
+    ) -> Vec<Constraint> {
+        // Pass 1: Calculate fixed and minimum sizes
+        let mut fixed_total = 0u16;
+        let mut fill_total_weight = 0u16;
+
+        for (constraint, _) in items {
+            match constraint {
+                LayoutConstraint::Length(n) => fixed_total += n,
+                LayoutConstraint::Min(n) => fixed_total += n,
+                LayoutConstraint::Fill(weight) => fill_total_weight += weight,
+            }
+        }
+
+        // Pass 2: Calculate remaining space for Fill elements
+        let remaining = available_space.saturating_sub(fixed_total);
+
+        // Pass 3: Build ratatui constraints
+        items
+            .iter()
+            .map(|(constraint, _)| match constraint {
+                LayoutConstraint::Length(n) => Constraint::Length(*n),
+                LayoutConstraint::Min(n) => Constraint::Min(*n),
+                LayoutConstraint::Fill(weight) => {
+                    if fill_total_weight > 0 {
+                        // Calculate proportional space
+                        let space = (remaining as u32 * *weight as u32 / fill_total_weight as u32) as u16;
+                        Constraint::Length(space)
+                    } else {
+                        Constraint::Length(0)
+                    }
+                }
+            })
+            .collect()
+    }
+
     fn render_element<Msg: Clone>(
         frame: &mut Frame,
         theme: &Theme,
@@ -135,16 +174,13 @@ impl Renderer {
                 frame.render_widget(widget, area);
             }
 
-            Element::Column { children, spacing } => {
-                if children.is_empty() {
+            Element::Column { items, spacing } => {
+                if items.is_empty() {
                     return;
                 }
 
-                // Calculate constraints for children
-                let constraints: Vec<Constraint> = children
-                    .iter()
-                    .map(|_| Constraint::Length(3)) // TODO: Calculate actual size
-                    .collect();
+                // Calculate ratatui constraints from layout constraints
+                let constraints = Self::calculate_constraints(items, area.height);
 
                 let chunks = Layout::default()
                     .direction(Direction::Vertical)
@@ -152,21 +188,18 @@ impl Renderer {
                     .split(area);
 
                 // Render each child
-                for (child, chunk) in children.iter().zip(chunks.iter()) {
+                for ((_, child), chunk) in items.iter().zip(chunks.iter()) {
                     Self::render_element(frame, theme, registry, child, *chunk);
                 }
             }
 
-            Element::Row { children, spacing } => {
-                if children.is_empty() {
+            Element::Row { items, spacing } => {
+                if items.is_empty() {
                     return;
                 }
 
-                // Calculate constraints for children
-                let constraints: Vec<Constraint> = children
-                    .iter()
-                    .map(|_| Constraint::Percentage(100 / children.len() as u16))
-                    .collect();
+                // Calculate ratatui constraints from layout constraints
+                let constraints = Self::calculate_constraints(items, area.width);
 
                 let chunks = Layout::default()
                     .direction(Direction::Horizontal)
@@ -174,7 +207,7 @@ impl Renderer {
                     .split(area);
 
                 // Render each child
-                for (child, chunk) in children.iter().zip(chunks.iter()) {
+                for ((_, child), chunk) in items.iter().zip(chunks.iter()) {
                     Self::render_element(frame, theme, registry, child, *chunk);
                 }
             }
