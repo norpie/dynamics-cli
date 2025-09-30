@@ -5,18 +5,22 @@ use ratatui::prelude::Stylize;
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
 use anyhow::Result;
 
-use crate::tui::{AppId, Runtime, apps::{Example1, Example2}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App};
+use crate::tui::{AppId, Runtime, apps::{Example1, Example2, LoadingScreen}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App};
 use crate::tui::element::{ColumnBuilder, RowBuilder};
 
 /// Manages multiple app runtimes and handles navigation between them
 pub struct MultiAppRuntime {
     example1: Runtime<Example1>,
     example2: Runtime<Example2>,
+    loading_screen: Runtime<LoadingScreen>,
     active_app: AppId,
 
     // Global UI state
     help_menu_open: bool,
     help_scroll_offset: usize,
+
+    // Pending global events to broadcast
+    pending_events: Vec<(String, serde_json::Value)>,
 }
 
 impl MultiAppRuntime {
@@ -24,9 +28,11 @@ impl MultiAppRuntime {
         Self {
             example1: Runtime::new(),
             example2: Runtime::new(),
+            loading_screen: Runtime::new(),
             active_app: AppId::Example1,
             help_menu_open: false,
             help_scroll_offset: 0,
+            pending_events: Vec::new(),
         }
     }
 
@@ -72,11 +78,19 @@ impl MultiAppRuntime {
         match self.active_app {
             AppId::Example1 => {
                 let result = self.example1.handle_key(key_event)?;
+                self.broadcast_events()?;
                 self.check_navigation()?;
                 Ok(result)
             }
             AppId::Example2 => {
                 let result = self.example2.handle_key(key_event)?;
+                self.broadcast_events()?;
+                self.check_navigation()?;
+                Ok(result)
+            }
+            AppId::LoadingScreen => {
+                let result = self.loading_screen.handle_key(key_event)?;
+                self.broadcast_events()?;
                 self.check_navigation()?;
                 Ok(result)
             }
@@ -87,11 +101,19 @@ impl MultiAppRuntime {
         match self.active_app {
             AppId::Example1 => {
                 let result = self.example1.handle_mouse(mouse_event)?;
+                self.broadcast_events()?;
                 self.check_navigation()?;
                 Ok(result)
             }
             AppId::Example2 => {
                 let result = self.example2.handle_mouse(mouse_event)?;
+                self.broadcast_events()?;
+                self.check_navigation()?;
+                Ok(result)
+            }
+            AppId::LoadingScreen => {
+                let result = self.loading_screen.handle_mouse(mouse_event)?;
+                self.broadcast_events()?;
                 self.check_navigation()?;
                 Ok(result)
             }
@@ -121,6 +143,7 @@ impl MultiAppRuntime {
         let (app_title, app_status) = match self.active_app {
             AppId::Example1 => (self.example1.get_title(), self.example1.get_status()),
             AppId::Example2 => (self.example2.get_title(), self.example2.get_status()),
+            AppId::LoadingScreen => (self.loading_screen.get_title(), self.loading_screen.get_status()),
         };
         self.render_header(frame, header_area, app_title, app_status, &theme);
 
@@ -128,6 +151,7 @@ impl MultiAppRuntime {
         match self.active_app {
             AppId::Example1 => self.example1.render_to_area(frame, app_area),
             AppId::Example2 => self.example2.render_to_area(frame, app_area),
+            AppId::LoadingScreen => self.loading_screen.render_to_area(frame, app_area),
         }
 
         // If help menu is open, overlay it on top
@@ -180,11 +204,13 @@ impl MultiAppRuntime {
         // Get all apps' key bindings and names
         let example1_bindings = self.example1.get_key_bindings();
         let example2_bindings = self.example2.get_key_bindings();
+        let loading_screen_bindings = self.loading_screen.get_key_bindings();
 
         // Determine current and other apps
         let (current_app_name, current_app_bindings, other_apps) = match self.active_app {
-            AppId::Example1 => ("Example 1", &example1_bindings, vec![("Example 2", &example2_bindings)]),
-            AppId::Example2 => ("Example 2", &example2_bindings, vec![("Example 1", &example1_bindings)]),
+            AppId::Example1 => ("Example 1", &example1_bindings, vec![("Example 2", &example2_bindings), ("Loading Screen", &loading_screen_bindings)]),
+            AppId::Example2 => ("Example 2", &example2_bindings, vec![("Example 1", &example1_bindings), ("Loading Screen", &loading_screen_bindings)]),
+            AppId::LoadingScreen => ("Loading Screen", &loading_screen_bindings, vec![("Example 1", &example1_bindings), ("Example 2", &example2_bindings)]),
         };
 
         // Build help content
@@ -321,9 +347,19 @@ impl MultiAppRuntime {
 
     /// Poll async commands for all apps
     pub async fn poll_async(&mut self) -> Result<()> {
-        // Poll both apps regardless of which is active
+        // Poll all apps regardless of which is active
         self.example1.poll_async().await?;
         self.example2.poll_async().await?;
+        self.loading_screen.poll_async().await?;
+        Ok(())
+    }
+
+    /// Poll timer subscriptions for all apps
+    pub fn poll_timers(&mut self) -> Result<()> {
+        // Poll all apps regardless of which is active
+        self.example1.poll_timers()?;
+        self.example2.poll_timers()?;
+        self.loading_screen.poll_timers()?;
         Ok(())
     }
 
@@ -333,12 +369,38 @@ impl MultiAppRuntime {
         let nav_target = match self.active_app {
             AppId::Example1 => self.example1.take_navigation(),
             AppId::Example2 => self.example2.take_navigation(),
+            AppId::LoadingScreen => self.loading_screen.take_navigation(),
         };
 
         if let Some(target) = nav_target {
             self.active_app = target;
         }
 
+        Ok(())
+    }
+
+    /// Broadcast events globally to all apps
+    fn broadcast_events(&mut self) -> Result<()> {
+        // Collect all pending publishes from all apps
+        let mut all_events = Vec::new();
+        all_events.extend(self.example1.take_publishes());
+        all_events.extend(self.example2.take_publishes());
+        all_events.extend(self.loading_screen.take_publishes());
+
+        // Broadcast each event to all apps
+        for (topic, data) in all_events {
+            self.example1.handle_publish(&topic, data.clone())?;
+            self.example2.handle_publish(&topic, data.clone())?;
+            self.loading_screen.handle_publish(&topic, data)?;
+        }
+
+        Ok(())
+    }
+
+    /// Process side effects (navigation, events) from timers and async commands
+    pub fn process_side_effects(&mut self) -> Result<()> {
+        self.broadcast_events()?;
+        self.check_navigation()?;
         Ok(())
     }
 }

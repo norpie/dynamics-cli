@@ -101,8 +101,14 @@ async fn run_tui<B: Backend>(
             break;
         }
 
+        // Poll timers
+        runtime.poll_timers()?;
+
         // Poll async commands
         runtime.poll_async().await?;
+
+        // Check for navigation/events from timers and async commands
+        runtime.process_side_effects()?;
 
         // Render the TUI with updated state (shows input immediately)
         terminal.draw(|frame| {

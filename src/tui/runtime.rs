@@ -2,6 +2,7 @@ use ratatui::Frame;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, MouseEvent, MouseEventKind, MouseButton};
 use anyhow::Result;
 use std::collections::HashMap;
+use std::time::{Duration, Instant};
 use serde_json::Value;
 
 use crate::tui::{App, AppId, Command, Renderer, InteractionRegistry, Theme, ThemeVariant, Subscription};
@@ -23,6 +24,9 @@ pub struct Runtime<A: App> {
     /// Event bus for pub/sub
     event_bus: HashMap<String, Vec<Box<dyn Fn(Value) -> Option<A::Msg> + Send>>>,
 
+    /// Timer subscriptions: (interval, last_tick, msg)
+    timers: Vec<(Duration, Instant, A::Msg)>,
+
     /// Last hovered element position for tracking hover exits
     last_hover_pos: Option<(u16, u16)>,
 
@@ -31,6 +35,9 @@ pub struct Runtime<A: App> {
 
     /// Pending async commands
     pending_async: Vec<std::pin::Pin<Box<dyn std::future::Future<Output = A::Msg> + Send>>>,
+
+    /// Pending publish events to broadcast globally
+    pending_publishes: Vec<(String, serde_json::Value)>,
 }
 
 impl<A: App> Runtime<A> {
@@ -44,9 +51,11 @@ impl<A: App> Runtime<A> {
             registry: InteractionRegistry::new(),
             key_subscriptions: HashMap::new(),
             event_bus: HashMap::new(),
+            timers: Vec::new(),
             last_hover_pos: None,
             navigation_target: None,
             pending_async: Vec::new(),
+            pending_publishes: Vec::new(),
         };
 
         // Initialize subscriptions
@@ -61,6 +70,11 @@ impl<A: App> Runtime<A> {
     /// Take the pending navigation target (if any)
     pub fn take_navigation(&mut self) -> Option<AppId> {
         self.navigation_target.take()
+    }
+
+    /// Take pending publish events
+    pub fn take_publishes(&mut self) -> Vec<(String, serde_json::Value)> {
+        std::mem::take(&mut self.pending_publishes)
     }
 
     /// Get keyboard bindings for help menu
@@ -96,6 +110,28 @@ impl<A: App> Runtime<A> {
         self.registry = registry;
     }
 
+    /// Poll timer subscriptions and fire those that are ready
+    pub fn poll_timers(&mut self) -> Result<()> {
+        let now = Instant::now();
+        let mut messages = Vec::new();
+
+        // Check which timers need to fire
+        for (interval, last_tick, msg) in &mut self.timers {
+            if now.duration_since(*last_tick) >= *interval {
+                messages.push(msg.clone());
+                *last_tick = now;
+            }
+        }
+
+        // Execute messages
+        for msg in messages {
+            let command = A::update(&mut self.state, msg);
+            self.execute_command(command)?;
+        }
+
+        Ok(())
+    }
+
     /// Poll pending async commands and process completed ones
     pub async fn poll_async(&mut self) -> Result<()> {
         use std::future::Future;
@@ -129,6 +165,7 @@ impl<A: App> Runtime<A> {
     fn update_subscriptions(&mut self) {
         self.key_subscriptions.clear();
         self.event_bus.clear();
+        self.timers.clear();
 
         let subscriptions = A::subscriptions(&self.state);
         for sub in subscriptions {
@@ -143,8 +180,8 @@ impl<A: App> Runtime<A> {
                         .or_insert_with(Vec::new)
                         .push(handler);
                 }
-                Subscription::Timer { .. } => {
-                    // TODO: Implement timer subscriptions
+                Subscription::Timer { interval, msg } => {
+                    self.timers.push((interval, Instant::now(), msg));
                 }
             }
         }
@@ -201,6 +238,26 @@ impl<A: App> Runtime<A> {
         Ok(true)
     }
 
+    /// Handle a published event (from global or local event bus)
+    pub fn handle_publish(&mut self, topic: &str, data: serde_json::Value) -> Result<()> {
+        // Collect messages first to avoid borrow checker issues
+        let messages: Vec<A::Msg> = if let Some(handlers) = self.event_bus.get(topic) {
+            handlers
+                .iter()
+                .filter_map(|handler| handler(data.clone()))
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        // Now execute the messages
+        for msg in messages {
+            let command = A::update(&mut self.state, msg);
+            self.execute_command(command)?;
+        }
+        Ok(())
+    }
+
     /// Execute a command
     fn execute_command(&mut self, command: Command<A::Msg>) -> Result<bool> {
         match command {
@@ -224,22 +281,10 @@ impl<A: App> Runtime<A> {
             }
 
             Command::Publish { topic, data } => {
-                // Publish to event bus
-                // Collect messages first to avoid borrow checker issues
-                let messages: Vec<A::Msg> = if let Some(handlers) = self.event_bus.get(&topic) {
-                    handlers
-                        .iter()
-                        .filter_map(|handler| handler(data.clone()))
-                        .collect()
-                } else {
-                    Vec::new()
-                };
-
-                // Now execute the messages
-                for msg in messages {
-                    let command = A::update(&mut self.state, msg);
-                    self.execute_command(command)?;
-                }
+                // Handle locally first
+                self.handle_publish(&topic, data.clone())?;
+                // Store for global broadcasting by MultiAppRuntime
+                self.pending_publishes.push((topic, data));
                 Ok(true)
             }
 
@@ -267,8 +312,5 @@ impl<A: App> Runtime<A> {
 
         // Render the view
         Renderer::render(frame, &self.theme, &mut self.registry, &view, area);
-
-        // Update subscriptions after rendering (in case state affects subscriptions)
-        self.update_subscriptions();
     }
 }

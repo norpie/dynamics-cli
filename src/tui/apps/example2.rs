@@ -13,12 +13,17 @@ pub enum Msg {
     CancelNavigate,
     ButtonHovered,
     ButtonUnhovered,
+    StartLoading,
+    LoadButtonHovered,
+    LoadButtonUnhovered,
+    CancelLoading,
 }
 
 #[derive(Default)]
 pub struct State {
     button_hovered: bool,
     show_confirm: bool,
+    load_button_hovered: bool,
 }
 
 impl App for Example2 {
@@ -49,11 +54,47 @@ impl App for Example2 {
                 state.button_hovered = false;
                 Command::None
             }
+            Msg::LoadButtonHovered => {
+                state.load_button_hovered = true;
+                Command::None
+            }
+            Msg::LoadButtonUnhovered => {
+                state.load_button_hovered = false;
+                Command::None
+            }
+            Msg::StartLoading => {
+                // Initialize loading screen with 3 tasks
+                // LoadingScreen will spawn async work and handle progress itself
+                let init_data = serde_json::json!({
+                    "tasks": ["Fetching data", "Processing records", "Building cache"],
+                    "target": "Example2",
+                    "caller": "Example2",
+                    "cancellable": true,
+                });
+
+                Command::Batch(vec![
+                    Command::Publish {
+                        topic: "loading:init".to_string(),
+                        data: init_data,
+                    },
+                    Command::navigate_to(AppId::LoadingScreen),
+                ])
+            }
+            Msg::CancelLoading => {
+                // Handle cancellation - just a no-op for now
+                Command::None
+            }
         }
     }
 
     fn view(state: &State, theme: &Theme) -> Element<Msg> {
         let button_style = if state.button_hovered {
+            ratatui::style::Style::default().fg(theme.lavender)
+        } else {
+            ratatui::style::Style::default().fg(theme.text)
+        };
+
+        let load_button_style = if state.load_button_hovered {
             ratatui::style::Style::default().fg(theme.lavender)
         } else {
             ratatui::style::Style::default().fg(theme.text)
@@ -67,6 +108,13 @@ impl App for Example2 {
                 .on_hover(Msg::ButtonHovered)
                 .on_hover_exit(Msg::ButtonUnhovered)
                 .style(button_style)
+                .build(),
+            Element::text(""),
+            Element::button("[ Press L to load data with loading screen ]")
+                .on_press(Msg::StartLoading)
+                .on_hover(Msg::LoadButtonHovered)
+                .on_hover_exit(Msg::LoadButtonUnhovered)
+                .style(load_button_style)
                 .build(),
             Element::text(""),
             Element::text("Now with confirmation modal!"),
@@ -90,11 +138,24 @@ impl App for Example2 {
     }
 
     fn subscriptions(_state: &State) -> Vec<Subscription<Msg>> {
-        vec![Subscription::keyboard(
-            KeyCode::Char('1'),
-            "Navigate to Example 1 (with confirmation)",
-            Msg::RequestNavigate,
-        )]
+        vec![
+            Subscription::keyboard(
+                KeyCode::Char('1'),
+                "Navigate to Example 1 (with confirmation)",
+                Msg::RequestNavigate,
+            ),
+            Subscription::keyboard(
+                KeyCode::Char('l'),
+                "Load data with loading screen",
+                Msg::StartLoading,
+            ),
+            Subscription::keyboard(
+                KeyCode::Char('L'),
+                "Load data with loading screen",
+                Msg::StartLoading,
+            ),
+            Subscription::subscribe("loading:cancel:Example2", |_| Some(Msg::CancelLoading)),
+        ]
     }
 
     fn title() -> &'static str {
