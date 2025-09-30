@@ -63,6 +63,39 @@ impl<A: App> Runtime<A> {
         self.navigation_target.take()
     }
 
+    /// Get keyboard bindings for help menu
+    pub fn get_key_bindings(&self) -> Vec<(KeyCode, String)> {
+        use crate::tui::Subscription;
+
+        A::subscriptions(&self.state)
+            .into_iter()
+            .filter_map(|sub| match sub {
+                Subscription::Keyboard { key, description, .. } => Some((key, description)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Get the app's title (static string)
+    pub fn get_title(&self) -> &'static str {
+        A::title()
+    }
+
+    /// Get the app's status (optional, dynamic)
+    pub fn get_status(&self) -> Option<ratatui::text::Line<'static>> {
+        A::status(&self.state, &self.theme)
+    }
+
+    /// Get a reference to the app's state
+    pub fn get_state(&self) -> &A::State {
+        &self.state
+    }
+
+    /// Set the interaction registry (for mouse events after rendering)
+    pub fn set_registry(&mut self, registry: InteractionRegistry<A::Msg>) {
+        self.registry = registry;
+    }
+
     /// Poll pending async commands and process completed ones
     pub async fn poll_async(&mut self) -> Result<()> {
         use std::future::Future;
@@ -220,14 +253,17 @@ impl<A: App> Runtime<A> {
 
     /// Render the current app
     pub fn render(&mut self, frame: &mut Frame) {
+        let area = frame.size();
+        self.render_to_area(frame, area);
+    }
+
+    /// Render the app to a specific area
+    pub fn render_to_area(&mut self, frame: &mut Frame, area: ratatui::layout::Rect) {
         // Clear registry for this frame
         self.registry.clear();
 
         // Get the view from the app
         let view = A::view(&self.state, &self.theme);
-
-        // Get the frame size
-        let area = frame.size();
 
         // Render the view
         Renderer::render(frame, &self.theme, &mut self.registry, &view, area);

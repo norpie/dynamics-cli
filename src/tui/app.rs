@@ -1,4 +1,5 @@
 use crate::tui::{Command, Element, Subscription, Theme};
+use ratatui::text::Line;
 
 /// The main trait that all TUI apps must implement.
 ///
@@ -23,6 +24,14 @@ pub trait App: Sized + Send + 'static {
 
     /// Declare what inputs this app wants to receive
     fn subscriptions(state: &Self::State) -> Vec<Subscription<Self::Msg>>;
+
+    /// Return the app's title (static string for help menu, etc.)
+    fn title() -> &'static str;
+
+    /// Return optional status text (dynamic, styled based on state)
+    fn status(state: &Self::State, theme: &Theme) -> Option<Line<'static>> {
+        None
+    }
 
     /// Optional: Initialize the app with a command
     fn init() -> (Self::State, Command<Self::Msg>) {

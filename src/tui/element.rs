@@ -1,4 +1,5 @@
 use ratatui::style::Style;
+use ratatui::text::Line;
 
 /// Alignment options for positioned elements
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -63,6 +64,9 @@ pub enum Element<Msg> {
     /// Static text
     Text { content: String, style: Option<Style> },
 
+    /// Styled text with multiple spans
+    StyledText { line: Line<'static> },
+
     /// Interactive button
     Button {
         label: String,
@@ -109,6 +113,11 @@ impl<Msg> Element<Msg> {
             content: content.into(),
             style: None,
         }
+    }
+
+    /// Create a styled text element
+    pub fn styled_text(line: Line<'static>) -> Self {
+        Element::StyledText { line }
     }
 
     /// Create a button element
@@ -240,6 +249,7 @@ impl<Msg> Element<Msg> {
         match self {
             Element::None => LayoutConstraint::Length(0),
             Element::Text { .. } => LayoutConstraint::Length(1),
+            Element::StyledText { .. } => LayoutConstraint::Length(1),
             Element::Button { .. } => LayoutConstraint::Length(3),
             Element::Column { .. } => LayoutConstraint::Fill(1),
             Element::Row { .. } => LayoutConstraint::Fill(1),

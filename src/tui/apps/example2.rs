@@ -1,4 +1,7 @@
 use crossterm::event::KeyCode;
+use ratatui::text::{Line, Span};
+use ratatui::style::Style;
+use ratatui::prelude::Stylize;
 use crate::tui::{App, AppId, Command, Element, Subscription, Theme};
 
 pub struct Example2;
@@ -92,5 +95,17 @@ impl App for Example2 {
             "Navigate to Example 1 (with confirmation)",
             Msg::RequestNavigate,
         )]
+    }
+
+    fn title() -> &'static str {
+        "Example 2"
+    }
+
+    fn status(state: &State, theme: &Theme) -> Option<Line<'static>> {
+        if state.show_confirm {
+            Some(Line::from(Span::styled("[Confirm]", Style::default().fg(theme.peach))))
+        } else {
+            None
+        }
     }
 }

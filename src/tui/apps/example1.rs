@@ -1,4 +1,7 @@
 use crossterm::event::KeyCode;
+use ratatui::text::{Line, Span};
+use ratatui::style::Style;
+use ratatui::prelude::Stylize;
 use crate::tui::{App, AppId, Command, Element, Subscription, Theme, LayoutConstraint};
 
 pub struct Example1;
@@ -128,5 +131,17 @@ impl App for Example1 {
             Subscription::keyboard(KeyCode::Char('l'), "Load data asynchronously", Msg::LoadData),
             Subscription::keyboard(KeyCode::Char('L'), "Load data asynchronously", Msg::LoadData),
         ]
+    }
+
+    fn title() -> &'static str {
+        "Example 1"
+    }
+
+    fn status(state: &State, theme: &Theme) -> Option<Line<'static>> {
+        if state.loading {
+            Some(Line::from(Span::styled("[Loading...]", Style::default().fg(theme.yellow))))
+        } else {
+            None
+        }
     }
 }
