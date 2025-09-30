@@ -5,7 +5,7 @@ use ratatui::{
     style::Style,
 };
 use std::collections::HashMap;
-use crate::tui::{Element, Theme, LayoutConstraint};
+use crate::tui::{Element, Theme, LayoutConstraint, Layer, Alignment as LayerAlignment};
 
 /// Stores interaction handlers for UI elements
 /// Maps (Rect, InteractionType) -> Message
@@ -37,7 +37,8 @@ impl<Msg: Clone> InteractionRegistry<Msg> {
     }
 
     pub fn find_click(&self, x: u16, y: u16) -> Option<Msg> {
-        for (rect, msg) in &self.click_handlers {
+        // Search in reverse order so topmost layers are checked first
+        for (rect, msg) in self.click_handlers.iter().rev() {
             if self.point_in_rect(x, y, *rect) {
                 return Some(msg.clone());
             }
@@ -46,7 +47,8 @@ impl<Msg: Clone> InteractionRegistry<Msg> {
     }
 
     pub fn find_hover(&self, x: u16, y: u16) -> Option<Msg> {
-        for (rect, msg) in &self.hover_handlers {
+        // Search in reverse order so topmost layers are checked first
+        for (rect, msg) in self.hover_handlers.iter().rev() {
             if self.point_in_rect(x, y, *rect) {
                 return Some(msg.clone());
             }
@@ -55,7 +57,8 @@ impl<Msg: Clone> InteractionRegistry<Msg> {
     }
 
     pub fn find_hover_exit(&self, x: u16, y: u16) -> Option<Msg> {
-        for (rect, msg) in &self.hover_exit_handlers {
+        // Search in reverse order so topmost layers are checked first
+        for (rect, msg) in self.hover_exit_handlers.iter().rev() {
             if self.point_in_rect(x, y, *rect) {
                 return Some(msg.clone());
             }
@@ -221,6 +224,136 @@ impl Renderer {
                     height: area.height.saturating_sub(padding * 2),
                 };
                 Self::render_element(frame, theme, registry, child, padded_area);
+            }
+
+            Element::Panel { child, title } => {
+                // Render border block
+                let block = if let Some(title_text) = title {
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(theme.overlay0))
+                        .title(title_text.as_str())
+                } else {
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(theme.overlay0))
+                };
+
+                let inner_area = block.inner(area);
+                frame.render_widget(block, area);
+
+                // Render child in the inner area
+                Self::render_element(frame, theme, registry, child, inner_area);
+            }
+
+            Element::Stack { layers } => {
+                // Render all layers (visual + interactions)
+                for layer in layers.iter() {
+                    // Render dim overlay if requested
+                    if layer.dim_below {
+                        Self::render_dim_overlay(frame, theme, area);
+                    }
+
+                    // Calculate position based on alignment
+                    let layer_area = Self::calculate_layer_position(&layer.element, layer.alignment, area);
+
+                    // Render the layer element
+                    Self::render_element(frame, theme, registry, &layer.element, layer_area);
+                }
+
+                // Clear all interactions and re-render topmost layer to register only its interactions
+                registry.clear();
+                if let Some(last_layer) = layers.last() {
+                    let layer_area = Self::calculate_layer_position(&last_layer.element, last_layer.alignment, area);
+                    Self::render_element(frame, theme, registry, &last_layer.element, layer_area);
+                }
+            }
+        }
+    }
+
+    /// Render a semi-transparent dim overlay
+    fn render_dim_overlay(frame: &mut Frame, theme: &Theme, area: Rect) {
+        let dim_block = Block::default()
+            .style(Style::default().bg(theme.surface0));
+        frame.render_widget(dim_block, area);
+    }
+
+    /// Calculate the position of a layer based on its alignment
+    fn calculate_layer_position<Msg>(element: &Element<Msg>, alignment: LayerAlignment, container: Rect) -> Rect {
+        // Estimate element size (for centered modal, use reasonable defaults)
+        let (width, height) = Self::estimate_element_size(element, container);
+
+        match alignment {
+            LayerAlignment::TopLeft => Rect {
+                x: container.x,
+                y: container.y,
+                width,
+                height,
+            },
+            LayerAlignment::TopCenter => Rect {
+                x: container.x + (container.width.saturating_sub(width)) / 2,
+                y: container.y,
+                width,
+                height,
+            },
+            LayerAlignment::TopRight => Rect {
+                x: container.x + container.width.saturating_sub(width),
+                y: container.y,
+                width,
+                height,
+            },
+            LayerAlignment::Center => Rect {
+                x: container.x + (container.width.saturating_sub(width)) / 2,
+                y: container.y + (container.height.saturating_sub(height)) / 2,
+                width,
+                height,
+            },
+            LayerAlignment::BottomLeft => Rect {
+                x: container.x,
+                y: container.y + container.height.saturating_sub(height),
+                width,
+                height,
+            },
+            LayerAlignment::BottomCenter => Rect {
+                x: container.x + (container.width.saturating_sub(width)) / 2,
+                y: container.y + container.height.saturating_sub(height),
+                width,
+                height,
+            },
+            LayerAlignment::BottomRight => Rect {
+                x: container.x + container.width.saturating_sub(width),
+                y: container.y + container.height.saturating_sub(height),
+                width,
+                height,
+            },
+        }
+    }
+
+    /// Estimate the size an element needs
+    fn estimate_element_size<Msg>(element: &Element<Msg>, container: Rect) -> (u16, u16) {
+        match element {
+            Element::None => (0, 0),
+            Element::Text { content, .. } => (content.len() as u16, 1),
+            Element::Button { label, .. } => (label.len() as u16 + 4, 3),
+            Element::Panel { .. } => {
+                // For panels (modals), use a reasonable default
+                let width = container.width.min(60);
+                let height = container.height.min(15);
+                (width, height)
+            }
+            Element::Container { .. } => {
+                // For containers (modals), use a reasonable default
+                let width = container.width.min(60);
+                let height = container.height.min(15);
+                (width, height)
+            }
+            Element::Column { .. } | Element::Row { .. } | Element::Stack { .. } => {
+                // Layout elements should fill the full container
+                (container.width, container.height)
+            }
+            _ => {
+                // Default: 50% of container
+                (container.width / 2, container.height / 2)
             }
         }
     }

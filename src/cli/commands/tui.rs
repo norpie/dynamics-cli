@@ -64,43 +64,12 @@ async fn run_tui<B: Backend>(
     terminal: &mut Terminal<B>,
     runtime: &mut MultiAppRuntime,
 ) -> Result<()> {
-    let mut needs_render = true;
-
     loop {
-        // Determine frame budget based on activity
-        let (should_render, poll_timeout) = if runtime.has_pending_async() {
-            // Active: render at 60 FPS while async operations are pending
-            (true, std::time::Duration::from_millis(16))
-        } else if needs_render {
-            // One-shot render after event
-            (true, std::time::Duration::from_millis(16))
-        } else {
-            // Idle: don't render, use longer poll to save CPU
-            (false, std::time::Duration::from_millis(80))
-        };
+        let frame_start = std::time::Instant::now();
 
-        if should_render {
-            let frame_start = std::time::Instant::now();
-
-            // Render the TUI
-            terminal.draw(|frame| {
-                runtime.render(frame);
-            })?;
-
-            // Poll async commands
-            runtime.poll_async().await?;
-
-            needs_render = false;
-
-            // Sleep remainder of frame time to maintain 60 FPS
-            let elapsed = frame_start.elapsed();
-            if let Some(remaining) = std::time::Duration::from_millis(16).checked_sub(elapsed) {
-                std::thread::sleep(remaining);
-            }
-        }
-
-        // Poll for events
-        if event::poll(poll_timeout)? {
+        // Process all pending events FIRST for minimal input latency
+        let mut should_quit = false;
+        while event::poll(std::time::Duration::from_millis(0))? {
             let event_result = event::read()?;
 
             // Handle global shortcuts first
@@ -108,11 +77,13 @@ async fn run_tui<B: Backend>(
                 if key.code == crossterm::event::KeyCode::Char('q')
                     && key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL)
                 {
+                    should_quit = true;
                     break;
                 }
 
                 // Pass key event to runtime
                 if !runtime.handle_key(*key)? {
+                    should_quit = true;
                     break;
                 }
             }
@@ -120,12 +91,28 @@ async fn run_tui<B: Backend>(
             // Handle mouse events
             if let Event::Mouse(mouse) = &event_result {
                 if !runtime.handle_mouse(*mouse)? {
+                    should_quit = true;
                     break;
                 }
             }
+        }
 
-            // Mark that we need to render after handling event
-            needs_render = true;
+        if should_quit {
+            break;
+        }
+
+        // Poll async commands
+        runtime.poll_async().await?;
+
+        // Render the TUI with updated state (shows input immediately)
+        terminal.draw(|frame| {
+            runtime.render(frame);
+        })?;
+
+        // Sleep for remainder of 16ms frame (60 FPS)
+        let elapsed = frame_start.elapsed();
+        if let Some(remaining) = std::time::Duration::from_millis(16).checked_sub(elapsed) {
+            tokio::time::sleep(remaining).await;
         }
     }
 

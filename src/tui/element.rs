@@ -1,5 +1,49 @@
 use ratatui::style::Style;
 
+/// Alignment options for positioned elements
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Alignment {
+    Center,
+    TopLeft,
+    TopCenter,
+    TopRight,
+    BottomLeft,
+    BottomCenter,
+    BottomRight,
+}
+
+/// A layer in a stack of UI elements
+pub struct Layer<Msg> {
+    pub element: Element<Msg>,
+    pub alignment: Alignment,
+    pub dim_below: bool,
+}
+
+impl<Msg> Layer<Msg> {
+    pub fn new(element: Element<Msg>) -> Self {
+        Self {
+            element,
+            alignment: Alignment::TopLeft,
+            dim_below: false,
+        }
+    }
+
+    pub fn center(mut self) -> Self {
+        self.alignment = Alignment::Center;
+        self
+    }
+
+    pub fn align(mut self, alignment: Alignment) -> Self {
+        self.alignment = alignment;
+        self
+    }
+
+    pub fn dim(mut self, should_dim: bool) -> Self {
+        self.dim_below = should_dim;
+        self
+    }
+}
+
 /// Layout constraints for sizing elements within containers
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LayoutConstraint {
@@ -44,6 +88,17 @@ pub enum Element<Msg> {
     Container {
         child: Box<Element<Msg>>,
         padding: u16,
+    },
+
+    /// Panel with border
+    Panel {
+        child: Box<Element<Msg>>,
+        title: Option<String>,
+    },
+
+    /// Stack of layered elements (for modals, overlays)
+    Stack {
+        layers: Vec<Layer<Msg>>,
     },
 }
 
@@ -103,6 +158,83 @@ impl<Msg> Element<Msg> {
         }
     }
 
+    /// Wrap element in a panel with border
+    pub fn panel(child: Element<Msg>) -> PanelBuilder<Msg> {
+        PanelBuilder {
+            child: Box::new(child),
+            title: None,
+        }
+    }
+
+    /// Create a stack of layers
+    pub fn stack(layers: Vec<Layer<Msg>>) -> Self {
+        Element::Stack { layers }
+    }
+
+    /// Create a confirmation modal overlay
+    pub fn modal_confirm(
+        background: Element<Msg>,
+        title: impl Into<String>,
+        message: impl Into<String>,
+        on_confirm: Msg,
+        on_cancel: Msg,
+    ) -> Self {
+        use crate::tui::element::RowBuilder;
+
+        let button_row = RowBuilder::new()
+            .add(
+                Element::button("Cancel").on_press(on_cancel).build(),
+                LayoutConstraint::Fill(1),
+            )
+            .add(
+                Element::text("  "),
+                LayoutConstraint::Length(2),
+            )
+            .add(
+                Element::button("Confirm").on_press(on_confirm).build(),
+                LayoutConstraint::Fill(1),
+            )
+            .spacing(0)
+            .build();
+
+        let modal_content = ColumnBuilder::new()
+            .add(
+                Element::text(title.into()),
+                LayoutConstraint::Length(1),
+            )
+            .add(
+                Element::text(""),
+                LayoutConstraint::Length(1),
+            )
+            .add(
+                Element::text(message.into()),
+                LayoutConstraint::Length(1),
+            )
+            .add(
+                Element::text(""),
+                LayoutConstraint::Length(1),
+            )
+            .add(
+                button_row,
+                LayoutConstraint::Length(3),
+            )
+            .spacing(0)
+            .build();
+
+        Element::stack(vec![
+            Layer::new(background),
+            Layer::new(
+                Element::panel(
+                    Element::container(modal_content)
+                        .padding(1)
+                        .build()
+                )
+                .title("Confirmation")
+                .build()
+            ).center(),
+        ])
+    }
+
     /// Get the default layout constraint for this element type
     pub fn default_constraint(&self) -> LayoutConstraint {
         match self {
@@ -112,6 +244,8 @@ impl<Msg> Element<Msg> {
             Element::Column { .. } => LayoutConstraint::Fill(1),
             Element::Row { .. } => LayoutConstraint::Fill(1),
             Element::Container { .. } => LayoutConstraint::Fill(1),
+            Element::Panel { .. } => LayoutConstraint::Fill(1),
+            Element::Stack { .. } => LayoutConstraint::Fill(1),
         }
     }
 }
@@ -241,6 +375,26 @@ impl<Msg> ContainerBuilder<Msg> {
         Element::Container {
             child: self.child,
             padding: self.padding,
+        }
+    }
+}
+
+/// Builder for panels
+pub struct PanelBuilder<Msg> {
+    child: Box<Element<Msg>>,
+    title: Option<String>,
+}
+
+impl<Msg> PanelBuilder<Msg> {
+    pub fn title(mut self, title: impl Into<String>) -> Self {
+        self.title = Some(title.into());
+        self
+    }
+
+    pub fn build(self) -> Element<Msg> {
+        Element::Panel {
+            child: self.child,
+            title: self.title,
         }
     }
 }

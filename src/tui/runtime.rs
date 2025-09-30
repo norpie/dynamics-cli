@@ -63,11 +63,6 @@ impl<A: App> Runtime<A> {
         self.navigation_target.take()
     }
 
-    /// Check if there are any pending async commands
-    pub fn has_pending_async(&self) -> bool {
-        !self.pending_async.is_empty()
-    }
-
     /// Poll pending async commands and process completed ones
     pub async fn poll_async(&mut self) -> Result<()> {
         use std::future::Future;

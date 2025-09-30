@@ -10,7 +10,7 @@ pub mod apps;
 
 pub use theme::{Theme, ThemeVariant};
 pub use command::{Command, AppId};
-pub use element::{Element, LayoutConstraint};
+pub use element::{Element, LayoutConstraint, Layer, Alignment};
 pub use subscription::Subscription;
 pub use app::App;
 pub use renderer::{Renderer, InteractionRegistry};
