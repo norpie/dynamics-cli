@@ -30,6 +30,7 @@ pub enum AppId {
     Example1,
     Example2,
     LoadingScreen,
+    ErrorScreen,
 }
 
 impl<Msg> Command<Msg> {

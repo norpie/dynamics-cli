@@ -38,6 +38,7 @@ pub struct State {
     cancellable: bool,
     spinner_state: usize,
     countdown_ticks: Option<usize>, // Number of ticks remaining before navigation (80ms per tick)
+    initialized: bool, // Prevents stale events from affecting state before Initialize runs
 }
 
 const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -51,13 +52,9 @@ impl App for LoadingScreen {
             Msg::Initialize(data) => {
                 use rand::Rng;
 
-                // Reset state from previous runs
-                state.tasks.clear();
-                state.target_app = None;
-                state.caller_app = None;
-                state.cancellable = false;
-                state.spinner_state = 0;
-                state.countdown_ticks = None;
+                // IMPORTANT: Reset ALL state from previous runs
+                // This prevents old countdown/state from interfering with new loads
+                *state = State::default();
 
                 // Parse initialization data
                 let task_names: Vec<String> = if let Some(tasks_json) = data.get("tasks").and_then(|v| v.as_array()) {
@@ -84,6 +81,7 @@ impl App for LoadingScreen {
                     .and_then(|s| match s {
                         "Example1" => Some(AppId::Example1),
                         "Example2" => Some(AppId::Example2),
+                        "ErrorScreen" => Some(AppId::ErrorScreen),
                         _ => None,
                     });
 
@@ -93,46 +91,63 @@ impl App for LoadingScreen {
                     .and_then(|s| match s {
                         "Example1" => Some(AppId::Example1),
                         "Example2" => Some(AppId::Example2),
+                        "ErrorScreen" => Some(AppId::ErrorScreen),
                         _ => None,
                     });
 
                 state.cancellable = data.get("cancellable").and_then(|v| v.as_bool()).unwrap_or(false);
 
-                // Spawn async work for each task with random delays
+                // Check if tasks should auto-complete (default: true)
+                // Set to false if you want to control task progress externally
+                let auto_complete = data.get("auto_complete")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true);
+
                 let mut commands = Vec::new();
-                let mut rng = rand::thread_rng();
 
-                for task_name in task_names {
-                    let delay_secs = rng.gen_range(1..=5);
-                    let task_name_clone = task_name.clone();
+                if auto_complete {
+                    // Spawn async work for each task with random delays
+                    let mut rng = rand::thread_rng();
 
-                    commands.push(Command::perform(
-                        async move {
-                            tokio::time::sleep(tokio::time::Duration::from_secs(delay_secs)).await;
+                    for task_name in task_names {
+                        let delay_secs = rng.gen_range(1..=5);
+                        let task_name_clone = task_name.clone();
 
-                            // Mark task as completed
-                            serde_json::json!({
-                                "task": task_name_clone,
-                                "status": "Completed",
-                            })
-                        },
-                        |data| Msg::TaskProgress(data),
-                    ));
+                        commands.push(Command::perform(
+                            async move {
+                                tokio::time::sleep(tokio::time::Duration::from_secs(delay_secs)).await;
 
-                    // Also immediately send InProgress status
-                    commands.push(Command::Publish {
-                        topic: "loading:progress".to_string(),
-                        data: serde_json::json!({
-                            "task": task_name,
-                            "status": "InProgress",
-                        }),
-                    });
+                                // Mark task as completed
+                                serde_json::json!({
+                                    "task": task_name_clone,
+                                    "status": "Completed",
+                                })
+                            },
+                            |data| Msg::TaskProgress(data),
+                        ));
+
+                        // Also immediately send InProgress status
+                        commands.push(Command::Publish {
+                            topic: "loading:progress".to_string(),
+                            data: serde_json::json!({
+                                "task": task_name,
+                                "status": "InProgress",
+                            }),
+                        });
+                    }
                 }
+
+                // Mark as initialized AFTER all setup is complete
+                state.initialized = true;
 
                 Command::Batch(commands)
             }
 
             Msg::TaskProgress(data) => {
+                // Ignore stale events from previous loads
+                if !state.initialized {
+                    return Command::None;
+                }
                 let task_name = data.get("task").and_then(|v| v.as_str()).unwrap_or("");
                 let status_str = data.get("status").and_then(|v| v.as_str()).unwrap_or("");
 
@@ -151,7 +166,9 @@ impl App for LoadingScreen {
                 }
 
                 // Check if all tasks are complete
-                let all_done = state.tasks.iter().all(|t| {
+                // IMPORTANT: Only start countdown if we have tasks AND they're all done
+                // This prevents edge cases where empty task list triggers immediate countdown
+                let all_done = !state.tasks.is_empty() && state.tasks.iter().all(|t| {
                     matches!(t.status, TaskStatus::Completed | TaskStatus::Failed(_))
                 });
 
@@ -166,15 +183,19 @@ impl App for LoadingScreen {
             Msg::Tick => {
                 state.spinner_state = (state.spinner_state + 1) % SPINNER_FRAMES.len();
 
-                // Handle countdown
-                if let Some(remaining) = state.countdown_ticks {
-                    if remaining <= 1 {
-                        // Countdown finished, navigate immediately without changing state
-                        if let Some(target) = state.target_app {
-                            return Command::navigate_to(target);
+                // Handle countdown only if initialized
+                if state.initialized {
+                    if let Some(remaining) = state.countdown_ticks {
+                        if remaining <= 1 {
+                            // Only navigate if we have tasks (prevents stale countdown from navigating)
+                            if !state.tasks.is_empty() {
+                                if let Some(target) = state.target_app {
+                                    return Command::navigate_to(target);
+                                }
+                            }
+                        } else {
+                            state.countdown_ticks = Some(remaining - 1);
                         }
-                    } else {
-                        state.countdown_ticks = Some(remaining - 1);
                     }
                 }
 
@@ -208,10 +229,8 @@ impl App for LoadingScreen {
             matches!(t.status, TaskStatus::Completed | TaskStatus::Failed(_))
         });
 
-        let header_text = if let Some(remaining) = state.countdown_ticks {
-            // Show actual tick count for debugging: 80ms per tick
-            let ms_remaining = remaining * 80;
-            format!("All tasks completed! Returning in {}ms...", ms_remaining)
+        let header_text = if state.countdown_ticks.is_some() {
+            "All tasks completed! Returning in 1 second...".to_string()
         } else if all_done {
             "All tasks completed!".to_string()
         } else {

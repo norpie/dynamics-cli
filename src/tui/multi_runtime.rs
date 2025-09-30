@@ -6,7 +6,7 @@ use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
 use anyhow::Result;
 use std::collections::HashMap;
 
-use crate::tui::{AppId, Runtime, AppRuntime, apps::{Example1, Example2, LoadingScreen}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App};
+use crate::tui::{AppId, Runtime, AppRuntime, apps::{Example1, Example2, LoadingScreen, ErrorScreen}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App};
 use crate::tui::element::{ColumnBuilder, RowBuilder};
 
 /// Manages multiple app runtimes and handles navigation between them
@@ -30,6 +30,7 @@ impl MultiAppRuntime {
         runtimes.insert(AppId::Example1, Box::new(Runtime::<Example1>::new()));
         runtimes.insert(AppId::Example2, Box::new(Runtime::<Example2>::new()));
         runtimes.insert(AppId::LoadingScreen, Box::new(Runtime::<LoadingScreen>::new()));
+        runtimes.insert(AppId::ErrorScreen, Box::new(Runtime::<ErrorScreen>::new()));
 
         Self {
             runtimes,
@@ -352,6 +353,12 @@ impl MultiAppRuntime {
             .take_navigation();
 
         if let Some(target) = nav_target {
+            // Clear any stale navigation from the target app before switching to it
+            // This prevents old navigation requests from when it was previously active
+            self.runtimes.get_mut(&target)
+                .expect("Target app not found in runtimes")
+                .take_navigation();
+
             self.active_app = target;
         }
 

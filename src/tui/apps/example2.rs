@@ -16,6 +16,11 @@ pub enum Msg {
     StartLoading,
     LoadButtonHovered,
     LoadButtonUnhovered,
+    StartFailingLoad,
+    FailLoadButtonHovered,
+    FailLoadButtonUnhovered,
+    Task1Complete,
+    Task2Failed,
     CancelLoading,
 }
 
@@ -24,6 +29,7 @@ pub struct State {
     button_hovered: bool,
     show_confirm: bool,
     load_button_hovered: bool,
+    fail_load_button_hovered: bool,
 }
 
 impl App for Example2 {
@@ -80,6 +86,98 @@ impl App for Example2 {
                     Command::navigate_to(AppId::LoadingScreen),
                 ])
             }
+            Msg::StartFailingLoad => {
+                use rand::Rng;
+                let mut rng = rand::thread_rng();
+
+                // Initialize loading screen with 2 tasks
+                // auto_complete: false means we control the task progress externally
+                let init_data = serde_json::json!({
+                    "tasks": ["Connecting to server", "Authenticating"],
+                    "target": "ErrorScreen",
+                    "caller": "Example2",
+                    "cancellable": false,
+                    "auto_complete": false,
+                });
+
+                let delay1 = rng.gen_range(1..=3);
+                let delay2 = rng.gen_range(2..=4);
+
+                Command::Batch(vec![
+                    Command::Publish {
+                        topic: "loading:init".to_string(),
+                        data: init_data,
+                    },
+                    Command::navigate_to(AppId::LoadingScreen),
+                    // Immediately mark tasks as InProgress
+                    Command::Publish {
+                        topic: "loading:progress".to_string(),
+                        data: serde_json::json!({
+                            "task": "Connecting to server",
+                            "status": "InProgress",
+                        }),
+                    },
+                    Command::Publish {
+                        topic: "loading:progress".to_string(),
+                        data: serde_json::json!({
+                            "task": "Authenticating",
+                            "status": "InProgress",
+                        }),
+                    },
+                    // Task 1: Connecting to server
+                    Command::perform(
+                        async move {
+                            tokio::time::sleep(tokio::time::Duration::from_secs(delay1)).await;
+                        },
+                        |_| Msg::Task1Complete
+                    ),
+                    // Task 2: Authenticating (will fail)
+                    Command::perform(
+                        async move {
+                            tokio::time::sleep(tokio::time::Duration::from_secs(delay2)).await;
+                        },
+                        |_| Msg::Task2Failed
+                    ),
+                ])
+            }
+            Msg::Task1Complete => {
+                // Mark task 1 as completed
+                Command::Publish {
+                    topic: "loading:progress".to_string(),
+                    data: serde_json::json!({
+                        "task": "Connecting to server",
+                        "status": "Completed",
+                    }),
+                }
+            }
+            Msg::Task2Failed => {
+                // Mark task 2 as failed and initialize error screen
+                Command::Batch(vec![
+                    Command::Publish {
+                        topic: "loading:progress".to_string(),
+                        data: serde_json::json!({
+                            "task": "Authenticating",
+                            "status": "Failed",
+                            "error": "Invalid credentials",
+                        }),
+                    },
+                    Command::Publish {
+                        topic: "error:init".to_string(),
+                        data: serde_json::json!({
+                            "message": "Failed to authenticate: Invalid credentials",
+                            "target": "Example2",
+                        }),
+                    },
+                ])
+            }
+            Msg::FailLoadButtonHovered => {
+                state.fail_load_button_hovered = true;
+                Command::None
+            }
+            Msg::FailLoadButtonUnhovered => {
+                state.fail_load_button_hovered = false;
+                Command::None
+            }
             Msg::CancelLoading => {
                 // Handle cancellation - just a no-op for now
                 Command::None
@@ -100,6 +198,12 @@ impl App for Example2 {
             ratatui::style::Style::default().fg(theme.text)
         };
 
+        let fail_load_button_style = if state.fail_load_button_hovered {
+            ratatui::style::Style::default().fg(theme.lavender)
+        } else {
+            ratatui::style::Style::default().fg(theme.text)
+        };
+
         let main_ui = Element::column(vec![
             Element::text("Example 2 - Modal Confirmation Demo!"),
             Element::text(""),
@@ -110,11 +214,18 @@ impl App for Example2 {
                 .style(button_style)
                 .build(),
             Element::text(""),
-            Element::button("[ Press L to load data with loading screen ]")
+            Element::button("[ Press L to load data (cancellable) ]")
                 .on_press(Msg::StartLoading)
                 .on_hover(Msg::LoadButtonHovered)
                 .on_hover_exit(Msg::LoadButtonUnhovered)
                 .style(load_button_style)
+                .build(),
+            Element::text(""),
+            Element::button("[ Press F to fail loading (uncancellable) ]")
+                .on_press(Msg::StartFailingLoad)
+                .on_hover(Msg::FailLoadButtonHovered)
+                .on_hover_exit(Msg::FailLoadButtonUnhovered)
+                .style(fail_load_button_style)
                 .build(),
             Element::text(""),
             Element::text("Now with confirmation modal!"),
@@ -146,13 +257,23 @@ impl App for Example2 {
             ),
             Subscription::keyboard(
                 KeyCode::Char('l'),
-                "Load data with loading screen",
+                "Load data (cancellable)",
                 Msg::StartLoading,
             ),
             Subscription::keyboard(
                 KeyCode::Char('L'),
-                "Load data with loading screen",
+                "Load data (cancellable)",
                 Msg::StartLoading,
+            ),
+            Subscription::keyboard(
+                KeyCode::Char('f'),
+                "Fail loading (uncancellable)",
+                Msg::StartFailingLoad,
+            ),
+            Subscription::keyboard(
+                KeyCode::Char('F'),
+                "Fail loading (uncancellable)",
+                Msg::StartFailingLoad,
             ),
             Subscription::subscribe("loading:cancel:Example2", |_| Some(Msg::CancelLoading)),
         ]
