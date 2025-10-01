@@ -545,10 +545,10 @@ fn test_delete_confirmation_flow() {
   - [ ] Keyboard navigation
   - [ ] Virtualized rendering
   - [ ] Tests
-- [ ] Implement Tabs widget
-  - [ ] Tab bar rendering
-  - [ ] Content switching
-  - [ ] Keyboard navigation (Left/Right)
+- [x] Implement Tabs widget
+  - [x] Tab bar rendering
+  - [x] Content switching
+  - [x] Keyboard navigation (Left/Right)
   - [ ] Tests
 
 ### Phase 2: Simple Apps
