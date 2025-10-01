@@ -65,12 +65,12 @@ trait Screen {
 
 **HIGH PRIORITY (Must have for migration)**:
 1. **List widget** - Used everywhere for selection ✅ **DONE**
-2. **TextInput widget** - Required for search, prefix mapping, manual mapping
-3. **Tree/Hierarchy widget** - Core of UnifiedCompareScreen (fields tab)
-4. **Tabs widget** - UnifiedCompareScreen has 4 tabs (Fields, Relationships, Views, Forms)
+2. **TextInput widget** - Required for search, prefix mapping, manual mapping ✅ **DONE**
+3. **Tree/Hierarchy widget** - Core of UnifiedCompareScreen (fields tab) ✅ **DONE**
+4. **Tabs widget** - UnifiedCompareScreen has 4 tabs (Fields, Relationships, Views, Forms) ✅ **DONE**
 
 **MEDIUM PRIORITY**:
-5. **Scrollable containers** - Long lists of fields/entities
+5. **Scrollable containers** - Long lists of fields/entities ✅ **DONE**
 
 **LOW PRIORITY** (Can work around):
 7. Ergonomic macros (`column![]` vs. verbose builders)
@@ -452,13 +452,16 @@ fn test_delete_confirmation_flow() {
 - **Theming**: Catppuccin colors (need to migrate from old STYLES)
 - **Keyboard shortcuts**: Subscription::keyboard
 
-### ❌ **Missing from Framework (BLOCKERS)**
+### ✅ **Framework Widgets (ALL COMPLETE!)**
 
 - ~~**List widget**~~ ✅ **DONE** - Used in 6/7 screens
-- **TextInput widget** - Required for 3+ modals
-- **Tree/Hierarchy widget** - Core of UnifiedCompareScreen
-- **Tabs widget** - UnifiedCompareScreen has 4 tabs
-- **Scrollable containers** - Long lists
+- ~~**TextInput widget**~~ ✅ **DONE** - Required for 3+ modals
+- ~~**Tree/Hierarchy widget**~~ ✅ **DONE** - Core of UnifiedCompareScreen
+- ~~**Tabs widget**~~ ✅ **DONE** - UnifiedCompareScreen has 4 tabs
+- ~~**Scrollable containers**~~ ✅ **DONE** - General-purpose scrollable element
+
+### ❌ **Still Missing (Low Priority)**
+
 - **Ergonomic macros** - DX improvement (`column![]` vs. builders)
 
 ### ⚙️ **Domain-Specific (Implement in migration/ module)**
@@ -473,42 +476,49 @@ fn test_delete_confirmation_flow() {
 
 ## 8. Next Steps & Recommendations
 
-### Immediate Actions
+### ✅ Completed (Phase 1)
 
 1. ~~**Build List widget**~~ ✅ **DONE**
-   - Most critical blocker
-   - Used everywhere
-   - Enables MigrationSelectApp, EnvironmentSelectApp
+2. ~~**Build TextInput widget**~~ ✅ **DONE**
+3. ~~**Build Tree widget**~~ ✅ **DONE**
+4. ~~**Build Tabs widget**~~ ✅ **DONE**
+5. ~~**Build Scrollable widget**~~ ✅ **DONE**
 
-2. **Build TextInput widget**
-   - Second most critical
-   - Required for search, mapping modals
+### 🔄 Immediate Actions (Phase 2)
 
-3. **Design Tree widget API**
-   - Most complex widget
-   - Review proposal_new.md suggestions
-   - Consider reusing ratatui-tree-widget crate?
-
-### Medium-Term Goals
-
-4. **Migrate MigrationSelectApp**
-   - Validate pattern with simple screen
+1. **Implement MigrationSelectApp**
+   - First app migration
+   - Validate Elm pattern with real use case
    - Learn pain points
+   - Components: List widget, confirmation modal, async delete
 
-5. **Migrate EnvironmentSelectApp**
-   - Multi-phase selection pattern
-   - Refine List widget API
+2. **Implement EnvironmentSelectApp**
+   - Two-phase selection pattern
+   - State machine for source→target flow
+   - Refine widget APIs based on feedback
 
-6. **Build Tabs widget + start UnifiedCompareApp**
-   - Tackle the big one
+3. **Implement LoadingApp**
+   - Async data fetching patterns
+   - Progress tracking
+   - Error handling
+   - Auto-navigation on completion
+
+### Medium-Term Goals (Phase 3)
+
+4. **Start UnifiedCompareApp**
+   - Most complex screen
+   - Use all widgets (List, Tree, Tabs, TextInput, Scrollable)
+   - Break into sub-modules
    - Iterative refinement
 
-### Long-Term Vision
+### Long-Term Vision (Phase 4)
 
-7. **Extract reusable widgets to framework**
-   - entity_tree → Tree widget
+5. **Polish & refinement**
+   - Performance optimization
+   - Visual polish
+   - User testing
 
-8. **Delete old implementation**
+6. **Delete old implementation**
    - Remove 36k LOC of old code
    - Celebrate clean architecture 🎉
 
@@ -546,6 +556,13 @@ fn test_delete_confirmation_flow() {
   - [x] Tab bar rendering
   - [x] Content switching
   - [x] Keyboard navigation (Left/Right)
+- [x] Implement Scrollable widget
+  - [x] ScrollableState with navigation methods
+  - [x] Virtual scrolling for Column children
+  - [x] Scrollbar rendering with position indicator
+  - [x] Keyboard navigation (Up/Down/PageUp/PageDown/Home/End)
+  - [x] Auto content-height detection
+  - [x] Works with any Element type
 
 ### Phase 2: Simple Apps
 - [ ] MigrationSelectApp
@@ -598,12 +615,14 @@ fn test_delete_confirmation_flow() {
 
 ## Conclusion
 
-The migration module is **substantial** (36k LOC) but **well-suited** for the Elm-inspired pattern. The main blocker is **missing widgets** (List, TextInput, Tree, Tabs).
+The migration module is **substantial** (36k LOC) but **well-suited** for the Elm-inspired pattern. ~~The main blocker is **missing widgets** (List, TextInput, Tree, Tabs).~~ ✅ **ALL FRAMEWORK WIDGETS COMPLETE!**
 
-**Recommended path**:
-1. Build framework widgets (Phase 1)
-2. Migrate simple screens (Phase 2)
-3. Migrate complex screen (Phase 3)
-4. Polish & export (Phase 4)
+**Status**:
+1. ✅ **Phase 1 COMPLETE** - Build framework widgets (List, TextInput, Tree, Tabs, Scrollable)
+2. 🔄 **Phase 2 READY** - Migrate simple screens (MigrationSelectApp, EnvironmentSelectApp, LoadingApp)
+3. ⏳ **Phase 3 PENDING** - Migrate complex screen (UnifiedCompareApp)
+4. ⏳ **Phase 4 PENDING** - Polish & export
+
+**Next Step**: Start Phase 2 - implement MigrationSelectApp
 
 **Payoff**: Clean architecture, testable code, reusable widgets for other apps, deletion of 36k LOC of technical debt.
