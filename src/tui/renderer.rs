@@ -474,16 +474,18 @@ impl Renderer {
                     theme.overlay0
                 };
 
-                // Render border block
+                // Render border block with background
                 let block = if let Some(title_text) = title {
                     Block::default()
                         .borders(Borders::ALL)
                         .border_style(Style::default().fg(border_color))
+                        .style(Style::default().bg(theme.base))
                         .title(title_text.as_str())
                 } else {
                     Block::default()
                         .borders(Borders::ALL)
                         .border_style(Style::default().fg(border_color))
+                        .style(Style::default().bg(theme.base))
                 };
 
                 let inner_area = block.inner(area);

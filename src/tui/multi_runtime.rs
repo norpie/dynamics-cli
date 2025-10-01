@@ -193,6 +193,13 @@ impl MultiAppRuntime {
     }
 
     fn render_help_menu(&self, frame: &mut Frame, area: ratatui::layout::Rect, theme: &Theme) {
+        // First, render a dim overlay over the entire area
+        use ratatui::widgets::Block;
+        use ratatui::style::Style;
+        let dim_block = Block::default()
+            .style(Style::default().bg(theme.surface0));
+        frame.render_widget(dim_block, area);
+
         // Build global key bindings
         let global_bindings = vec![
             (KeyCode::F(1), "Toggle help menu".to_string()),
@@ -216,7 +223,7 @@ impl MultiAppRuntime {
             .filter(|(id, _, _)| *id != self.active_app)
             .collect();
 
-        // Build help content
+        // Build ALL help content items (no skipping - List widget handles scrolling)
         let mut help_items = vec![
             Element::styled_text(Line::from(vec![
                 Span::styled("Keyboard Shortcuts", Style::default().fg(theme.lavender).bold())
@@ -224,24 +231,12 @@ impl MultiAppRuntime {
             Element::text(""),
         ];
 
-        // Skip items for scrolling
-        let mut skipped = 0;
-        let skip_target = self.help_scroll_offset;
-
         // Section 1: Global Keys (highest priority)
-        if skipped < skip_target {
-            skipped += 1;
-        } else {
-            help_items.push(Element::styled_text(Line::from(vec![
-                Span::styled("▼ Global", Style::default().fg(theme.peach).bold())
-            ])).build());
-        }
+        help_items.push(Element::styled_text(Line::from(vec![
+            Span::styled("▼ Global", Style::default().fg(theme.peach).bold())
+        ])).build());
 
         for (key, description) in &global_bindings {
-            if skipped < skip_target {
-                skipped += 1;
-                continue;
-            }
             let key_str = format!("{:?}", key);
             let line = Line::from(vec![
                 Span::styled(format!("  {:13}", key_str), Style::default().fg(theme.mauve)),
@@ -251,26 +246,14 @@ impl MultiAppRuntime {
             help_items.push(Element::styled_text(line).build());
         }
 
-        if skipped < skip_target {
-            skipped += 1;
-        } else {
-            help_items.push(Element::text(""));
-        }
+        help_items.push(Element::text(""));
 
         // Section 2: Current App Keys
-        if skipped < skip_target {
-            skipped += 1;
-        } else {
-            help_items.push(Element::styled_text(Line::from(vec![
-                Span::styled(format!("▼ {}", current_app_data.1), Style::default().fg(theme.blue).bold())
-            ])).build());
-        }
+        help_items.push(Element::styled_text(Line::from(vec![
+            Span::styled(format!("▼ {}", current_app_data.1), Style::default().fg(theme.blue).bold())
+        ])).build());
 
         for (key, description) in &current_app_data.2 {
-            if skipped < skip_target {
-                skipped += 1;
-                continue;
-            }
             let key_str = format!("{:?}", key);
             let line = Line::from(vec![
                 Span::styled(format!("  {:13}", key_str), Style::default().fg(theme.green)),
@@ -280,27 +263,15 @@ impl MultiAppRuntime {
             help_items.push(Element::styled_text(line).build());
         }
 
-        if skipped < skip_target {
-            skipped += 1;
-        } else {
-            help_items.push(Element::text(""));
-        }
+        help_items.push(Element::text(""));
 
         // Section 3: Other Apps
         for (_, app_title, app_bindings) in other_apps {
-            if skipped < skip_target {
-                skipped += 1;
-            } else {
-                help_items.push(Element::styled_text(Line::from(vec![
-                    Span::styled(format!("▼ {}", app_title), Style::default().fg(theme.overlay1).bold())
-                ])).build());
-            }
+            help_items.push(Element::styled_text(Line::from(vec![
+                Span::styled(format!("▼ {}", app_title), Style::default().fg(theme.overlay1).bold())
+            ])).build());
 
             for (key, description) in app_bindings {
-                if skipped < skip_target {
-                    skipped += 1;
-                    continue;
-                }
                 let key_str = format!("{:?}", key);
                 let line = Line::from(vec![
                     Span::styled(format!("  {:13}", key_str), Style::default().fg(theme.overlay2)),
@@ -310,18 +281,40 @@ impl MultiAppRuntime {
                 help_items.push(Element::styled_text(line).build());
             }
 
-            if skipped < skip_target {
-                skipped += 1;
-            } else {
-                help_items.push(Element::text(""));
-            }
+            help_items.push(Element::text(""));
         }
 
+        help_items.push(Element::text(""));
         help_items.push(Element::styled_text(Line::from(vec![
             Span::styled("[ESC to close | ↑↓ to scroll]", Style::default().fg(theme.overlay1))
         ])).build());
 
-        let help_content = Element::column(help_items).build();
+        // Calculate modal dimensions and position
+        let modal_width = area.width.min(60);
+        let modal_height = area.height.min(20);
+        let modal_area = ratatui::layout::Rect {
+            x: area.x + (area.width.saturating_sub(modal_width)) / 2,
+            y: area.y + (area.height.saturating_sub(modal_height)) / 2,
+            width: modal_width,
+            height: modal_height,
+        };
+
+        // Calculate available content height (subtract panel borders + container padding)
+        let content_height = modal_height.saturating_sub(4); // 2 for borders, 2 for padding
+
+        // Clamp scroll offset to valid range
+        let total_items = help_items.len();
+        let max_scroll = total_items.saturating_sub(content_height as usize);
+        let clamped_scroll = self.help_scroll_offset.min(max_scroll);
+
+        // Only include visible items (virtual scrolling)
+        let visible_items: Vec<_> = help_items
+            .into_iter()
+            .skip(clamped_scroll)
+            .take(content_height as usize)
+            .collect();
+
+        let help_content = Element::column(visible_items).build();
 
         // Wrap in panel and center
         let help_modal = Element::panel(
@@ -333,19 +326,8 @@ impl MultiAppRuntime {
         .build();
 
         use crate::tui::{Renderer, InteractionRegistry};
-        let mut registry: InteractionRegistry<()> = InteractionRegistry::new();
-
-        // Calculate centered position for help modal
-        let modal_width = area.width.min(60);
-        let modal_height = area.height.min(20);
-        let modal_area = ratatui::layout::Rect {
-            x: area.x + (area.width.saturating_sub(modal_width)) / 2,
-            y: area.y + (area.height.saturating_sub(modal_height)) / 2,
-            width: modal_width,
-            height: modal_height,
-        };
-
         use crate::tui::renderer::FocusRegistry;
+        let mut registry: InteractionRegistry<()> = InteractionRegistry::new();
         let mut focus_registry: FocusRegistry<()> = FocusRegistry::new();
         Renderer::render(frame, theme, &mut registry, &mut focus_registry, None, &help_modal, modal_area);
     }
