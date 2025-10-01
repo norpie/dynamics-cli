@@ -535,7 +535,7 @@ impl<A: App> Runtime<A> {
         self.focus_registry.clear();
 
         // Get the view from the app
-        let view = A::view(&self.state, &self.config.theme);
+        let view = A::view(&mut self.state, &self.config.theme);
 
         // Render the view
         Renderer::render(

@@ -20,7 +20,8 @@ pub trait App: Sized + Send + 'static {
     fn update(state: &mut Self::State, msg: Self::Msg) -> Command<Self::Msg>;
 
     /// Render the current state to UI elements
-    fn view(state: &Self::State, theme: &Theme) -> Element<Self::Msg>;
+    /// Note: Takes &mut for internal optimizations (e.g., cache rebuilds)
+    fn view(state: &mut Self::State, theme: &Theme) -> Element<Self::Msg>;
 
     /// Declare what inputs this app wants to receive
     fn subscriptions(state: &Self::State) -> Vec<Subscription<Self::Msg>>;

@@ -71,7 +71,7 @@ impl App for Example4 {
         }
     }
 
-    fn view(state: &State, theme: &Theme) -> Element<Msg> {
+    fn view(state: &mut State, theme: &Theme) -> Element<Msg> {
         // Render different content based on active tab
         let content = match state.active_tab {
             TabId::Overview => {

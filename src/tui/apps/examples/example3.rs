@@ -71,7 +71,7 @@ impl App for Example3 {
         }
     }
 
-    fn view(state: &State, theme: &Theme) -> Element<Msg> {
+    fn view(state: &mut State, theme: &Theme) -> Element<Msg> {
         let name_input = Element::panel(
             Element::text_input(
                 FocusId::new("name"),

@@ -57,7 +57,7 @@ impl App for Example1 {
         }
     }
 
-    fn view(state: &State, theme: &Theme) -> Element<Msg> {
+    fn view(state: &mut State, theme: &Theme) -> Element<Msg> {
         let button_style = if state.button_hovered {
             ratatui::style::Style::default().fg(theme.lavender)
         } else {

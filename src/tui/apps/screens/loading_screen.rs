@@ -221,7 +221,7 @@ impl App for LoadingScreen {
         }
     }
 
-    fn view(state: &State, theme: &Theme) -> Element<Msg> {
+    fn view(state: &mut State, theme: &Theme) -> Element<Msg> {
         let mut content = vec![];
 
         // Header

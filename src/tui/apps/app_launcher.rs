@@ -45,6 +45,11 @@ impl Default for State {
                     name: "Example 4".to_string(),
                     description: "Tab pattern demo".to_string(),
                 },
+                AppInfo {
+                    id: AppId::Example5,
+                    name: "Example 5".to_string(),
+                    description: "Tree widget demo - hierarchical navigation".to_string(),
+                },
             ],
             list_state: ListState::with_selection(),
             initialized: false,
@@ -112,7 +117,7 @@ impl App for AppLauncher {
         }
     }
 
-    fn view(state: &State, theme: &Theme) -> Element<Msg> {
+    fn view(state: &mut State, theme: &Theme) -> Element<Msg> {
         let list = Element::list(
             FocusId::new("app-list"),
             &state.apps,

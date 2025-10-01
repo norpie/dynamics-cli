@@ -6,7 +6,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use anyhow::Result;
 use std::collections::HashMap;
 
-use crate::tui::{AppId, Runtime, AppRuntime, apps::{AppLauncher, Example1, Example2, Example3, Example4, LoadingScreen, ErrorScreen}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App};
+use crate::tui::{AppId, Runtime, AppRuntime, apps::{AppLauncher, Example1, Example2, Example3, Example4, Example5, LoadingScreen, ErrorScreen}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App};
 use crate::tui::element::{ColumnBuilder, RowBuilder};
 
 /// Manages multiple app runtimes and handles navigation between them
@@ -32,6 +32,7 @@ impl MultiAppRuntime {
         runtimes.insert(AppId::Example2, Box::new(Runtime::<Example2>::new()));
         runtimes.insert(AppId::Example3, Box::new(Runtime::<Example3>::new()));
         runtimes.insert(AppId::Example4, Box::new(Runtime::<Example4>::new()));
+        runtimes.insert(AppId::Example5, Box::new(Runtime::<Example5>::new()));
         runtimes.insert(AppId::LoadingScreen, Box::new(Runtime::<LoadingScreen>::new()));
         runtimes.insert(AppId::ErrorScreen, Box::new(Runtime::<ErrorScreen>::new()));
 

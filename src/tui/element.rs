@@ -148,6 +148,20 @@ pub enum Element<Msg> {
         on_focus: Option<Msg>,
         on_blur: Option<Msg>,
     },
+
+    /// Hierarchical tree with expand/collapse
+    Tree {
+        id: FocusId,
+        items: Vec<Element<Msg>>,       // Flattened nodes
+        node_ids: Vec<String>,           // Parallel array of node IDs
+        selected: Option<String>,        // Selected node ID (not index!)
+        scroll_offset: usize,
+        on_select: Option<fn(String) -> Msg>,     // ID-based callbacks
+        on_toggle: Option<fn(String) -> Msg>,     // Expand/collapse callback
+        on_navigate: Option<fn(crossterm::event::KeyCode) -> Msg>,
+        on_focus: Option<Msg>,
+        on_blur: Option<Msg>,
+    },
 }
 
 impl<Msg> Element<Msg> {
@@ -311,6 +325,7 @@ impl<Msg> Element<Msg> {
             Element::Stack { .. } => LayoutConstraint::Fill(1),
             Element::List { .. } => LayoutConstraint::Fill(1),
             Element::TextInput { .. } => LayoutConstraint::Length(1),
+            Element::Tree { .. } => LayoutConstraint::Fill(1),
         }
     }
 
@@ -360,6 +375,39 @@ impl<Msg> Element<Msg> {
             scroll_offset: state.scroll_offset(),
             on_select: None,
             on_activate: None,
+            on_navigate: None,
+            on_focus: None,
+            on_blur: None,
+        }
+    }
+
+    /// Create a tree element from TreeItem-implementing items
+    pub fn tree<T>(
+        id: FocusId,
+        root_items: &[T],
+        state: &mut crate::tui::widgets::TreeState,
+        theme: &crate::tui::Theme,
+    ) -> TreeBuilder<Msg>
+    where
+        T: crate::tui::widgets::TreeItem<Msg = Msg>,
+    {
+        // Flatten tree based on expansion state
+        let flattened = crate::tui::widgets::tree::flatten_tree(root_items, state, theme);
+
+        // Extract elements and node IDs (parallel arrays) by consuming the vec
+        let (elements, node_ids): (Vec<Element<Msg>>, Vec<String>) = flattened
+            .into_iter()
+            .map(|node| (node.element, node.id))
+            .unzip();
+
+        TreeBuilder {
+            id,
+            items: elements,
+            node_ids,
+            selected: state.selected().map(String::from),
+            scroll_offset: state.scroll_offset(),
+            on_select: None,
+            on_toggle: None,
             on_navigate: None,
             on_focus: None,
             on_blur: None,
@@ -662,6 +710,62 @@ impl<Msg> TextInputBuilder<Msg> {
             max_length: self.max_length,
             on_change: self.on_change,
             on_submit: self.on_submit,
+            on_focus: self.on_focus,
+            on_blur: self.on_blur,
+        }
+    }
+}
+
+/// Builder for tree elements
+pub struct TreeBuilder<Msg> {
+    id: FocusId,
+    items: Vec<Element<Msg>>,
+    node_ids: Vec<String>,
+    selected: Option<String>,
+    scroll_offset: usize,
+    on_select: Option<fn(String) -> Msg>,
+    on_toggle: Option<fn(String) -> Msg>,
+    on_navigate: Option<fn(crossterm::event::KeyCode) -> Msg>,
+    on_focus: Option<Msg>,
+    on_blur: Option<Msg>,
+}
+
+impl<Msg> TreeBuilder<Msg> {
+    pub fn on_select(mut self, msg: fn(String) -> Msg) -> Self {
+        self.on_select = Some(msg);
+        self
+    }
+
+    pub fn on_toggle(mut self, msg: fn(String) -> Msg) -> Self {
+        self.on_toggle = Some(msg);
+        self
+    }
+
+    pub fn on_navigate(mut self, msg: fn(crossterm::event::KeyCode) -> Msg) -> Self {
+        self.on_navigate = Some(msg);
+        self
+    }
+
+    pub fn on_focus(mut self, msg: Msg) -> Self {
+        self.on_focus = Some(msg);
+        self
+    }
+
+    pub fn on_blur(mut self, msg: Msg) -> Self {
+        self.on_blur = Some(msg);
+        self
+    }
+
+    pub fn build(self) -> Element<Msg> {
+        Element::Tree {
+            id: self.id,
+            items: self.items,
+            node_ids: self.node_ids,
+            selected: self.selected,
+            scroll_offset: self.scroll_offset,
+            on_select: self.on_select,
+            on_toggle: self.on_toggle,
+            on_navigate: self.on_navigate,
             on_focus: self.on_focus,
             on_blur: self.on_blur,
         }
