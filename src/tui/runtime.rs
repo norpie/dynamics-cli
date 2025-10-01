@@ -7,9 +7,11 @@ use serde_json::Value;
 use std::pin::Pin;
 use std::future::Future;
 
-use crate::tui::{App, AppId, Command, Renderer, InteractionRegistry, Theme, ThemeVariant, Subscription};
+use crate::tui::{App, AppId, Command, Renderer, InteractionRegistry, Subscription};
 use crate::tui::renderer::{FocusRegistry, FocusableInfo};
 use crate::tui::element::FocusId;
+use crate::tui::config::RuntimeConfig;
+use crate::tui::focus::FocusMode;
 
 /// Trait for runtime operations, allowing type-erased storage of different Runtime<A> types
 pub trait AppRuntime {
@@ -33,8 +35,8 @@ pub struct Runtime<A: App> {
     /// Current app state
     state: A::State,
 
-    /// Theme for rendering
-    theme: Theme,
+    /// Runtime configuration (theme, focus mode, etc.)
+    config: RuntimeConfig,
 
     /// Interaction registry for mouse events
     registry: InteractionRegistry<A::Msg>,
@@ -70,11 +72,11 @@ pub struct Runtime<A: App> {
 impl<A: App> Runtime<A> {
     pub fn new() -> Self {
         let (state, init_command) = A::init();
-        let theme = Theme::new(ThemeVariant::default());
+        let config = RuntimeConfig::default();
 
         let mut runtime = Self {
             state,
-            theme,
+            config,
             registry: InteractionRegistry::new(),
             focus_registry: FocusRegistry::new(),
             focused_id: None,
@@ -126,7 +128,7 @@ impl<A: App> Runtime<A> {
 
     /// Get the app's status (optional, dynamic)
     pub fn get_status(&self) -> Option<ratatui::text::Line<'static>> {
-        A::status(&self.state, &self.theme)
+        A::status(&self.state, &self.config.theme)
     }
 
     /// Get a reference to the app's state
@@ -341,6 +343,31 @@ impl<A: App> Runtime<A> {
                 }
             }
             MouseEventKind::Moved => {
+                // Handle focus-on-hover based on config
+                match self.config.focus_mode {
+                    FocusMode::Click => {
+                        // Do nothing - focus only changes on click
+                    }
+                    FocusMode::Hover => {
+                        // Always focus on hover
+                        if let Some(hovered_id) = self.focus_registry.find_at_position(pos.0, pos.1) {
+                            if self.focused_id.as_ref() != Some(&hovered_id) {
+                                let cmd = Command::set_focus(hovered_id);
+                                self.execute_command(cmd)?;
+                            }
+                        }
+                    }
+                    FocusMode::HoverWhenUnfocused => {
+                        // Only focus on hover if nothing is currently focused
+                        if self.focused_id.is_none() {
+                            if let Some(hovered_id) = self.focus_registry.find_at_position(pos.0, pos.1) {
+                                let cmd = Command::set_focus(hovered_id);
+                                self.execute_command(cmd)?;
+                            }
+                        }
+                    }
+                }
+
                 // Handle hover exit if we moved to a different element
                 if let Some(last_pos) = self.last_hover_pos {
                     if last_pos != pos {
@@ -473,12 +500,12 @@ impl<A: App> Runtime<A> {
         self.focus_registry.clear();
 
         // Get the view from the app
-        let view = A::view(&self.state, &self.theme);
+        let view = A::view(&self.state, &self.config.theme);
 
         // Render the view
         Renderer::render(
             frame,
-            &self.theme,
+            &self.config.theme,
             &mut self.registry,
             &mut self.focus_registry,
             self.focused_id.as_ref(),
