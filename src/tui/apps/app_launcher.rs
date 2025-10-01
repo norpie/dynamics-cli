@@ -11,7 +11,7 @@ pub struct AppLauncher;
 #[derive(Clone)]
 pub enum Msg {
     LaunchApp(usize),
-    ListKeyPressed(KeyCode),
+    ListNavigate(KeyCode),
 }
 
 pub struct State {
@@ -75,16 +75,7 @@ impl App for AppLauncher {
                     Command::None
                 }
             }
-            Msg::ListKeyPressed(key) => {
-                // Check for Enter first (activation)
-                if key == KeyCode::Enter {
-                    if let Some(idx) = state.list_state.selected() {
-                        return Command::Batch(vec![
-                            Self::update(state, Msg::LaunchApp(idx)),
-                        ]);
-                    }
-                }
-
+            Msg::ListNavigate(key) => {
                 // Handle list navigation
                 let visible_height = 20; // Approximate, will be corrected during render
                 state.list_state.handle_key(key, state.apps.len(), visible_height);
@@ -101,6 +92,7 @@ impl App for AppLauncher {
             theme,
         )
         .on_activate(Msg::LaunchApp)
+        .on_navigate(Msg::ListNavigate)
         .build();
 
         // Wrap list in panel to ensure consistent border
@@ -145,15 +137,8 @@ impl App for AppLauncher {
     }
 
     fn subscriptions(state: &State) -> Vec<Subscription<Msg>> {
-        vec![
-            Subscription::keyboard(KeyCode::Up, "Navigate up", Msg::ListKeyPressed(KeyCode::Up)),
-            Subscription::keyboard(KeyCode::Down, "Navigate down", Msg::ListKeyPressed(KeyCode::Down)),
-            Subscription::keyboard(KeyCode::Enter, "Launch app", Msg::ListKeyPressed(KeyCode::Enter)),
-            Subscription::keyboard(KeyCode::Home, "First app", Msg::ListKeyPressed(KeyCode::Home)),
-            Subscription::keyboard(KeyCode::End, "Last app", Msg::ListKeyPressed(KeyCode::End)),
-            Subscription::keyboard(KeyCode::PageUp, "Page up", Msg::ListKeyPressed(KeyCode::PageUp)),
-            Subscription::keyboard(KeyCode::PageDown, "Page down", Msg::ListKeyPressed(KeyCode::PageDown)),
-        ]
+        // Navigation is handled via focus system - no keyboard subscriptions needed
+        vec![]
     }
 
     fn title() -> &'static str {

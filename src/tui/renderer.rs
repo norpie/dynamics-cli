@@ -223,18 +223,25 @@ impl Renderer {
         })
     }
 
-    /// Create on_key handler for lists (Enter activates selected item)
+    /// Create on_key handler for lists (navigation and activation)
     fn list_on_key<Msg: Clone + Send + 'static>(
-        _item_count: usize,
-        _on_select: Option<fn(usize) -> Msg>,
+        selected: Option<usize>,
+        on_navigate: Option<fn(KeyCode) -> Msg>,
         on_activate: Option<fn(usize) -> Msg>,
     ) -> Box<dyn Fn(KeyCode) -> Option<Msg> + Send> {
         Box::new(move |key| match key {
+            // Navigation keys - handled by on_navigate callback
+            KeyCode::Up | KeyCode::Down | KeyCode::PageUp | KeyCode::PageDown
+            | KeyCode::Home | KeyCode::End => {
+                on_navigate.map(|f| f(key))
+            }
+            // Enter activates selected item
             KeyCode::Enter => {
-                // Note: We can't access the current selection here because it's in app state
-                // The app will handle this via on_activate callback
-                // For now, Enter is handled by the app's subscription
-                None
+                if let (Some(idx), Some(activate)) = (selected, on_activate) {
+                    Some(activate(idx))
+                } else {
+                    None
+                }
             }
             _ => None,
         })
@@ -445,6 +452,7 @@ impl Renderer {
                 scroll_offset,
                 on_select,
                 on_activate,
+                on_navigate,
                 on_focus,
                 on_blur,
             } => {
@@ -452,7 +460,7 @@ impl Renderer {
                 focus_registry.register_focusable(FocusableInfo {
                     id: id.clone(),
                     rect: area,
-                    on_key: Self::list_on_key(items.len(), on_select.clone(), on_activate.clone()),
+                    on_key: Self::list_on_key(*selected, on_navigate.clone(), on_activate.clone()),
                     on_focus: on_focus.clone(),
                     on_blur: on_blur.clone(),
                     inside_panel,

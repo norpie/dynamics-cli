@@ -127,6 +127,7 @@ pub enum Element<Msg> {
         scroll_offset: usize,
         on_select: Option<fn(usize) -> Msg>,
         on_activate: Option<fn(usize) -> Msg>,
+        on_navigate: Option<fn(crossterm::event::KeyCode) -> Msg>,
         on_focus: Option<Msg>,
         on_blur: Option<Msg>,
     },
@@ -317,6 +318,7 @@ impl<Msg> Element<Msg> {
             scroll_offset: state.scroll_offset(),
             on_select: None,
             on_activate: None,
+            on_navigate: None,
             on_focus: None,
             on_blur: None,
         }
@@ -496,6 +498,7 @@ pub struct ListBuilder<Msg> {
     scroll_offset: usize,
     on_select: Option<fn(usize) -> Msg>,
     on_activate: Option<fn(usize) -> Msg>,
+    on_navigate: Option<fn(crossterm::event::KeyCode) -> Msg>,
     on_focus: Option<Msg>,
     on_blur: Option<Msg>,
 }
@@ -508,6 +511,11 @@ impl<Msg> ListBuilder<Msg> {
 
     pub fn on_activate(mut self, msg: fn(usize) -> Msg) -> Self {
         self.on_activate = Some(msg);
+        self
+    }
+
+    pub fn on_navigate(mut self, msg: fn(crossterm::event::KeyCode) -> Msg) -> Self {
+        self.on_navigate = Some(msg);
         self
     }
 
@@ -529,6 +537,7 @@ impl<Msg> ListBuilder<Msg> {
             scroll_offset: self.scroll_offset,
             on_select: self.on_select,
             on_activate: self.on_activate,
+            on_navigate: self.on_navigate,
             on_focus: self.on_focus,
             on_blur: self.on_blur,
         }
