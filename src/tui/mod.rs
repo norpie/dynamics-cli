@@ -1,4 +1,3 @@
-pub mod theme;
 pub mod command;
 pub mod element;
 pub mod subscription;
@@ -7,11 +6,9 @@ pub mod renderer;
 pub mod runtime;
 pub mod multi_runtime;
 pub mod apps;
-pub mod focus;
-pub mod config;
+pub mod state;
 pub mod widgets;
 
-pub use theme::{Theme, ThemeVariant};
 pub use command::{Command, AppId};
 pub use element::{Element, LayoutConstraint, Layer, Alignment, FocusId};
 pub use subscription::Subscription;
@@ -19,6 +16,5 @@ pub use app::App;
 pub use renderer::{Renderer, InteractionRegistry};
 pub use runtime::{Runtime, AppRuntime};
 pub use multi_runtime::MultiAppRuntime;
-pub use focus::FocusMode;
-pub use config::RuntimeConfig;
+pub use state::{Theme, ThemeVariant, FocusMode, RuntimeConfig};
 pub use widgets::{ListItem, ListState};

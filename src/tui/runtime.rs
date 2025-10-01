@@ -10,8 +10,7 @@ use std::future::Future;
 use crate::tui::{App, AppId, Command, Renderer, InteractionRegistry, Subscription};
 use crate::tui::renderer::{FocusRegistry, FocusableInfo};
 use crate::tui::element::FocusId;
-use crate::tui::config::RuntimeConfig;
-use crate::tui::focus::FocusMode;
+use crate::tui::state::{RuntimeConfig, FocusMode};
 
 /// Trait for runtime operations, allowing type-erased storage of different Runtime<A> types
 pub trait AppRuntime {

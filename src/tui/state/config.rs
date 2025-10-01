@@ -1,5 +1,4 @@
-use crate::tui::{Theme, ThemeVariant};
-use crate::tui::focus::FocusMode;
+use super::{Theme, ThemeVariant, FocusMode};
 
 /// Runtime configuration for TUI behavior and appearance
 ///
