@@ -162,6 +162,17 @@ pub enum Element<Msg> {
         on_focus: Option<Msg>,
         on_blur: Option<Msg>,
     },
+
+    /// Scrollable wrapper for any element
+    Scrollable {
+        id: FocusId,
+        child: Box<Element<Msg>>,
+        scroll_offset: usize,
+        content_height: Option<usize>,   // If None, auto-detect from Column
+        on_scroll: Option<fn(usize) -> Msg>,
+        on_focus: Option<Msg>,
+        on_blur: Option<Msg>,
+    },
 }
 
 impl<Msg> Element<Msg> {
@@ -326,6 +337,7 @@ impl<Msg> Element<Msg> {
             Element::List { .. } => LayoutConstraint::Fill(1),
             Element::TextInput { .. } => LayoutConstraint::Length(1),
             Element::Tree { .. } => LayoutConstraint::Fill(1),
+            Element::Scrollable { .. } => LayoutConstraint::Fill(1),
         }
     }
 
@@ -409,6 +421,23 @@ impl<Msg> Element<Msg> {
             on_select: None,
             on_toggle: None,
             on_navigate: None,
+            on_focus: None,
+            on_blur: None,
+        }
+    }
+
+    /// Create a scrollable wrapper around any element
+    pub fn scrollable(
+        id: FocusId,
+        child: Element<Msg>,
+        state: &crate::tui::widgets::ScrollableState,
+    ) -> ScrollableBuilder<Msg> {
+        ScrollableBuilder {
+            id,
+            child: Box::new(child),
+            scroll_offset: state.scroll_offset(),
+            content_height: None,
+            on_scroll: None,
             on_focus: None,
             on_blur: None,
         }
@@ -766,6 +795,53 @@ impl<Msg> TreeBuilder<Msg> {
             on_select: self.on_select,
             on_toggle: self.on_toggle,
             on_navigate: self.on_navigate,
+            on_focus: self.on_focus,
+            on_blur: self.on_blur,
+        }
+    }
+}
+
+/// Builder for scrollable elements
+pub struct ScrollableBuilder<Msg> {
+    id: FocusId,
+    child: Box<Element<Msg>>,
+    scroll_offset: usize,
+    content_height: Option<usize>,
+    on_scroll: Option<fn(usize) -> Msg>,
+    on_focus: Option<Msg>,
+    on_blur: Option<Msg>,
+}
+
+impl<Msg> ScrollableBuilder<Msg> {
+    /// Set explicit content height (optional, auto-detected for Column)
+    pub fn content_height(mut self, height: usize) -> Self {
+        self.content_height = Some(height);
+        self
+    }
+
+    /// Set callback when scroll position changes
+    pub fn on_scroll(mut self, msg: fn(usize) -> Msg) -> Self {
+        self.on_scroll = Some(msg);
+        self
+    }
+
+    pub fn on_focus(mut self, msg: Msg) -> Self {
+        self.on_focus = Some(msg);
+        self
+    }
+
+    pub fn on_blur(mut self, msg: Msg) -> Self {
+        self.on_blur = Some(msg);
+        self
+    }
+
+    pub fn build(self) -> Element<Msg> {
+        Element::Scrollable {
+            id: self.id,
+            child: self.child,
+            scroll_offset: self.scroll_offset,
+            content_height: self.content_height,
+            on_scroll: self.on_scroll,
             on_focus: self.on_focus,
             on_blur: self.on_blur,
         }

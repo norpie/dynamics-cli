@@ -7,7 +7,8 @@ use anyhow::Result;
 use std::collections::HashMap;
 
 use crate::tui::{AppId, Runtime, AppRuntime, apps::{AppLauncher, Example1, Example2, Example3, Example4, Example5, LoadingScreen, ErrorScreen}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App};
-use crate::tui::element::{ColumnBuilder, RowBuilder};
+use crate::tui::element::{ColumnBuilder, RowBuilder, FocusId};
+use crate::tui::widgets::ScrollableState;
 
 /// Manages multiple app runtimes and handles navigation between them
 pub struct MultiAppRuntime {
@@ -19,7 +20,7 @@ pub struct MultiAppRuntime {
 
     // Global UI state
     help_menu_open: bool,
-    help_scroll_offset: usize,
+    help_scroll_state: ScrollableState,
 }
 
 impl MultiAppRuntime {
@@ -40,7 +41,7 @@ impl MultiAppRuntime {
             runtimes,
             active_app: AppId::AppLauncher,
             help_menu_open: false,
-            help_scroll_offset: 0,
+            help_scroll_state: ScrollableState::new(),
         }
     }
 
@@ -48,7 +49,9 @@ impl MultiAppRuntime {
         // Global keys: F1 toggles help menu
         if key_event.code == KeyCode::F(1) {
             self.help_menu_open = !self.help_menu_open;
-            self.help_scroll_offset = 0; // Reset scroll when opening
+            if self.help_menu_open {
+                self.help_scroll_state.scroll_to_top(); // Reset scroll when opening
+            }
             return Ok(true);
         }
 
@@ -60,19 +63,27 @@ impl MultiAppRuntime {
                     return Ok(true);
                 }
                 KeyCode::Up => {
-                    self.help_scroll_offset = self.help_scroll_offset.saturating_sub(1);
+                    self.help_scroll_state.scroll_up(1);
                     return Ok(true);
                 }
                 KeyCode::Down => {
-                    self.help_scroll_offset = self.help_scroll_offset.saturating_add(1);
+                    self.help_scroll_state.scroll_down(1);
                     return Ok(true);
                 }
                 KeyCode::PageUp => {
-                    self.help_scroll_offset = self.help_scroll_offset.saturating_sub(10);
+                    self.help_scroll_state.page_up();
                     return Ok(true);
                 }
                 KeyCode::PageDown => {
-                    self.help_scroll_offset = self.help_scroll_offset.saturating_add(10);
+                    self.help_scroll_state.page_down();
+                    return Ok(true);
+                }
+                KeyCode::Home => {
+                    self.help_scroll_state.scroll_to_top();
+                    return Ok(true);
+                }
+                KeyCode::End => {
+                    self.help_scroll_state.scroll_to_bottom();
                     return Ok(true);
                 }
                 _ => {
@@ -192,7 +203,7 @@ impl MultiAppRuntime {
         Renderer::render(frame, theme, &mut registry, &mut focus_registry, None, &header, area);
     }
 
-    fn render_help_menu(&self, frame: &mut Frame, area: ratatui::layout::Rect, theme: &Theme) {
+    fn render_help_menu(&mut self, frame: &mut Frame, area: ratatui::layout::Rect, theme: &Theme) {
         // First, render a dim overlay over the entire area
         use ratatui::widgets::Block;
         use ratatui::style::Style;
@@ -286,7 +297,7 @@ impl MultiAppRuntime {
 
         help_items.push(Element::text(""));
         help_items.push(Element::styled_text(Line::from(vec![
-            Span::styled("[ESC to close | ↑↓ to scroll]", Style::default().fg(theme.overlay1))
+            Span::styled("[ESC to close | ↑↓/PgUp/PgDn/Home/End to scroll]", Style::default().fg(theme.overlay1))
         ])).build());
 
         // Calculate modal dimensions and position
@@ -300,21 +311,23 @@ impl MultiAppRuntime {
         };
 
         // Calculate available content height (subtract panel borders + container padding)
-        let content_height = modal_height.saturating_sub(4); // 2 for borders, 2 for padding
+        let content_height = modal_height.saturating_sub(4) as usize; // 2 for borders, 2 for padding
 
-        // Clamp scroll offset to valid range
-        let total_items = help_items.len();
-        let max_scroll = total_items.saturating_sub(content_height as usize);
-        let clamped_scroll = self.help_scroll_offset.min(max_scroll);
+        // Update scroll state dimensions
+        self.help_scroll_state.update_dimensions(help_items.len(), content_height);
 
-        // Only include visible items (virtual scrolling)
-        let visible_items: Vec<_> = help_items
-            .into_iter()
-            .skip(clamped_scroll)
-            .take(content_height as usize)
-            .collect();
+        // Create scrollable column with all items (spacing=0 for dense packing)
+        let mut column_builder = ColumnBuilder::new();
+        for item in help_items {
+            column_builder = column_builder.add(item, LayoutConstraint::Length(1));
+        }
+        let help_column = column_builder.spacing(0).build();
 
-        let help_content = Element::column(visible_items).build();
+        let help_content = Element::scrollable(
+            FocusId::new("help_scroll"),
+            help_column,
+            &self.help_scroll_state,
+        ).build();
 
         // Wrap in panel and center
         let help_modal = Element::panel(
