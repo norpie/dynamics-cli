@@ -533,11 +533,11 @@ fn test_delete_confirmation_flow() {
   - [x] Mouse support (click, scroll)
   - [x] Virtual scrolling optimization
   - [ ] Tests
-- [ ] Implement TextInput widget
-  - [ ] Text editing (insert, delete, cursor movement)
-  - [ ] Placeholder text
-  - [ ] Password mode
-  - [ ] Max length validation
+- [x] Implement TextInput widget
+  - [x] Text editing (insert, delete, cursor movement)
+  - [x] Placeholder text
+  - [x] Max length validation
+  - [x] Borderless design (wraps in Panel for label + border)
   - [ ] Tests
 - [ ] Implement Tree widget
   - [ ] Hierarchical data structure
