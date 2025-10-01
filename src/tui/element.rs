@@ -1,6 +1,17 @@
 use ratatui::style::Style;
 use ratatui::text::Line;
 
+/// Stable identifier for focusable UI elements
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FocusId(pub &'static str);
+
+impl FocusId {
+    /// Create a new FocusId with a static string identifier
+    pub const fn new(id: &'static str) -> Self {
+        Self(id)
+    }
+}
+
 /// Alignment options for positioned elements
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Alignment {
@@ -69,10 +80,13 @@ pub enum Element<Msg> {
 
     /// Interactive button
     Button {
+        id: FocusId,
         label: String,
         on_press: Option<Msg>,
         on_hover: Option<Msg>,
         on_hover_exit: Option<Msg>,
+        on_focus: Option<Msg>,
+        on_blur: Option<Msg>,
         style: Option<Style>,
     },
 
@@ -121,12 +135,15 @@ impl<Msg> Element<Msg> {
     }
 
     /// Create a button element
-    pub fn button(label: impl Into<String>) -> ButtonBuilder<Msg> {
+    pub fn button(id: FocusId, label: impl Into<String>) -> ButtonBuilder<Msg> {
         ButtonBuilder {
+            id,
             label: label.into(),
             on_press: None,
             on_hover: None,
             on_hover_exit: None,
+            on_focus: None,
+            on_blur: None,
             style: None,
         }
     }
@@ -185,14 +202,16 @@ impl<Msg> Element<Msg> {
         background: Element<Msg>,
         title: impl Into<String>,
         message: impl Into<String>,
-        on_confirm: Msg,
+        cancel_id: FocusId,
         on_cancel: Msg,
+        confirm_id: FocusId,
+        on_confirm: Msg,
     ) -> Self {
         use crate::tui::element::RowBuilder;
 
         let button_row = RowBuilder::new()
             .add(
-                Element::button("Cancel").on_press(on_cancel).build(),
+                Element::button(cancel_id, "Cancel").on_press(on_cancel).build(),
                 LayoutConstraint::Fill(1),
             )
             .add(
@@ -200,7 +219,7 @@ impl<Msg> Element<Msg> {
                 LayoutConstraint::Length(2),
             )
             .add(
-                Element::button("Confirm").on_press(on_confirm).build(),
+                Element::button(confirm_id, "Confirm").on_press(on_confirm).build(),
                 LayoutConstraint::Fill(1),
             )
             .spacing(0)
@@ -262,10 +281,13 @@ impl<Msg> Element<Msg> {
 
 /// Builder for button elements
 pub struct ButtonBuilder<Msg> {
+    id: FocusId,
     label: String,
     on_press: Option<Msg>,
     on_hover: Option<Msg>,
     on_hover_exit: Option<Msg>,
+    on_focus: Option<Msg>,
+    on_blur: Option<Msg>,
     style: Option<Style>,
 }
 
@@ -285,6 +307,16 @@ impl<Msg> ButtonBuilder<Msg> {
         self
     }
 
+    pub fn on_focus(mut self, msg: Msg) -> Self {
+        self.on_focus = Some(msg);
+        self
+    }
+
+    pub fn on_blur(mut self, msg: Msg) -> Self {
+        self.on_blur = Some(msg);
+        self
+    }
+
     pub fn style(mut self, style: Style) -> Self {
         self.style = Some(style);
         self
@@ -292,10 +324,13 @@ impl<Msg> ButtonBuilder<Msg> {
 
     pub fn build(self) -> Element<Msg> {
         Element::Button {
+            id: self.id,
             label: self.label,
             on_press: self.on_press,
             on_hover: self.on_hover,
             on_hover_exit: self.on_hover_exit,
+            on_focus: self.on_focus,
+            on_blur: self.on_blur,
             style: self.style,
         }
     }

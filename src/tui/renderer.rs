@@ -4,8 +4,10 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
     style::Style,
 };
+use crossterm::event::KeyCode;
 use std::collections::HashMap;
 use crate::tui::{Element, Theme, LayoutConstraint, Layer, Alignment as LayerAlignment};
+use crate::tui::element::FocusId;
 
 /// Stores interaction handlers for UI elements
 /// Maps (Rect, InteractionType) -> Message
@@ -77,18 +79,130 @@ impl<Msg: Clone> InteractionRegistry<Msg> {
     }
 }
 
+/// Information about a focusable element
+pub struct FocusableInfo<Msg> {
+    pub id: FocusId,
+    pub rect: Rect,
+    pub on_key: Box<dyn Fn(KeyCode) -> Option<Msg> + Send>,
+    pub on_focus: Option<Msg>,
+    pub on_blur: Option<Msg>,
+}
+
+/// Focus context for a single layer in the UI
+pub struct LayerFocusContext<Msg> {
+    pub layer_index: usize,
+    pub focusables: Vec<FocusableInfo<Msg>>,
+}
+
+/// Stores focus information for UI elements, organized by layer
+pub struct FocusRegistry<Msg> {
+    layers: Vec<LayerFocusContext<Msg>>,
+}
+
+impl<Msg: Clone> FocusRegistry<Msg> {
+    pub fn new() -> Self {
+        Self {
+            layers: vec![LayerFocusContext {
+                layer_index: 0,
+                focusables: Vec::new(),
+            }],
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.layers.clear();
+        self.layers.push(LayerFocusContext {
+            layer_index: 0,
+            focusables: Vec::new(),
+        });
+    }
+
+    pub fn push_layer(&mut self, layer_index: usize) {
+        self.layers.push(LayerFocusContext {
+            layer_index,
+            focusables: Vec::new(),
+        });
+    }
+
+    pub fn pop_layer(&mut self) {
+        if self.layers.len() > 1 {
+            self.layers.pop();
+        }
+    }
+
+    fn current_layer_mut(&mut self) -> &mut LayerFocusContext<Msg> {
+        self.layers.last_mut().expect("FocusRegistry should always have at least one layer")
+    }
+
+    pub fn register_focusable(&mut self, info: FocusableInfo<Msg>) {
+        // Check for duplicate IDs and warn/panic
+        if self.current_layer_mut().focusables.iter().any(|f| f.id == info.id) {
+            #[cfg(debug_assertions)]
+            panic!("Duplicate FocusId detected: {:?}. Each focusable element must have a unique ID within its layer.", info.id);
+
+            #[cfg(not(debug_assertions))]
+            eprintln!("WARNING: Duplicate FocusId: {:?} - last registration wins", info.id);
+        }
+
+        self.current_layer_mut().focusables.push(info);
+    }
+
+    pub fn active_layer(&self) -> Option<&LayerFocusContext<Msg>> {
+        self.layers.last()
+    }
+
+    pub fn find_in_active_layer(&self, id: &FocusId) -> Option<&FocusableInfo<Msg>> {
+        self.active_layer()?.focusables.iter().find(|f| &f.id == id)
+    }
+
+    pub fn focusable_ids_in_active_layer(&self) -> Vec<FocusId> {
+        self.active_layer()
+            .map(|layer| layer.focusables.iter().map(|f| f.id.clone()).collect())
+            .unwrap_or_default()
+    }
+
+    pub fn find_at_position(&self, x: u16, y: u16) -> Option<FocusId> {
+        self.active_layer()?
+            .focusables
+            .iter()
+            .rev()
+            .find(|f| self.point_in_rect(x, y, f.rect))
+            .map(|f| f.id.clone())
+    }
+
+    pub fn contains(&self, id: &FocusId) -> bool {
+        self.layers.iter().any(|layer| {
+            layer.focusables.iter().any(|f| &f.id == id)
+        })
+    }
+
+    fn point_in_rect(&self, x: u16, y: u16, rect: Rect) -> bool {
+        x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height
+    }
+}
+
 /// Renders elements to the terminal
 pub struct Renderer;
 
 impl Renderer {
-    pub fn render<Msg: Clone>(
+    pub fn render<Msg: Clone + Send + 'static>(
         frame: &mut Frame,
         theme: &Theme,
         registry: &mut InteractionRegistry<Msg>,
+        focus_registry: &mut FocusRegistry<Msg>,
+        focused_id: Option<&FocusId>,
         element: &Element<Msg>,
         area: Rect,
     ) {
-        Self::render_element(frame, theme, registry, element, area);
+        Self::render_element(frame, theme, registry, focus_registry, focused_id, element, area);
+    }
+
+    /// Create on_key handler for buttons (Enter or Space activates)
+    fn button_on_key<Msg: Clone + Send + 'static>(on_press: Option<Msg>) -> Box<dyn Fn(KeyCode) -> Option<Msg> + Send> {
+        Box::new(move |key| match key {
+            KeyCode::Enter | KeyCode::Char(' ') => on_press.clone(),
+            _ => None,
+        })
     }
 
     /// Calculate ratatui Constraints from our LayoutConstraints
@@ -130,10 +244,12 @@ impl Renderer {
             .collect()
     }
 
-    fn render_element<Msg: Clone>(
+    fn render_element<Msg: Clone + Send + 'static>(
         frame: &mut Frame,
         theme: &Theme,
         registry: &mut InteractionRegistry<Msg>,
+        focus_registry: &mut FocusRegistry<Msg>,
+        focused_id: Option<&FocusId>,
         element: &Element<Msg>,
         area: Rect,
     ) {
@@ -153,12 +269,24 @@ impl Renderer {
             }
 
             Element::Button {
+                id,
                 label,
                 on_press,
                 on_hover,
                 on_hover_exit,
+                on_focus,
+                on_blur,
                 style,
             } => {
+                // Register in focus registry
+                focus_registry.register_focusable(FocusableInfo {
+                    id: id.clone(),
+                    rect: area,
+                    on_key: Self::button_on_key(on_press.clone()),
+                    on_focus: on_focus.clone(),
+                    on_blur: on_blur.clone(),
+                });
+
                 // Register interaction handlers
                 if let Some(msg) = on_press {
                     registry.register_click(area, msg.clone());
@@ -170,11 +298,19 @@ impl Renderer {
                     registry.register_hover_exit(area, msg.clone());
                 }
 
+                // Check if this button is focused
+                let is_focused = focused_id == Some(id);
+
                 // Render button widget
                 let default_style = Style::default().fg(theme.text);
+                let border_style = if is_focused {
+                    Style::default().fg(theme.blue)
+                } else {
+                    Style::default().fg(theme.overlay0)
+                };
                 let block = Block::default()
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(theme.overlay0));
+                    .border_style(border_style);
                 let widget = Paragraph::new(label.as_str())
                     .block(block)
                     .alignment(Alignment::Center)
@@ -197,7 +333,7 @@ impl Renderer {
 
                 // Render each child
                 for ((_, child), chunk) in items.iter().zip(chunks.iter()) {
-                    Self::render_element(frame, theme, registry, child, *chunk);
+                    Self::render_element(frame, theme, registry, focus_registry, focused_id, child, *chunk);
                 }
             }
 
@@ -216,7 +352,7 @@ impl Renderer {
 
                 // Render each child
                 for ((_, child), chunk) in items.iter().zip(chunks.iter()) {
-                    Self::render_element(frame, theme, registry, child, *chunk);
+                    Self::render_element(frame, theme, registry, focus_registry, focused_id, child, *chunk);
                 }
             }
 
@@ -228,7 +364,7 @@ impl Renderer {
                     width: area.width.saturating_sub(padding * 2),
                     height: area.height.saturating_sub(padding * 2),
                 };
-                Self::render_element(frame, theme, registry, child, padded_area);
+                Self::render_element(frame, theme, registry, focus_registry, focused_id, child, padded_area);
             }
 
             Element::Panel { child, title } => {
@@ -248,12 +384,12 @@ impl Renderer {
                 frame.render_widget(block, area);
 
                 // Render child in the inner area
-                Self::render_element(frame, theme, registry, child, inner_area);
+                Self::render_element(frame, theme, registry, focus_registry, focused_id, child, inner_area);
             }
 
             Element::Stack { layers } => {
-                // Render all layers (visual + interactions)
-                for layer in layers.iter() {
+                // Render all layers visually
+                for (layer_idx, layer) in layers.iter().enumerate() {
                     // Render dim overlay if requested
                     if layer.dim_below {
                         Self::render_dim_overlay(frame, theme, area);
@@ -262,15 +398,26 @@ impl Renderer {
                     // Calculate position based on alignment
                     let layer_area = Self::calculate_layer_position(&layer.element, layer.alignment, area);
 
+                    // Push focus layer context for this stack layer
+                    focus_registry.push_layer(layer_idx);
+
                     // Render the layer element
-                    Self::render_element(frame, theme, registry, &layer.element, layer_area);
+                    Self::render_element(frame, theme, registry, focus_registry, focused_id, &layer.element, layer_area);
+
+                    // Pop focus layer context
+                    focus_registry.pop_layer();
                 }
 
-                // Clear all interactions and re-render topmost layer to register only its interactions
+                // Clear all interactions and focus, then re-render topmost layer to register only its interactions/focus
                 registry.clear();
                 if let Some(last_layer) = layers.last() {
+                    let layer_idx = layers.len() - 1;
                     let layer_area = Self::calculate_layer_position(&last_layer.element, last_layer.alignment, area);
-                    Self::render_element(frame, theme, registry, &last_layer.element, layer_area);
+
+                    // Re-push the topmost layer context
+                    focus_registry.push_layer(layer_idx);
+                    Self::render_element(frame, theme, registry, focus_registry, focused_id, &last_layer.element, layer_area);
+                    focus_registry.pop_layer();
                 }
             }
         }

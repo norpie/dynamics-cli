@@ -3,6 +3,7 @@ use ratatui::text::{Line, Span};
 use ratatui::style::Style;
 use ratatui::prelude::Stylize;
 use crate::tui::{App, AppId, Command, Element, Subscription, Theme, LayoutConstraint};
+use crate::tui::element::FocusId;
 
 pub struct Example1;
 
@@ -82,7 +83,7 @@ impl App for Example1 {
             )
             // Navigation button (3 lines)
             .add(
-                Element::button("[ Press 2 or click to go to Example 2 ]")
+                Element::button(FocusId::new("nav-button"), "[ Press 2 or click to go to Example 2 ]")
                     .on_press(Msg::NavigateToExample2)
                     .on_hover(Msg::ButtonHovered)
                     .on_hover_exit(Msg::ButtonUnhovered)
@@ -92,7 +93,7 @@ impl App for Example1 {
             )
             // Load button (3 lines)
             .add(
-                Element::button("[ Press L to load data async ]")
+                Element::button(FocusId::new("load-button"), "[ Press L to load data async ]")
                     .on_press(Msg::LoadData)
                     .build(),
                 LayoutConstraint::Length(3),

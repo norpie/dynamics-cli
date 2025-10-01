@@ -8,6 +8,8 @@ use std::pin::Pin;
 use std::future::Future;
 
 use crate::tui::{App, AppId, Command, Renderer, InteractionRegistry, Theme, ThemeVariant, Subscription};
+use crate::tui::renderer::{FocusRegistry, FocusableInfo};
+use crate::tui::element::FocusId;
 
 /// Trait for runtime operations, allowing type-erased storage of different Runtime<A> types
 pub trait AppRuntime {
@@ -22,6 +24,8 @@ pub trait AppRuntime {
     fn take_navigation(&mut self) -> Option<AppId>;
     fn take_publishes(&mut self) -> Vec<(String, Value)>;
     fn handle_publish(&mut self, topic: &str, data: Value) -> Result<()>;
+    fn focus_next(&mut self) -> Result<()>;
+    fn focus_previous(&mut self) -> Result<()>;
 }
 
 /// The runtime manages app lifecycle, event routing, and command execution
@@ -34,6 +38,12 @@ pub struct Runtime<A: App> {
 
     /// Interaction registry for mouse events
     registry: InteractionRegistry<A::Msg>,
+
+    /// Focus registry for keyboard focus
+    focus_registry: FocusRegistry<A::Msg>,
+
+    /// Currently focused element ID
+    focused_id: Option<FocusId>,
 
     /// Keyboard subscriptions
     key_subscriptions: HashMap<KeyCode, A::Msg>,
@@ -66,6 +76,8 @@ impl<A: App> Runtime<A> {
             state,
             theme,
             registry: InteractionRegistry::new(),
+            focus_registry: FocusRegistry::new(),
+            focused_id: None,
             key_subscriptions: HashMap::new(),
             event_bus: HashMap::new(),
             timers: Vec::new(),
@@ -122,9 +134,65 @@ impl<A: App> Runtime<A> {
         &self.state
     }
 
+    /// Get the currently focused element ID
+    pub fn get_focused_id(&self) -> Option<&FocusId> {
+        self.focused_id.as_ref()
+    }
+
     /// Set the interaction registry (for mouse events after rendering)
     pub fn set_registry(&mut self, registry: InteractionRegistry<A::Msg>) {
         self.registry = registry;
+    }
+
+    /// Focus the next element (Tab)
+    pub fn focus_next(&mut self) -> Result<()> {
+        let focusable_ids = self.focus_registry.focusable_ids_in_active_layer();
+
+        if focusable_ids.is_empty() {
+            return Ok(());
+        }
+
+        let next_id = if let Some(current_id) = &self.focused_id {
+            if let Some(pos) = focusable_ids.iter().position(|id| id == current_id) {
+                focusable_ids[(pos + 1) % focusable_ids.len()].clone()
+            } else {
+                focusable_ids[0].clone()
+            }
+        } else {
+            focusable_ids[0].clone()
+        };
+
+        let cmd = Command::set_focus(next_id);
+        self.execute_command(cmd)?;
+        Ok(())
+    }
+
+    /// Focus the previous element (Shift-Tab)
+    pub fn focus_previous(&mut self) -> Result<()> {
+        let focusable_ids = self.focus_registry.focusable_ids_in_active_layer();
+
+        if focusable_ids.is_empty() {
+            return Ok(());
+        }
+
+        let prev_id = if let Some(current_id) = &self.focused_id {
+            if let Some(pos) = focusable_ids.iter().position(|id| id == current_id) {
+                let prev_pos = if pos == 0 {
+                    focusable_ids.len() - 1
+                } else {
+                    pos - 1
+                };
+                focusable_ids[prev_pos].clone()
+            } else {
+                focusable_ids[0].clone()
+            }
+        } else {
+            focusable_ids[focusable_ids.len() - 1].clone()
+        };
+
+        let cmd = Command::set_focus(prev_id);
+        self.execute_command(cmd)?;
+        Ok(())
     }
 
     /// Poll timer subscriptions and fire those that are ready
@@ -210,7 +278,33 @@ impl<A: App> Runtime<A> {
             return Ok(true);
         }
 
-        // Check if we have a subscription for this key
+        // Special handling for Escape: blur focused element first
+        if key_event.code == KeyCode::Esc {
+            if let Some(focused_id) = self.focused_id.take() {
+                // Send blur message to focused element
+                if let Some(focusable) = self.focus_registry.find_in_active_layer(&focused_id) {
+                    if let Some(on_blur) = focusable.on_blur.clone() {
+                        let command = A::update(&mut self.state, on_blur);
+                        self.execute_command(command)?;
+                    }
+                }
+                // Focus cleared, Escape consumed
+                return Ok(true);
+            }
+            // Nothing focused, fall through to app subscriptions
+        }
+
+        // If there's a focused element, try routing the key to it first
+        if let Some(focused_id) = &self.focused_id {
+            if let Some(focusable) = self.focus_registry.find_in_active_layer(focused_id) {
+                if let Some(msg) = (focusable.on_key)(key_event.code) {
+                    let command = A::update(&mut self.state, msg);
+                    return self.execute_command(command);
+                }
+            }
+        }
+
+        // No focused element handled it, check global subscriptions
         if let Some(msg) = self.key_subscriptions.get(&key_event.code).cloned() {
             let command = A::update(&mut self.state, msg);
             return self.execute_command(command);
@@ -225,6 +319,22 @@ impl<A: App> Runtime<A> {
 
         match mouse_event.kind {
             MouseEventKind::Down(MouseButton::Left) => {
+                // STEP 1: Handle focus change
+                if let Some(clicked_id) = self.focus_registry.find_at_position(pos.0, pos.1) {
+                    // Clicked on focusable element - focus it if not already focused
+                    if self.focused_id.as_ref() != Some(&clicked_id) {
+                        let cmd = Command::set_focus(clicked_id);
+                        self.execute_command(cmd)?;
+                    }
+                } else {
+                    // Clicked on non-focusable area - clear focus
+                    if self.focused_id.is_some() {
+                        let cmd = Command::clear_focus();
+                        self.execute_command(cmd)?;
+                    }
+                }
+
+                // STEP 2: Handle click action
                 if let Some(msg) = self.registry.find_click(pos.0, pos.1) {
                     let command = A::update(&mut self.state, msg);
                     return self.execute_command(command);
@@ -310,6 +420,43 @@ impl<A: App> Runtime<A> {
                 self.pending_async.push(future);
                 Ok(true)
             }
+
+            Command::SetFocus(id) => {
+                // Send blur to currently focused element (if any)
+                if let Some(old_id) = self.focused_id.take() {
+                    if let Some(focusable) = self.focus_registry.find_in_active_layer(&old_id) {
+                        if let Some(on_blur) = focusable.on_blur.clone() {
+                            let cmd = A::update(&mut self.state, on_blur);
+                            self.execute_command(cmd)?;
+                        }
+                    }
+                }
+
+                // Set new focus
+                self.focused_id = Some(id.clone());
+
+                // Send focus message to new element
+                if let Some(focusable) = self.focus_registry.find_in_active_layer(&id) {
+                    if let Some(on_focus) = focusable.on_focus.clone() {
+                        let cmd = A::update(&mut self.state, on_focus);
+                        self.execute_command(cmd)?;
+                    }
+                }
+
+                Ok(true)
+            }
+
+            Command::ClearFocus => {
+                if let Some(old_id) = self.focused_id.take() {
+                    if let Some(focusable) = self.focus_registry.find_in_active_layer(&old_id) {
+                        if let Some(on_blur) = focusable.on_blur.clone() {
+                            let cmd = A::update(&mut self.state, on_blur);
+                            self.execute_command(cmd)?;
+                        }
+                    }
+                }
+                Ok(true)
+            }
         }
     }
 
@@ -321,14 +468,31 @@ impl<A: App> Runtime<A> {
 
     /// Render the app to a specific area
     pub fn render_to_area(&mut self, frame: &mut Frame, area: ratatui::layout::Rect) {
-        // Clear registry for this frame
+        // Clear registries for this frame
         self.registry.clear();
+        self.focus_registry.clear();
 
         // Get the view from the app
         let view = A::view(&self.state, &self.theme);
 
         // Render the view
-        Renderer::render(frame, &self.theme, &mut self.registry, &view, area);
+        Renderer::render(
+            frame,
+            &self.theme,
+            &mut self.registry,
+            &mut self.focus_registry,
+            self.focused_id.as_ref(),
+            &view,
+            area,
+        );
+
+        // Check if focused element still exists in the tree
+        if let Some(focused_id) = &self.focused_id {
+            if !self.focus_registry.contains(focused_id) {
+                // Element removed while focused, clear focus
+                self.focused_id = None;
+            }
+        }
     }
 }
 
@@ -381,5 +545,13 @@ where
 
     fn handle_publish(&mut self, topic: &str, data: Value) -> Result<()> {
         Runtime::handle_publish(self, topic, data)
+    }
+
+    fn focus_next(&mut self) -> Result<()> {
+        Runtime::focus_next(self)
+    }
+
+    fn focus_previous(&mut self) -> Result<()> {
+        Runtime::focus_previous(self)
     }
 }

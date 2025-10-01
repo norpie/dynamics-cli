@@ -2,7 +2,7 @@ use ratatui::Frame;
 use ratatui::text::{Line, Span};
 use ratatui::style::Style;
 use ratatui::prelude::Stylize;
-use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use anyhow::Result;
 use std::collections::HashMap;
 
@@ -76,6 +76,21 @@ impl MultiAppRuntime {
                     return Ok(true);
                 }
             }
+        }
+
+        // Global Tab/Shift-Tab navigation (before app-specific handling)
+        if key_event.code == KeyCode::Tab {
+            let runtime = self.runtimes
+                .get_mut(&self.active_app)
+                .expect("Active app not found in runtimes");
+
+            if key_event.modifiers.contains(KeyModifiers::SHIFT) {
+                runtime.focus_previous()?;
+            } else {
+                runtime.focus_next()?;
+            }
+
+            return Ok(true);
         }
 
         // Normal: delegate to active app
@@ -167,8 +182,10 @@ impl MultiAppRuntime {
         .build();
 
         use crate::tui::{Renderer, InteractionRegistry};
+        use crate::tui::renderer::FocusRegistry;
         let mut registry: InteractionRegistry<()> = InteractionRegistry::new();
-        Renderer::render(frame, theme, &mut registry, &header, area);
+        let mut focus_registry: FocusRegistry<()> = FocusRegistry::new();
+        Renderer::render(frame, theme, &mut registry, &mut focus_registry, None, &header, area);
     }
 
     fn render_help_menu(&self, frame: &mut Frame, area: ratatui::layout::Rect, theme: &Theme) {
@@ -324,7 +341,9 @@ impl MultiAppRuntime {
             height: modal_height,
         };
 
-        Renderer::render(frame, theme, &mut registry, &help_modal, modal_area);
+        use crate::tui::renderer::FocusRegistry;
+        let mut focus_registry: FocusRegistry<()> = FocusRegistry::new();
+        Renderer::render(frame, theme, &mut registry, &mut focus_registry, None, &help_modal, modal_area);
     }
 
     /// Poll async commands for all apps

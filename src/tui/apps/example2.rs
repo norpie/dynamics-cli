@@ -3,6 +3,7 @@ use ratatui::text::{Line, Span};
 use ratatui::style::Style;
 use ratatui::prelude::Stylize;
 use crate::tui::{App, AppId, Command, Element, Subscription, Theme};
+use crate::tui::element::FocusId;
 
 pub struct Example2;
 
@@ -207,21 +208,21 @@ impl App for Example2 {
         let main_ui = Element::column(vec![
             Element::text("Example 2 - Modal Confirmation Demo!"),
             Element::text(""),
-            Element::button("[ Press 1 or click to go to Example 1 ]")
+            Element::button(FocusId::new("nav-button"), "[ Press 1 or click to go to Example 1 ]")
                 .on_press(Msg::RequestNavigate)
                 .on_hover(Msg::ButtonHovered)
                 .on_hover_exit(Msg::ButtonUnhovered)
                 .style(button_style)
                 .build(),
             Element::text(""),
-            Element::button("[ Press L to load data (cancellable) ]")
+            Element::button(FocusId::new("load-button"), "[ Press L to load data (cancellable) ]")
                 .on_press(Msg::StartLoading)
                 .on_hover(Msg::LoadButtonHovered)
                 .on_hover_exit(Msg::LoadButtonUnhovered)
                 .style(load_button_style)
                 .build(),
             Element::text(""),
-            Element::button("[ Press F to fail loading (uncancellable) ]")
+            Element::button(FocusId::new("fail-button"), "[ Press F to fail loading (uncancellable) ]")
                 .on_press(Msg::StartFailingLoad)
                 .on_hover(Msg::FailLoadButtonHovered)
                 .on_hover_exit(Msg::FailLoadButtonUnhovered)
@@ -240,8 +241,10 @@ impl App for Example2 {
                 main_ui,
                 "Confirm Navigation",
                 "Are you sure you want to navigate to Example 1?",
-                Msg::ConfirmNavigate,
+                FocusId::new("modal-cancel"),
                 Msg::CancelNavigate,
+                FocusId::new("modal-confirm"),
+                Msg::ConfirmNavigate,
             )
         } else {
             main_ui

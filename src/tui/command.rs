@@ -1,6 +1,7 @@
 use std::future::Future;
 use std::pin::Pin;
 use serde_json::Value;
+use crate::tui::element::FocusId;
 
 /// Commands represent side effects that apps want to perform.
 /// They are returned from the update() function and executed by the runtime.
@@ -19,6 +20,12 @@ pub enum Command<Msg> {
 
     /// Publish an event to the event bus
     Publish { topic: String, data: Value },
+
+    /// Set focus to a specific element
+    SetFocus(FocusId),
+
+    /// Clear focus from all elements
+    ClearFocus,
 
     /// Quit the application
     Quit,
@@ -62,6 +69,16 @@ impl<Msg> Command<Msg> {
     /// Helper to batch multiple commands
     pub fn batch(commands: Vec<Command<Msg>>) -> Self {
         Command::Batch(commands)
+    }
+
+    /// Helper to set focus to an element
+    pub fn set_focus(id: FocusId) -> Self {
+        Command::SetFocus(id)
+    }
+
+    /// Helper to clear focus from all elements
+    pub fn clear_focus() -> Self {
+        Command::ClearFocus
     }
 }
 
