@@ -86,6 +86,7 @@ pub struct FocusableInfo<Msg> {
     pub on_key: Box<dyn Fn(KeyCode) -> Option<Msg> + Send>,
     pub on_focus: Option<Msg>,
     pub on_blur: Option<Msg>,
+    pub inside_panel: bool,  // True if this element is inside a Panel
 }
 
 /// Focus context for a single layer in the UI
@@ -194,7 +195,24 @@ impl Renderer {
         element: &Element<Msg>,
         area: Rect,
     ) {
-        Self::render_element(frame, theme, registry, focus_registry, focused_id, element, area);
+        Self::render_element(frame, theme, registry, focus_registry, focused_id, element, area, false);
+    }
+
+    /// Check if an element or its descendants contain a focusable with the given ID
+    fn element_contains_focus<Msg>(element: &Element<Msg>, focused_id: &FocusId) -> bool {
+        match element {
+            Element::Button { id, .. } | Element::List { id, .. } => id == focused_id,
+            Element::Column { items, .. } | Element::Row { items, .. } => {
+                items.iter().any(|(_, child)| Self::element_contains_focus(child, focused_id))
+            }
+            Element::Container { child, .. } | Element::Panel { child, .. } => {
+                Self::element_contains_focus(child, focused_id)
+            }
+            Element::Stack { layers } => {
+                layers.iter().any(|layer| Self::element_contains_focus(&layer.element, focused_id))
+            }
+            _ => false,
+        }
     }
 
     /// Create on_key handler for buttons (Enter or Space activates)
@@ -269,6 +287,7 @@ impl Renderer {
         focused_id: Option<&FocusId>,
         element: &Element<Msg>,
         area: Rect,
+        inside_panel: bool,
     ) {
         match element {
             Element::None => {}
@@ -302,6 +321,7 @@ impl Renderer {
                     on_key: Self::button_on_key(on_press.clone()),
                     on_focus: on_focus.clone(),
                     on_blur: on_blur.clone(),
+                    inside_panel,
                 });
 
                 // Register interaction handlers
@@ -320,8 +340,10 @@ impl Renderer {
 
                 // Render button widget
                 let default_style = Style::default().fg(theme.text);
-                let border_style = if is_focused {
-                    Style::default().fg(theme.blue)
+                // Only show focus border on button itself if NOT inside a panel
+                // (panels will show focus on their border instead)
+                let border_style = if is_focused && !inside_panel {
+                    Style::default().fg(theme.lavender)
                 } else {
                     Style::default().fg(theme.overlay0)
                 };
@@ -350,7 +372,7 @@ impl Renderer {
 
                 // Render each child
                 for ((_, child), chunk) in items.iter().zip(chunks.iter()) {
-                    Self::render_element(frame, theme, registry, focus_registry, focused_id, child, *chunk);
+                    Self::render_element(frame, theme, registry, focus_registry, focused_id, child, *chunk, inside_panel);
                 }
             }
 
@@ -369,7 +391,7 @@ impl Renderer {
 
                 // Render each child
                 for ((_, child), chunk) in items.iter().zip(chunks.iter()) {
-                    Self::render_element(frame, theme, registry, focus_registry, focused_id, child, *chunk);
+                    Self::render_element(frame, theme, registry, focus_registry, focused_id, child, *chunk, inside_panel);
                 }
             }
 
@@ -381,27 +403,39 @@ impl Renderer {
                     width: area.width.saturating_sub(padding * 2),
                     height: area.height.saturating_sub(padding * 2),
                 };
-                Self::render_element(frame, theme, registry, focus_registry, focused_id, child, padded_area);
+                Self::render_element(frame, theme, registry, focus_registry, focused_id, child, padded_area, inside_panel);
             }
 
             Element::Panel { child, title } => {
+                // Check if the child (or any descendant) contains the focused element
+                let child_has_focus = focused_id
+                    .map(|fid| Self::element_contains_focus(child, fid))
+                    .unwrap_or(false);
+
+                // Use focus color for panel border if child is focused
+                let border_color = if child_has_focus {
+                    theme.lavender
+                } else {
+                    theme.overlay0
+                };
+
                 // Render border block
                 let block = if let Some(title_text) = title {
                     Block::default()
                         .borders(Borders::ALL)
-                        .border_style(Style::default().fg(theme.overlay0))
+                        .border_style(Style::default().fg(border_color))
                         .title(title_text.as_str())
                 } else {
                     Block::default()
                         .borders(Borders::ALL)
-                        .border_style(Style::default().fg(theme.overlay0))
+                        .border_style(Style::default().fg(border_color))
                 };
 
                 let inner_area = block.inner(area);
                 frame.render_widget(block, area);
 
-                // Render child in the inner area
-                Self::render_element(frame, theme, registry, focus_registry, focused_id, child, inner_area);
+                // Render child in the inner area, marking it as inside a panel
+                Self::render_element(frame, theme, registry, focus_registry, focused_id, child, inner_area, true);
             }
 
             Element::List {
@@ -421,6 +455,7 @@ impl Renderer {
                     on_key: Self::list_on_key(items.len(), on_select.clone(), on_activate.clone()),
                     on_focus: on_focus.clone(),
                     on_blur: on_blur.clone(),
+                    inside_panel,
                 });
 
                 // Check if this list is focused
@@ -455,7 +490,7 @@ impl Renderer {
 
                     // Render each visible item
                     for ((_, child), chunk) in visible_items.iter().zip(chunks.iter()) {
-                        Self::render_element(frame, theme, registry, focus_registry, focused_id, child, *chunk);
+                        Self::render_element(frame, theme, registry, focus_registry, focused_id, child, *chunk, inside_panel);
                     }
                 }
 
@@ -487,11 +522,12 @@ impl Renderer {
                     }
                 }
 
-                // Render border if focused
-                if is_focused {
+                // Only render focus border if NOT inside a panel
+                // (panels will show focus on their border instead)
+                if is_focused && !inside_panel {
                     let border = Block::default()
                         .borders(Borders::ALL)
-                        .border_style(Style::default().fg(theme.blue));
+                        .border_style(Style::default().fg(theme.lavender));
                     frame.render_widget(border, area);
                 }
             }
@@ -511,7 +547,7 @@ impl Renderer {
                     focus_registry.push_layer(layer_idx);
 
                     // Render the layer element
-                    Self::render_element(frame, theme, registry, focus_registry, focused_id, &layer.element, layer_area);
+                    Self::render_element(frame, theme, registry, focus_registry, focused_id, &layer.element, layer_area, inside_panel);
 
                     // Pop focus layer context
                     focus_registry.pop_layer();
@@ -525,7 +561,7 @@ impl Renderer {
 
                     // Re-push the topmost layer context
                     focus_registry.push_layer(layer_idx);
-                    Self::render_element(frame, theme, registry, focus_registry, focused_id, &last_layer.element, layer_area);
+                    Self::render_element(frame, theme, registry, focus_registry, focused_id, &last_layer.element, layer_area, inside_panel);
                     focus_registry.pop_layer();
                 }
             }
