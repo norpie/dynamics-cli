@@ -386,6 +386,42 @@ impl<A: App> Runtime<A> {
 
                 self.last_hover_pos = Some(pos);
             }
+            MouseEventKind::ScrollUp => {
+                // Scroll up - send as Up arrow key to focused element
+                if let Some(focused_id) = &self.focused_id {
+                    if let Some(focusable) = self.focus_registry.find_in_active_layer(focused_id) {
+                        // Check if scroll happened over the focused element
+                        if pos.0 >= focusable.rect.x
+                            && pos.0 < focusable.rect.x + focusable.rect.width
+                            && pos.1 >= focusable.rect.y
+                            && pos.1 < focusable.rect.y + focusable.rect.height
+                        {
+                            if let Some(msg) = (focusable.on_key)(KeyCode::Up) {
+                                let command = A::update(&mut self.state, msg);
+                                return self.execute_command(command);
+                            }
+                        }
+                    }
+                }
+            }
+            MouseEventKind::ScrollDown => {
+                // Scroll down - send as Down arrow key to focused element
+                if let Some(focused_id) = &self.focused_id {
+                    if let Some(focusable) = self.focus_registry.find_in_active_layer(focused_id) {
+                        // Check if scroll happened over the focused element
+                        if pos.0 >= focusable.rect.x
+                            && pos.0 < focusable.rect.x + focusable.rect.width
+                            && pos.1 >= focusable.rect.y
+                            && pos.1 < focusable.rect.y + focusable.rect.height
+                        {
+                            if let Some(msg) = (focusable.on_key)(KeyCode::Down) {
+                                let command = A::update(&mut self.state, msg);
+                                return self.execute_command(command);
+                            }
+                        }
+                    }
+                }
+            }
             _ => {}
         }
 

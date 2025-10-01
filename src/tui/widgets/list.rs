@@ -20,6 +20,7 @@ pub struct ListState {
     selected: Option<usize>,
     scroll_offset: usize,
     scroll_off: usize, // Rows from edge before scrolling (like vim scrolloff)
+    wrap_around: bool, // Wrap to bottom/top when reaching edges
 }
 
 impl Default for ListState {
@@ -35,6 +36,7 @@ impl ListState {
             selected: None,
             scroll_offset: 0,
             scroll_off: 3,
+            wrap_around: true,
         }
     }
 
@@ -44,12 +46,19 @@ impl ListState {
             selected: Some(0),
             scroll_offset: 0,
             scroll_off: 3,
+            wrap_around: true,
         }
     }
 
     /// Set the scroll-off distance (rows from edge before scrolling)
     pub fn with_scroll_off(mut self, scroll_off: usize) -> Self {
         self.scroll_off = scroll_off;
+        self
+    }
+
+    /// Enable or disable wrap-around navigation
+    pub fn with_wrap_around(mut self, wrap_around: bool) -> Self {
+        self.wrap_around = wrap_around;
         self
     }
 
@@ -76,7 +85,7 @@ impl ListState {
 
         match key {
             KeyCode::Up => {
-                self.move_up();
+                self.move_up(item_count);
                 true
             }
             KeyCode::Down => {
@@ -103,7 +112,11 @@ impl ListState {
         }
     }
 
-    fn move_up(&mut self) {
+    fn move_up(&mut self, item_count: usize) {
+        if item_count == 0 {
+            return;
+        }
+
         if let Some(sel) = self.selected {
             if sel > 0 {
                 self.selected = Some(sel - 1);
@@ -111,6 +124,9 @@ impl ListState {
                 if (sel as isize - self.scroll_offset as isize) <= self.scroll_off as isize {
                     self.scroll_offset = self.scroll_offset.saturating_sub(1);
                 }
+            } else if self.wrap_around {
+                // At top, wrap to bottom
+                self.selected = Some(item_count - 1);
             }
         } else {
             // No selection, select first
@@ -119,14 +135,22 @@ impl ListState {
     }
 
     fn move_down(&mut self, item_count: usize) {
+        if item_count == 0 {
+            return;
+        }
+
         if let Some(sel) = self.selected {
             if sel < item_count - 1 {
                 self.selected = Some(sel + 1);
                 // Adjust scroll if needed (scrolloff logic)
                 // We need visible_height for this, but we'll handle it in the renderer
                 // For now, just update selection
+            } else if self.wrap_around {
+                // At bottom, wrap to top
+                self.selected = Some(0);
+                self.scroll_offset = 0;
             }
-        } else if item_count > 0 {
+        } else {
             // No selection, select first
             self.selected = Some(0);
         }
