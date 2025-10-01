@@ -65,13 +65,13 @@ impl App for ErrorScreen {
         let content = vec![
             Element::styled_text(Line::from(vec![
                 Span::styled("❌ Error", Style::default().fg(theme.red).bold()),
-            ])),
+            ])).build(),
             Element::text(""),
             Element::text(&state.error_message),
             Element::text(""),
             Element::styled_text(Line::from(vec![
                 Span::styled("Press Enter to continue", Style::default().fg(theme.overlay1)),
-            ])),
+            ])).build(),
         ];
 
         // Wrap in panel

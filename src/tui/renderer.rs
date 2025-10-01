@@ -306,8 +306,11 @@ impl Renderer {
                 frame.render_widget(widget, area);
             }
 
-            Element::StyledText { line } => {
-                let widget = Paragraph::new(line.clone());
+            Element::StyledText { line, background } => {
+                let mut widget = Paragraph::new(line.clone());
+                if let Some(bg_style) = background {
+                    widget = widget.style(*bg_style);
+                }
                 frame.render_widget(widget, area);
             }
 
@@ -639,7 +642,7 @@ impl Renderer {
         match element {
             Element::None => (0, 0),
             Element::Text { content, .. } => (content.len() as u16, 1),
-            Element::StyledText { line } => (line.width() as u16, 1),
+            Element::StyledText { line, .. } => (line.width() as u16, 1),
             Element::Button { label, .. } => (label.len() as u16 + 4, 3),
             Element::Panel { .. } => {
                 // For panels (modals), use a reasonable default

@@ -53,15 +53,21 @@ impl ListItem for AppInfo {
     type Msg = Msg;
 
     fn to_element(&self, theme: &Theme, is_selected: bool, _is_hovered: bool) -> Element<Msg> {
-        let style = if is_selected {
-            Style::default().bg(theme.surface0).fg(theme.lavender)
+        let (fg_color, bg_style) = if is_selected {
+            (theme.lavender, Some(Style::default().bg(theme.surface0)))
         } else {
-            Style::default().fg(theme.text)
+            (theme.text, None)
         };
 
-        Element::styled_text(Line::from(vec![
-            Span::styled(format!("  {} - {}", self.name, self.description), style),
-        ]))
+        let mut builder = Element::styled_text(Line::from(vec![
+            Span::styled(format!("  {} - {}", self.name, self.description), Style::default().fg(fg_color)),
+        ]));
+
+        if let Some(bg) = bg_style {
+            builder = builder.background(bg);
+        }
+
+        builder.build()
     }
 }
 

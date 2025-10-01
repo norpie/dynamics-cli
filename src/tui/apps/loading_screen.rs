@@ -241,7 +241,7 @@ impl App for LoadingScreen {
             Span::styled(SPINNER_FRAMES[state.spinner_state], Style::default().fg(theme.sky).bold()),
             Span::raw(" "),
             Span::styled(header_text.clone(), Style::default().fg(theme.sky)),
-        ])));
+        ])).build());
         content.push(Element::text(""));
 
         // Tasks
@@ -256,7 +256,7 @@ impl App for LoadingScreen {
             content.push(Element::styled_text(Line::from(vec![
                 Span::styled(format!(" {} ", symbol), Style::default().fg(color)),
                 Span::styled(task.name.clone(), Style::default().fg(color)),
-            ])));
+            ])).build());
         }
 
         content.push(Element::text(""));
@@ -272,7 +272,7 @@ impl App for LoadingScreen {
 
         content.push(Element::styled_text(Line::from(
             Span::styled(footer_text, Style::default().fg(theme.overlay1))
-        )));
+        )).build());
 
         // Wrap in panel
         Element::panel(

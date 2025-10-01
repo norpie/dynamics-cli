@@ -76,7 +76,10 @@ pub enum Element<Msg> {
     Text { content: String, style: Option<Style> },
 
     /// Styled text with multiple spans
-    StyledText { line: Line<'static> },
+    StyledText {
+        line: Line<'static>,
+        background: Option<Style>,
+    },
 
     /// Interactive button
     Button {
@@ -142,9 +145,13 @@ impl<Msg> Element<Msg> {
         }
     }
 
-    /// Create a styled text element
-    pub fn styled_text(line: Line<'static>) -> Self {
-        Element::StyledText { line }
+    /// Create a styled text element with optional background fill
+    pub fn styled_text(line: Line<'static>) -> StyledTextBuilder<Msg> {
+        StyledTextBuilder {
+            line,
+            background: None,
+            _phantom: std::marker::PhantomData,
+        }
     }
 
     /// Create a button element
@@ -321,6 +328,27 @@ impl<Msg> Element<Msg> {
             on_navigate: None,
             on_focus: None,
             on_blur: None,
+        }
+    }
+}
+
+/// Builder for styled text elements
+pub struct StyledTextBuilder<Msg> {
+    line: Line<'static>,
+    background: Option<Style>,
+    _phantom: std::marker::PhantomData<Msg>,
+}
+
+impl<Msg> StyledTextBuilder<Msg> {
+    pub fn background(mut self, style: Style) -> Self {
+        self.background = Some(style);
+        self
+    }
+
+    pub fn build(self) -> Element<Msg> {
+        Element::StyledText {
+            line: self.line,
+            background: self.background,
         }
     }
 }

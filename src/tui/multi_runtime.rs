@@ -168,10 +168,10 @@ impl MultiAppRuntime {
             Line::from(Span::styled(String::from(title), Style::default().fg(theme.blue).bold()))
         };
 
-        let header_left = Element::styled_text(title_line);
+        let header_left = Element::styled_text(title_line).build();
         let header_right = Element::styled_text(Line::from(vec![
             Span::styled("[?] F1 Help", Style::default().fg(theme.overlay1))
-        ]));
+        ])).build();
 
         let header = Element::panel(
             RowBuilder::new()
@@ -217,7 +217,7 @@ impl MultiAppRuntime {
         let mut help_items = vec![
             Element::styled_text(Line::from(vec![
                 Span::styled("Keyboard Shortcuts", Style::default().fg(theme.lavender).bold())
-            ])),
+            ])).build(),
             Element::text(""),
         ];
 
@@ -231,7 +231,7 @@ impl MultiAppRuntime {
         } else {
             help_items.push(Element::styled_text(Line::from(vec![
                 Span::styled("▼ Global", Style::default().fg(theme.peach).bold())
-            ])));
+            ])).build());
         }
 
         for (key, description) in &global_bindings {
@@ -245,7 +245,7 @@ impl MultiAppRuntime {
                 Span::raw("  "),
                 Span::styled(description.clone(), Style::default().fg(theme.text)),
             ]);
-            help_items.push(Element::styled_text(line));
+            help_items.push(Element::styled_text(line).build());
         }
 
         if skipped < skip_target {
@@ -260,7 +260,7 @@ impl MultiAppRuntime {
         } else {
             help_items.push(Element::styled_text(Line::from(vec![
                 Span::styled(format!("▼ {}", current_app_data.1), Style::default().fg(theme.blue).bold())
-            ])));
+            ])).build());
         }
 
         for (key, description) in &current_app_data.2 {
@@ -274,7 +274,7 @@ impl MultiAppRuntime {
                 Span::raw("  "),
                 Span::styled(description.clone(), Style::default().fg(theme.text)),
             ]);
-            help_items.push(Element::styled_text(line));
+            help_items.push(Element::styled_text(line).build());
         }
 
         if skipped < skip_target {
@@ -290,7 +290,7 @@ impl MultiAppRuntime {
             } else {
                 help_items.push(Element::styled_text(Line::from(vec![
                     Span::styled(format!("▼ {}", app_title), Style::default().fg(theme.overlay1).bold())
-                ])));
+                ])).build());
             }
 
             for (key, description) in app_bindings {
@@ -304,7 +304,7 @@ impl MultiAppRuntime {
                     Span::raw("  "),
                     Span::styled(description.clone(), Style::default().fg(theme.subtext0)),
                 ]);
-                help_items.push(Element::styled_text(line));
+                help_items.push(Element::styled_text(line).build());
             }
 
             if skipped < skip_target {
@@ -316,7 +316,7 @@ impl MultiAppRuntime {
 
         help_items.push(Element::styled_text(Line::from(vec![
             Span::styled("[ESC to close | ↑↓ to scroll]", Style::default().fg(theme.overlay1))
-        ])));
+        ])).build());
 
         let help_content = Element::column(help_items).build();
 
