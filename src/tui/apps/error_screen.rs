@@ -40,6 +40,7 @@ impl App for ErrorScreen {
                     .get("target")
                     .and_then(|v| v.as_str())
                     .and_then(|s| match s {
+                        "AppLauncher" => Some(AppId::AppLauncher),
                         "Example1" => Some(AppId::Example1),
                         "Example2" => Some(AppId::Example2),
                         "LoadingScreen" => Some(AppId::LoadingScreen),

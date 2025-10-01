@@ -34,6 +34,7 @@ pub enum Command<Msg> {
 /// Unique identifier for each app
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AppId {
+    AppLauncher,
     Example1,
     Example2,
     LoadingScreen,

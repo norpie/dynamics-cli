@@ -205,6 +205,23 @@ impl Renderer {
         })
     }
 
+    /// Create on_key handler for lists (Enter activates selected item)
+    fn list_on_key<Msg: Clone + Send + 'static>(
+        _item_count: usize,
+        _on_select: Option<fn(usize) -> Msg>,
+        on_activate: Option<fn(usize) -> Msg>,
+    ) -> Box<dyn Fn(KeyCode) -> Option<Msg> + Send> {
+        Box::new(move |key| match key {
+            KeyCode::Enter => {
+                // Note: We can't access the current selection here because it's in app state
+                // The app will handle this via on_activate callback
+                // For now, Enter is handled by the app's subscription
+                None
+            }
+            _ => None,
+        })
+    }
+
     /// Calculate ratatui Constraints from our LayoutConstraints
     fn calculate_constraints<Msg>(
         items: &[(LayoutConstraint, Element<Msg>)],
@@ -387,6 +404,98 @@ impl Renderer {
                 Self::render_element(frame, theme, registry, focus_registry, focused_id, child, inner_area);
             }
 
+            Element::List {
+                id,
+                items,
+                selected,
+                scroll_offset,
+                on_select,
+                on_activate,
+                on_focus,
+                on_blur,
+            } => {
+                // Register in focus registry
+                focus_registry.register_focusable(FocusableInfo {
+                    id: id.clone(),
+                    rect: area,
+                    on_key: Self::list_on_key(items.len(), on_select.clone(), on_activate.clone()),
+                    on_focus: on_focus.clone(),
+                    on_blur: on_blur.clone(),
+                });
+
+                // Check if this list is focused
+                let is_focused = focused_id == Some(id);
+
+                // Calculate visible height
+                let visible_height = area.height as usize;
+
+                // Virtual scrolling: only render visible items
+                let start_idx = *scroll_offset;
+                let end_idx = (start_idx + visible_height).min(items.len());
+
+                // Create layout for visible items
+                let visible_items: Vec<_> = items[start_idx..end_idx]
+                    .iter()
+                    .map(|item| (LayoutConstraint::Length(1), item.clone()))
+                    .collect();
+
+                if !visible_items.is_empty() {
+                    let constraints = visible_items
+                        .iter()
+                        .map(|(constraint, _)| match constraint {
+                            LayoutConstraint::Length(n) => Constraint::Length(*n),
+                            _ => Constraint::Length(1),
+                        })
+                        .collect::<Vec<_>>();
+
+                    let chunks = Layout::default()
+                        .direction(Direction::Vertical)
+                        .constraints(constraints)
+                        .split(area);
+
+                    // Render each visible item
+                    for ((_, child), chunk) in visible_items.iter().zip(chunks.iter()) {
+                        Self::render_element(frame, theme, registry, focus_registry, focused_id, child, *chunk);
+                    }
+                }
+
+                // Render scrollbar if needed
+                if items.len() > visible_height {
+                    let scrollbar_area = Rect {
+                        x: area.x + area.width - 1,
+                        y: area.y,
+                        width: 1,
+                        height: area.height,
+                    };
+
+                    let scrollbar_position = if items.len() > visible_height {
+                        (*scroll_offset as f32 / (items.len() - visible_height) as f32 * (area.height - 1) as f32) as u16
+                    } else {
+                        0
+                    };
+
+                    // Render scrollbar thumb
+                    if scrollbar_position < area.height {
+                        let thumb_area = Rect {
+                            x: scrollbar_area.x,
+                            y: scrollbar_area.y + scrollbar_position,
+                            width: 1,
+                            height: 1,
+                        };
+                        let thumb = Block::default().style(Style::default().fg(theme.overlay1));
+                        frame.render_widget(thumb, thumb_area);
+                    }
+                }
+
+                // Render border if focused
+                if is_focused {
+                    let border = Block::default()
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(theme.blue));
+                    frame.render_widget(border, area);
+                }
+            }
+
             Element::Stack { layers } => {
                 // Render all layers visually
                 for (layer_idx, layer) in layers.iter().enumerate() {
@@ -500,7 +609,7 @@ impl Renderer {
                 let height = container.height.min(15);
                 (width, height)
             }
-            Element::Column { .. } | Element::Row { .. } | Element::Stack { .. } => {
+            Element::Column { .. } | Element::Row { .. } | Element::Stack { .. } | Element::List { .. } => {
                 // Layout elements should fill the full container
                 (container.width, container.height)
             }

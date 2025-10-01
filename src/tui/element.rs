@@ -118,6 +118,18 @@ pub enum Element<Msg> {
     Stack {
         layers: Vec<Layer<Msg>>,
     },
+
+    /// Scrollable list of items
+    List {
+        id: FocusId,
+        items: Vec<Element<Msg>>,
+        selected: Option<usize>,
+        scroll_offset: usize,
+        on_select: Option<fn(usize) -> Msg>,
+        on_activate: Option<fn(usize) -> Msg>,
+        on_focus: Option<Msg>,
+        on_blur: Option<Msg>,
+    },
 }
 
 impl<Msg> Element<Msg> {
@@ -275,6 +287,38 @@ impl<Msg> Element<Msg> {
             Element::Container { .. } => LayoutConstraint::Fill(1),
             Element::Panel { .. } => LayoutConstraint::Fill(1),
             Element::Stack { .. } => LayoutConstraint::Fill(1),
+            Element::List { .. } => LayoutConstraint::Fill(1),
+        }
+    }
+
+    /// Create a list element from items
+    pub fn list<T>(
+        id: FocusId,
+        items: &[T],
+        state: &crate::tui::widgets::ListState,
+        theme: &crate::tui::Theme,
+    ) -> ListBuilder<Msg>
+    where
+        T: crate::tui::widgets::ListItem<Msg = Msg>,
+    {
+        let elements = items
+            .iter()
+            .enumerate()
+            .map(|(i, item)| {
+                let is_selected = state.selected() == Some(i);
+                item.to_element(theme, is_selected, false)
+            })
+            .collect();
+
+        ListBuilder {
+            id,
+            items: elements,
+            selected: state.selected(),
+            scroll_offset: state.scroll_offset(),
+            on_select: None,
+            on_activate: None,
+            on_focus: None,
+            on_blur: None,
         }
     }
 }
@@ -440,6 +484,53 @@ impl<Msg> PanelBuilder<Msg> {
         Element::Panel {
             child: self.child,
             title: self.title,
+        }
+    }
+}
+
+/// Builder for list elements
+pub struct ListBuilder<Msg> {
+    id: FocusId,
+    items: Vec<Element<Msg>>,
+    selected: Option<usize>,
+    scroll_offset: usize,
+    on_select: Option<fn(usize) -> Msg>,
+    on_activate: Option<fn(usize) -> Msg>,
+    on_focus: Option<Msg>,
+    on_blur: Option<Msg>,
+}
+
+impl<Msg> ListBuilder<Msg> {
+    pub fn on_select(mut self, msg: fn(usize) -> Msg) -> Self {
+        self.on_select = Some(msg);
+        self
+    }
+
+    pub fn on_activate(mut self, msg: fn(usize) -> Msg) -> Self {
+        self.on_activate = Some(msg);
+        self
+    }
+
+    pub fn on_focus(mut self, msg: Msg) -> Self {
+        self.on_focus = Some(msg);
+        self
+    }
+
+    pub fn on_blur(mut self, msg: Msg) -> Self {
+        self.on_blur = Some(msg);
+        self
+    }
+
+    pub fn build(self) -> Element<Msg> {
+        Element::List {
+            id: self.id,
+            items: self.items,
+            selected: self.selected,
+            scroll_offset: self.scroll_offset,
+            on_select: self.on_select,
+            on_activate: self.on_activate,
+            on_focus: self.on_focus,
+            on_blur: self.on_blur,
         }
     }
 }
