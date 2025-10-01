@@ -4,3 +4,4 @@ pub mod credentials;
 pub mod environments;
 pub mod tokens;
 pub mod legacy;
+pub mod migrations;

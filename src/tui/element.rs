@@ -115,6 +115,8 @@ pub enum Element<Msg> {
     Panel {
         child: Box<Element<Msg>>,
         title: Option<String>,
+        width: Option<u16>,
+        height: Option<u16>,
     },
 
     /// Stack of layered elements (for modals, overlays)
@@ -262,6 +264,8 @@ impl<Msg> Element<Msg> {
         PanelBuilder {
             child: Box::new(child),
             title: None,
+            width: None,
+            height: None,
         }
     }
 
@@ -346,12 +350,17 @@ impl<Msg> Element<Msg> {
             Element::Column { .. } => LayoutConstraint::Fill(1),
             Element::Row { .. } => LayoutConstraint::Fill(1),
             Element::Container { .. } => LayoutConstraint::Fill(1),
-            Element::Panel { child, .. } => {
-                // Panel sizes to child + 2 lines for borders (top + bottom)
-                match child.default_constraint() {
-                    LayoutConstraint::Length(n) => LayoutConstraint::Length(n + 2),
-                    LayoutConstraint::Min(n) => LayoutConstraint::Min(n + 2),
-                    LayoutConstraint::Fill(w) => LayoutConstraint::Fill(w),
+            Element::Panel { child, height, .. } => {
+                // If explicit height is set, use it
+                if let Some(h) = height {
+                    LayoutConstraint::Length(*h)
+                } else {
+                    // Panel sizes to child + 2 lines for borders (top + bottom)
+                    match child.default_constraint() {
+                        LayoutConstraint::Length(n) => LayoutConstraint::Length(n + 2),
+                        LayoutConstraint::Min(n) => LayoutConstraint::Min(n + 2),
+                        LayoutConstraint::Fill(w) => LayoutConstraint::Fill(w),
+                    }
                 }
             }
             Element::Stack { .. } => LayoutConstraint::Fill(1),
@@ -659,6 +668,8 @@ impl<Msg> ContainerBuilder<Msg> {
 pub struct PanelBuilder<Msg> {
     child: Box<Element<Msg>>,
     title: Option<String>,
+    width: Option<u16>,
+    height: Option<u16>,
 }
 
 impl<Msg> PanelBuilder<Msg> {
@@ -667,10 +678,22 @@ impl<Msg> PanelBuilder<Msg> {
         self
     }
 
+    pub fn width(mut self, width: u16) -> Self {
+        self.width = Some(width);
+        self
+    }
+
+    pub fn height(mut self, height: u16) -> Self {
+        self.height = Some(height);
+        self
+    }
+
     pub fn build(self) -> Element<Msg> {
         Element::Panel {
             child: self.child,
             title: self.title,
+            width: self.width,
+            height: self.height,
         }
     }
 }

@@ -6,7 +6,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use anyhow::Result;
 use std::collections::HashMap;
 
-use crate::tui::{AppId, Runtime, AppRuntime, apps::{AppLauncher, Example1, Example2, Example3, Example4, Example5, Example6, LoadingScreen, ErrorScreen}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App};
+use crate::tui::{AppId, Runtime, AppRuntime, apps::{AppLauncher, Example1, Example2, Example3, Example4, Example5, Example6, LoadingScreen, ErrorScreen, migration::MigrationEnvironmentApp}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App};
 use crate::tui::element::{ColumnBuilder, RowBuilder, FocusId};
 use crate::tui::widgets::ScrollableState;
 
@@ -37,6 +37,7 @@ impl MultiAppRuntime {
         runtimes.insert(AppId::Example6, Box::new(Runtime::<Example6>::new()));
         runtimes.insert(AppId::LoadingScreen, Box::new(Runtime::<LoadingScreen>::new()));
         runtimes.insert(AppId::ErrorScreen, Box::new(Runtime::<ErrorScreen>::new()));
+        runtimes.insert(AppId::MigrationEnvironment, Box::new(Runtime::<MigrationEnvironmentApp>::new()));
 
         Self {
             runtimes,

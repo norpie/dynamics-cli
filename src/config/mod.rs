@@ -17,6 +17,7 @@ pub mod migration;
 pub mod compat;
 
 pub use models::*;
+pub use repository::migrations::{SavedMigration, SavedComparison};
 
 use crate::api::models::{Environment as ApiEnvironment, CredentialSet as ApiCredentialSet};
 
@@ -201,5 +202,39 @@ impl Config {
     // Import from TOML (for migration or restore)
     pub async fn import_toml(&self, path: &std::path::Path) -> Result<()> {
         compat::import_from_toml(&self.pool, path).await
+    }
+
+    // Migration management methods
+    pub async fn add_migration(&self, migration: SavedMigration) -> Result<()> {
+        repository::migrations::insert(&self.pool, migration).await
+    }
+
+    pub async fn get_migration(&self, name: &str) -> Result<Option<SavedMigration>> {
+        repository::migrations::get(&self.pool, name).await
+    }
+
+    pub async fn list_migrations(&self) -> Result<Vec<SavedMigration>> {
+        repository::migrations::list(&self.pool).await
+    }
+
+    pub async fn delete_migration(&self, name: &str) -> Result<()> {
+        repository::migrations::delete(&self.pool, name).await
+    }
+
+    pub async fn touch_migration(&self, name: &str) -> Result<()> {
+        repository::migrations::touch(&self.pool, name).await
+    }
+
+    // Comparison management methods
+    pub async fn add_comparison(&self, comparison: SavedComparison) -> Result<i64> {
+        repository::migrations::insert_comparison(&self.pool, comparison).await
+    }
+
+    pub async fn get_comparisons(&self, migration_name: &str) -> Result<Vec<SavedComparison>> {
+        repository::migrations::get_comparisons(&self.pool, migration_name).await
+    }
+
+    pub async fn delete_comparison(&self, id: i64) -> Result<()> {
+        repository::migrations::delete_comparison(&self.pool, id).await
     }
 }

@@ -43,6 +43,7 @@ pub enum AppId {
     Example6,
     LoadingScreen,
     ErrorScreen,
+    MigrationEnvironment,
 }
 
 impl<Msg> Command<Msg> {

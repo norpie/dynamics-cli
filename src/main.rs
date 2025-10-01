@@ -23,6 +23,14 @@ pub fn client_manager() -> &'static api::ClientManager {
     CLIENT_MANAGER.get().expect("ClientManager not initialized")
 }
 
+// Global Config instance
+static CONFIG: OnceCell<config::Config> = OnceCell::new();
+
+/// Get a reference to the global Config
+pub fn config() -> &'static config::Config {
+    CONFIG.get().expect("Config not initialized")
+}
+
 use cli::Cli;
 // use cli::app::Commands;
 // use cli::commands::auth::AuthSubcommands;
@@ -56,6 +64,10 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
     info!("Starting dynamics-cli");
+
+    // Initialize global Config once
+    let config = config::Config::load().await?;
+    CONFIG.set(config).map_err(|_| anyhow::anyhow!("Failed to initialize global Config"))?;
 
     // Initialize global ClientManager once (contains config internally)
     let client_manager = api::ClientManager::new().await?;

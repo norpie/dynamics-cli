@@ -1,0 +1,477 @@
+use crossterm::event::KeyCode;
+use crate::tui::{App, Command, Element, Subscription, Theme, FocusId};
+use crate::tui::widgets::list::{ListItem, ListState};
+use crate::tui::widgets::{TextInputState, SelectState};
+use crate::config::SavedMigration;
+
+pub struct MigrationEnvironmentApp;
+
+#[derive(Clone)]
+pub struct MigrationEnvironment {
+    name: String,
+    source: String,
+    target: String,
+}
+
+impl ListItem for MigrationEnvironment {
+    type Msg = Msg;
+
+    fn to_element(&self, theme: &Theme, is_selected: bool, _is_hovered: bool) -> Element<Msg> {
+        use ratatui::text::{Line, Span};
+        use ratatui::style::Style;
+
+        let (fg_color, bg_style) = if is_selected {
+            (theme.lavender, Some(Style::default().bg(theme.surface0)))
+        } else {
+            (theme.text, None)
+        };
+
+        let mut builder = Element::styled_text(Line::from(vec![
+            Span::styled(format!("  {} -> {}", self.source, self.target), Style::default().fg(fg_color)),
+        ]));
+
+        if let Some(bg) = bg_style {
+            builder = builder.background(bg);
+        }
+
+        builder.build()
+    }
+}
+
+pub struct State {
+    environments: Vec<MigrationEnvironment>,
+    list_state: ListState,
+    initialized: bool,
+    show_create_modal: bool,
+    create_form: CreateMigrationForm,
+    available_environments: Vec<String>,
+}
+
+#[derive(Clone, Default)]
+pub struct CreateMigrationForm {
+    name: String,
+    name_input_state: TextInputState,
+    source_env: Option<String>,
+    source_select_state: SelectState,
+    target_env: Option<String>,
+    target_select_state: SelectState,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Clone)]
+pub enum Msg {
+    Initialize,
+    MigrationsLoaded(Result<Vec<SavedMigration>, String>),
+    SelectEnvironment(usize),
+    ListNavigate(KeyCode),
+    OpenCreateModal,
+    EnvironmentsLoaded(Result<Vec<String>, String>),
+    CreateFormNameChanged(KeyCode),
+    CreateFormSourceSelected(usize),
+    CreateFormSourceToggled,
+    CreateFormSourceNavigate(KeyCode),
+    CreateFormTargetSelected(usize),
+    CreateFormTargetToggled,
+    CreateFormTargetNavigate(KeyCode),
+    CreateFormSubmit,
+    CreateFormCancel,
+    MigrationCreated(Result<(), String>),
+}
+
+impl App for MigrationEnvironmentApp {
+    type State = State;
+    type Msg = Msg;
+
+    fn update(state: &mut State, msg: Msg) -> Command<Msg> {
+        match msg {
+            Msg::Initialize => {
+                if !state.initialized {
+                    // Load migrations from database
+                    Command::perform(
+                        async {
+                            let config = crate::config();
+                            config.list_migrations().await
+                                .map_err(|e| e.to_string())
+                        },
+                        Msg::MigrationsLoaded
+                    )
+                } else {
+                    Command::None
+                }
+            }
+            Msg::MigrationsLoaded(Ok(migrations)) => {
+                state.environments = migrations.into_iter().map(|m| MigrationEnvironment {
+                    name: m.name,
+                    source: m.source_env,
+                    target: m.target_env,
+                }).collect();
+                state.initialized = true;
+                Command::set_focus(FocusId::new("migration-list"))
+            }
+            Msg::MigrationsLoaded(Err(err)) => {
+                // TODO: Show error screen
+                log::error!("Failed to load migrations: {}", err);
+                state.initialized = true;
+                Command::None
+            }
+            Msg::SelectEnvironment(_idx) => {
+                // TODO: Navigate to next screen
+                Command::None
+            }
+            Msg::ListNavigate(key) => {
+                let visible_height = 20;
+                state.list_state.handle_key(key, state.environments.len(), visible_height);
+                Command::None
+            }
+            Msg::OpenCreateModal => {
+                state.show_create_modal = true;
+                state.create_form = CreateMigrationForm::default();
+                // Load available environments
+                Command::perform(
+                    async {
+                        let config = crate::config();
+                        config.list_environments().await
+                            .map_err(|e| e.to_string())
+                    },
+                    Msg::EnvironmentsLoaded
+                )
+            }
+            Msg::EnvironmentsLoaded(Ok(envs)) => {
+                state.available_environments = envs;
+                Command::set_focus(FocusId::new("create-name-input"))
+            }
+            Msg::EnvironmentsLoaded(Err(err)) => {
+                log::error!("Failed to load environments: {}", err);
+                state.show_create_modal = false;
+                Command::None
+            }
+            Msg::CreateFormNameChanged(key) => {
+                if let Some(new_value) = state.create_form.name_input_state.handle_key(
+                    key,
+                    &state.create_form.name,
+                    Some(50) // Max 50 characters
+                ) {
+                    state.create_form.name = new_value;
+                }
+                Command::None
+            }
+            Msg::CreateFormSourceSelected(idx) => {
+                // Index 0 is the placeholder, actual environments start at index 1
+                if idx == 0 {
+                    state.create_form.source_env = None;
+                } else {
+                    let filtered_envs = get_filtered_source_envs(&state.available_environments, &state.create_form.target_env);
+                    if let Some(env) = filtered_envs.get(idx - 1) {
+                        state.create_form.source_env = Some(env.clone());
+                    }
+                }
+                Command::None
+            }
+            Msg::CreateFormSourceToggled => {
+                state.create_form.source_select_state.toggle();
+                Command::None
+            }
+            Msg::CreateFormSourceNavigate(key) => {
+                match key {
+                    KeyCode::Up => state.create_form.source_select_state.navigate_prev(),
+                    KeyCode::Down => state.create_form.source_select_state.navigate_next(),
+                    _ => {}
+                }
+                Command::None
+            }
+            Msg::CreateFormTargetSelected(idx) => {
+                // Index 0 is the placeholder, actual environments start at index 1
+                if idx == 0 {
+                    state.create_form.target_env = None;
+                } else {
+                    let filtered_envs = get_filtered_target_envs(&state.available_environments, &state.create_form.source_env);
+                    if let Some(env) = filtered_envs.get(idx - 1) {
+                        state.create_form.target_env = Some(env.clone());
+                    }
+                }
+                Command::None
+            }
+            Msg::CreateFormTargetToggled => {
+                state.create_form.target_select_state.toggle();
+                Command::None
+            }
+            Msg::CreateFormTargetNavigate(key) => {
+                match key {
+                    KeyCode::Up => state.create_form.target_select_state.navigate_prev(),
+                    KeyCode::Down => state.create_form.target_select_state.navigate_next(),
+                    _ => {}
+                }
+                Command::None
+            }
+            Msg::CreateFormSubmit => {
+                let name = state.create_form.name.trim().to_string();
+                let source = state.create_form.source_env.clone();
+                let target = state.create_form.target_env.clone();
+
+                if name.is_empty() || source.is_none() || target.is_none() {
+                    // TODO: Show validation error
+                    return Command::None;
+                }
+
+                let source = source.unwrap();
+                let target = target.unwrap();
+
+                if source == target {
+                    // TODO: Show error that source and target can't be the same
+                    return Command::None;
+                }
+
+                state.show_create_modal = false;
+
+                Command::perform(
+                    async move {
+                        let config = crate::config();
+                        let migration = SavedMigration {
+                            name,
+                            source_env: source,
+                            target_env: target,
+                            created_at: chrono::Utc::now(),
+                            last_used: chrono::Utc::now(),
+                        };
+                        config.add_migration(migration).await
+                            .map_err(|e| e.to_string())
+                    },
+                    Msg::MigrationCreated
+                )
+            }
+            Msg::CreateFormCancel => {
+                state.show_create_modal = false;
+                Command::None
+            }
+            Msg::MigrationCreated(Ok(())) => {
+                // Reload migrations list
+                Command::perform(
+                    async {
+                        let config = crate::config();
+                        config.list_migrations().await
+                            .map_err(|e| e.to_string())
+                    },
+                    Msg::MigrationsLoaded
+                )
+            }
+            Msg::MigrationCreated(Err(err)) => {
+                log::error!("Failed to create migration: {}", err);
+                // TODO: Show error screen
+                Command::None
+            }
+        }
+    }
+
+    fn view(state: &mut State, theme: &Theme) -> Element<Msg> {
+        let list = Element::list(FocusId::new("migration-list"), &state.environments, &state.list_state, theme)
+            .on_activate(Msg::SelectEnvironment)
+            .on_navigate(Msg::ListNavigate)
+            .build();
+
+        let main_ui = Element::panel(list)
+            .title("Select Migration Environment")
+            .build();
+
+        if state.show_create_modal {
+            use crate::tui::element::{ColumnBuilder, RowBuilder, Alignment};
+            use crate::tui::LayoutConstraint;
+
+            // If environments haven't loaded yet, show loading message
+            if state.available_environments.is_empty() {
+                let loading_content = Element::panel(
+                    Element::container(
+                        Element::column(vec![
+                            Element::text("Loading environments..."),
+                        ]).build()
+                    )
+                    .padding(2)
+                    .build()
+                )
+                .title("Create New Migration")
+                .build();
+
+                return Element::stack(vec![
+                    crate::tui::Layer {
+                        element: main_ui,
+                        alignment: Alignment::Center,
+                        dim_below: false,
+                    },
+                    crate::tui::Layer {
+                        element: loading_content,
+                        alignment: Alignment::Center,
+                        dim_below: true,
+                    },
+                ]);
+            }
+
+            // Get filtered environment options
+            let mut source_options = vec!["(Select source environment)".to_string()];
+            source_options.extend(get_filtered_source_envs(&state.available_environments, &state.create_form.target_env));
+
+            let mut target_options = vec!["(Select target environment)".to_string()];
+            target_options.extend(get_filtered_target_envs(&state.available_environments, &state.create_form.source_env));
+
+            // Name input
+            let name_input = Element::panel(
+                Element::text_input(
+                    FocusId::new("create-name-input"),
+                    &state.create_form.name,
+                    &state.create_form.name_input_state
+                )
+                .placeholder("Migration name")
+                .on_change(Msg::CreateFormNameChanged)
+                .build()
+            )
+            .title("Name")
+            .build();
+
+            // Source environment select
+            let source_select = Element::panel(
+                Element::select(
+                    FocusId::new("create-source-select"),
+                    source_options,
+                    &mut state.create_form.source_select_state
+                )
+                .on_select(Msg::CreateFormSourceSelected)
+                .on_toggle(Msg::CreateFormSourceToggled)
+                .on_navigate(Msg::CreateFormSourceNavigate)
+                .build()
+            )
+            .title("Source Environment")
+            .build();
+
+            // Target environment select
+            let target_select = Element::panel(
+                Element::select(
+                    FocusId::new("create-target-select"),
+                    target_options,
+                    &mut state.create_form.target_select_state
+                )
+                .on_select(Msg::CreateFormTargetSelected)
+                .on_toggle(Msg::CreateFormTargetToggled)
+                .on_navigate(Msg::CreateFormTargetNavigate)
+                .build()
+            )
+            .title("Target Environment")
+            .build();
+
+            // Buttons
+            let buttons = RowBuilder::new()
+                .add(
+                    Element::button(FocusId::new("create-cancel"), "Cancel")
+                        .on_press(Msg::CreateFormCancel)
+                        .build(),
+                    LayoutConstraint::Fill(1),
+                )
+                .add(Element::text("  "), LayoutConstraint::Length(2))
+                .add(
+                    Element::button(FocusId::new("create-confirm"), "Confirm")
+                        .on_press(Msg::CreateFormSubmit)
+                        .build(),
+                    LayoutConstraint::Fill(1),
+                )
+                .spacing(0)
+                .build();
+
+            // Modal content - use explicit sizing for proper display
+            let modal_content = Element::panel(
+                Element::container(
+                    ColumnBuilder::new()
+                        .add(name_input, LayoutConstraint::Length(3))
+                        .add(Element::text(""), LayoutConstraint::Length(1))
+                        .add(source_select, LayoutConstraint::Length(10))
+                        .add(Element::text(""), LayoutConstraint::Length(1))
+                        .add(target_select, LayoutConstraint::Length(10))
+                        .add(Element::text(""), LayoutConstraint::Length(1))
+                        .add(buttons, LayoutConstraint::Length(3))
+                        .spacing(0)
+                        .build()
+                )
+                .padding(2)
+                .build()
+            )
+            .title("Create New Migration")
+            .width(80)
+            .height(35)
+            .build();
+
+            Element::stack(vec![
+                crate::tui::Layer {
+                    element: main_ui,
+                    alignment: Alignment::TopLeft,
+                    dim_below: false,
+                },
+                crate::tui::Layer {
+                    element: modal_content,
+                    alignment: Alignment::Center,
+                    dim_below: true,
+                },
+            ])
+        } else {
+            main_ui
+        }
+    }
+
+    fn subscriptions(state: &State) -> Vec<Subscription<Msg>> {
+        let mut subs = vec![];
+
+        if !state.initialized {
+            subs.push(Subscription::timer(std::time::Duration::from_millis(1), Msg::Initialize));
+        }
+
+        if !state.show_create_modal {
+            subs.push(Subscription::keyboard(KeyCode::Char('n'), "Create new migration", Msg::OpenCreateModal));
+            subs.push(Subscription::keyboard(KeyCode::Char('N'), "Create new migration", Msg::OpenCreateModal));
+        }
+
+        subs
+    }
+
+    fn title() -> &'static str {
+        "Migration Environments"
+    }
+}
+
+impl State {
+    pub fn new() -> Self {
+        Self {
+            environments: vec![],
+            list_state: ListState::with_selection(),
+            initialized: false,
+            show_create_modal: false,
+            create_form: CreateMigrationForm::default(),
+            available_environments: vec![],
+        }
+    }
+}
+
+fn get_filtered_source_envs(all_envs: &[String], exclude: &Option<String>) -> Vec<String> {
+    all_envs.iter()
+        .filter(|e| {
+            if let Some(target) = exclude {
+                *e != target
+            } else {
+                true
+            }
+        })
+        .cloned()
+        .collect()
+}
+
+fn get_filtered_target_envs(all_envs: &[String], exclude: &Option<String>) -> Vec<String> {
+    all_envs.iter()
+        .filter(|e| {
+            if let Some(source) = exclude {
+                *e != source
+            } else {
+                true
+            }
+        })
+        .cloned()
+        .collect()
+}
