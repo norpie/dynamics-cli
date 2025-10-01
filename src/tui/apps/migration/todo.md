@@ -295,28 +295,24 @@ src/tui/apps/migration/
    - Progress indicator (0.0 to 1.0)
    - `Element::progress_bar(0.65).label("Loading...")`
 
-**Estimated effort**: 2-3 weeks (complex widgets)
-
 ### Phase 2: Migrate Simple Screens 🏗️
 
 **Goal**: Convert simple screens to validate pattern
 
-1. **MigrationSelectApp** (2-3 days)
+1. **MigrationSelectApp**
    - State: list of migrations, selected index, modal state
    - Msg: Select, CreateNew, Delete, Confirm
    - View: List + confirmation modal
 
-2. **EnvironmentSelectApp** (2-3 days)
+2. **EnvironmentSelectApp**
    - State: phase (source vs. target), environments, selections
    - Msg: SelectSource, SelectTarget
    - View: List with title update
 
-3. **LoadingApp** (2 days)
+3. **LoadingApp**
    - State: progress tracking, async task handles
    - Msg: UpdateProgress, FetchComplete, FetchFailed
    - View: Spinner + progress bars
-
-**Estimated effort**: 1 week
 
 ### Phase 3: Migrate Complex Screen 🏔️
 
@@ -365,8 +361,6 @@ pub struct UnifiedCompareState {
 }
 ```
 
-**Estimated effort**: 2-3 weeks (very complex)
-
 ### Phase 4: Polish & Export 🎨
 
 **Goal**: Export functionality, refinements
@@ -375,8 +369,6 @@ pub struct UnifiedCompareState {
 2. Add keyboard shortcuts documentation
 3. Improve visual polish (animations, better colors)
 4. Performance optimization (virtual scrolling, memoization)
-
-**Estimated effort**: 1 week
 
 ---
 
@@ -489,41 +481,41 @@ fn test_delete_confirmation_flow() {
 
 ### Immediate Actions
 
-1. **Build List widget** (1 week)
+1. ~~**Build List widget**~~ ✅ **DONE**
    - Most critical blocker
    - Used everywhere
    - Enables MigrationSelectApp, EnvironmentSelectApp
 
-2. **Build TextInput widget** (3-4 days)
+2. **Build TextInput widget**
    - Second most critical
    - Required for search, mapping modals
 
-3. **Design Tree widget API** (2-3 days)
+3. **Design Tree widget API**
    - Most complex widget
    - Review proposal_new.md suggestions
    - Consider reusing ratatui-tree-widget crate?
 
 ### Medium-Term Goals
 
-4. **Migrate MigrationSelectApp** (2-3 days)
+4. **Migrate MigrationSelectApp**
    - Validate pattern with simple screen
    - Learn pain points
 
-5. **Migrate EnvironmentSelectApp** (2-3 days)
+5. **Migrate EnvironmentSelectApp**
    - Multi-phase selection pattern
    - Refine List widget API
 
-6. **Build Tabs widget + start UnifiedCompareApp** (2-3 weeks)
+6. **Build Tabs widget + start UnifiedCompareApp**
    - Tackle the big one
    - Iterative refinement
 
 ### Long-Term Vision
 
-7. **Extract reusable widgets to framework** (ongoing)
+7. **Extract reusable widgets to framework**
    - entity_tree → Tree widget
    - progress_tracker → ProgressBar widget
 
-8. **Delete old implementation** (after thorough testing)
+8. **Delete old implementation**
    - Remove 36k LOC of old code
    - Celebrate clean architecture 🎉
 
@@ -542,11 +534,11 @@ fn test_delete_confirmation_flow() {
 ## 10. Task Checklist
 
 ### Phase 1: Framework Widgets
-- [ ] Implement List widget in src/tui/element.rs
-  - [ ] Basic rendering & selection state
-  - [ ] Keyboard navigation (Up/Down/PageUp/PageDown/Home/End)
-  - [ ] Mouse support (click, scroll)
-  - [ ] Virtual scrolling optimization
+- [x] Implement List widget in src/tui/element.rs
+  - [x] Basic rendering & selection state
+  - [x] Keyboard navigation (Up/Down/PageUp/PageDown/Home/End)
+  - [x] Mouse support (click, scroll)
+  - [x] Virtual scrolling optimization
   - [ ] Tests
 - [ ] Implement TextInput widget
   - [ ] Text editing (insert, delete, cursor movement)
@@ -614,7 +606,7 @@ fn test_delete_confirmation_flow() {
   - [ ] Tests
 
 ### Phase 4: Polish
-- [ ] Migrate to Catppuccin theme colors
+- [x] Migrate to Catppuccin theme colors
 - [ ] Add help text/documentation
 - [ ] Performance benchmarking
 - [ ] Feature parity checklist vs. old implementation
@@ -628,11 +620,9 @@ fn test_delete_confirmation_flow() {
 The migration module is **substantial** (36k LOC) but **well-suited** for the Elm-inspired pattern. The main blocker is **missing widgets** (List, TextInput, Tree, Tabs).
 
 **Recommended path**:
-1. Build framework widgets (Phase 1) - **2-3 weeks**
-2. Migrate simple screens (Phase 2) - **1 week**
-3. Migrate complex screen (Phase 3) - **2-3 weeks**
-4. Polish & export (Phase 4) - **1 week**
-
-**Total estimated effort**: 6-8 weeks for full migration
+1. Build framework widgets (Phase 1)
+2. Migrate simple screens (Phase 2)
+3. Migrate complex screen (Phase 3)
+4. Polish & export (Phase 4)
 
 **Payoff**: Clean architecture, testable code, reusable widgets for other apps, deletion of 36k LOC of technical debt.
