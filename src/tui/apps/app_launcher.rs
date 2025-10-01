@@ -40,6 +40,11 @@ impl Default for State {
                     name: "Example 3".to_string(),
                     description: "Text input form demo".to_string(),
                 },
+                AppInfo {
+                    id: AppId::Example4,
+                    name: "Example 4".to_string(),
+                    description: "Tab pattern demo".to_string(),
+                },
             ],
             list_state: ListState::with_selection(),
             initialized: false,
