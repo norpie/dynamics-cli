@@ -17,4 +17,4 @@ pub use renderer::{Renderer, InteractionRegistry};
 pub use runtime::{Runtime, AppRuntime};
 pub use multi_runtime::MultiAppRuntime;
 pub use state::{Theme, ThemeVariant, FocusMode, RuntimeConfig};
-pub use widgets::{ListItem, ListState};
+pub use widgets::{ListItem, ListState, TextInputState};

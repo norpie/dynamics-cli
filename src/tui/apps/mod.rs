@@ -4,5 +4,5 @@ pub mod screens;
 pub mod migration;
 
 pub use app_launcher::AppLauncher;
-pub use examples::{Example1, Example2};
+pub use examples::{Example1, Example2, Example3};
 pub use screens::{LoadingScreen, ErrorScreen};

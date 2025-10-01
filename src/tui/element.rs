@@ -134,6 +134,20 @@ pub enum Element<Msg> {
         on_focus: Option<Msg>,
         on_blur: Option<Msg>,
     },
+
+    /// Single-line text input
+    TextInput {
+        id: FocusId,
+        value: String,
+        cursor_pos: usize,
+        scroll_offset: usize,
+        placeholder: Option<String>,
+        max_length: Option<usize>,
+        on_change: Option<fn(crossterm::event::KeyCode) -> Msg>,
+        on_submit: Option<Msg>,
+        on_focus: Option<Msg>,
+        on_blur: Option<Msg>,
+    },
 }
 
 impl<Msg> Element<Msg> {
@@ -296,6 +310,27 @@ impl<Msg> Element<Msg> {
             Element::Panel { .. } => LayoutConstraint::Fill(1),
             Element::Stack { .. } => LayoutConstraint::Fill(1),
             Element::List { .. } => LayoutConstraint::Fill(1),
+            Element::TextInput { .. } => LayoutConstraint::Length(1),
+        }
+    }
+
+    /// Create a text input element
+    pub fn text_input(
+        id: FocusId,
+        value: &str,
+        state: &crate::tui::widgets::TextInputState,
+    ) -> TextInputBuilder<Msg> {
+        TextInputBuilder {
+            id,
+            value: value.to_string(),
+            cursor_pos: state.cursor_pos(),
+            scroll_offset: state.scroll_offset(),
+            placeholder: None,
+            max_length: None,
+            on_change: None,
+            on_submit: None,
+            on_focus: None,
+            on_blur: None,
         }
     }
 
@@ -566,6 +601,67 @@ impl<Msg> ListBuilder<Msg> {
             on_select: self.on_select,
             on_activate: self.on_activate,
             on_navigate: self.on_navigate,
+            on_focus: self.on_focus,
+            on_blur: self.on_blur,
+        }
+    }
+}
+
+/// Builder for text input elements
+pub struct TextInputBuilder<Msg> {
+    id: FocusId,
+    value: String,
+    cursor_pos: usize,
+    scroll_offset: usize,
+    placeholder: Option<String>,
+    max_length: Option<usize>,
+    on_change: Option<fn(crossterm::event::KeyCode) -> Msg>,
+    on_submit: Option<Msg>,
+    on_focus: Option<Msg>,
+    on_blur: Option<Msg>,
+}
+
+impl<Msg> TextInputBuilder<Msg> {
+    pub fn placeholder(mut self, text: impl Into<String>) -> Self {
+        self.placeholder = Some(text.into());
+        self
+    }
+
+    pub fn max_length(mut self, max: usize) -> Self {
+        self.max_length = Some(max);
+        self
+    }
+
+    pub fn on_change(mut self, msg: fn(crossterm::event::KeyCode) -> Msg) -> Self {
+        self.on_change = Some(msg);
+        self
+    }
+
+    pub fn on_submit(mut self, msg: Msg) -> Self {
+        self.on_submit = Some(msg);
+        self
+    }
+
+    pub fn on_focus(mut self, msg: Msg) -> Self {
+        self.on_focus = Some(msg);
+        self
+    }
+
+    pub fn on_blur(mut self, msg: Msg) -> Self {
+        self.on_blur = Some(msg);
+        self
+    }
+
+    pub fn build(self) -> Element<Msg> {
+        Element::TextInput {
+            id: self.id,
+            value: self.value,
+            cursor_pos: self.cursor_pos,
+            scroll_offset: self.scroll_offset,
+            placeholder: self.placeholder,
+            max_length: self.max_length,
+            on_change: self.on_change,
+            on_submit: self.on_submit,
             on_focus: self.on_focus,
             on_blur: self.on_blur,
         }

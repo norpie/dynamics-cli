@@ -37,6 +37,7 @@ pub enum AppId {
     AppLauncher,
     Example1,
     Example2,
+    Example3,
     LoadingScreen,
     ErrorScreen,
 }

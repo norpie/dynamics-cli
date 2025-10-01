@@ -64,14 +64,13 @@ trait Screen {
 ### 1.4 Missing Framework Features (BLOCKERS)
 
 **HIGH PRIORITY (Must have for migration)**:
-1. **List widget** - Used everywhere for selection
+1. **List widget** - Used everywhere for selection ✅ **DONE**
 2. **TextInput widget** - Required for search, prefix mapping, manual mapping
 3. **Tree/Hierarchy widget** - Core of UnifiedCompareScreen (fields tab)
 4. **Tabs widget** - UnifiedCompareScreen has 4 tabs (Fields, Relationships, Views, Forms)
 
 **MEDIUM PRIORITY**:
 5. **Scrollable containers** - Long lists of fields/entities
-6. **ProgressBar** - LoadingScreen shows fetch progress
 
 **LOW PRIORITY** (Can work around):
 7. Ergonomic macros (`column![]` vs. verbose builders)
@@ -255,7 +254,7 @@ src/tui/apps/migration/
 **Option A: Implement missing widgets in framework first** (RECOMMENDED)
 - Pros: Reusable across all apps, cleaner API
 - Cons: More upfront work
-- **Widgets needed**: List, TextInput, Tree, Tabs, ProgressBar
+- **Widgets needed**: ~~List~~ ✅, TextInput, Tree, Tabs
 
 **Option B: Build migration-specific widgets, extract later**
 - Pros: Faster initial migration
@@ -290,10 +289,6 @@ src/tui/apps/migration/
 4. **Tabs widget**
    - Tab bar + content switching
    - `Element::tabs().add("Tab1", view1).selected(0)`
-
-5. **ProgressBar widget**
-   - Progress indicator (0.0 to 1.0)
-   - `Element::progress_bar(0.65).label("Loading...")`
 
 ### Phase 2: Migrate Simple Screens 🏗️
 
@@ -459,11 +454,10 @@ fn test_delete_confirmation_flow() {
 
 ### ❌ **Missing from Framework (BLOCKERS)**
 
-- **List widget** - Used in 6/7 screens
+- ~~**List widget**~~ ✅ **DONE** - Used in 6/7 screens
 - **TextInput widget** - Required for 3+ modals
 - **Tree/Hierarchy widget** - Core of UnifiedCompareScreen
 - **Tabs widget** - UnifiedCompareScreen has 4 tabs
-- **ProgressBar** - LoadingScreen
 - **Scrollable containers** - Long lists
 - **Ergonomic macros** - DX improvement (`column![]` vs. builders)
 
@@ -513,7 +507,6 @@ fn test_delete_confirmation_flow() {
 
 7. **Extract reusable widgets to framework**
    - entity_tree → Tree widget
-   - progress_tracker → ProgressBar widget
 
 8. **Delete old implementation**
    - Remove 36k LOC of old code
@@ -557,10 +550,6 @@ fn test_delete_confirmation_flow() {
   - [ ] Content switching
   - [ ] Keyboard navigation (Left/Right)
   - [ ] Tests
-- [ ] Implement ProgressBar widget
-  - [ ] Progress indicator (0.0-1.0)
-  - [ ] Optional label
-  - [ ] Tests
 
 ### Phase 2: Simple Apps
 - [ ] MigrationSelectApp
@@ -579,7 +568,7 @@ fn test_delete_confirmation_flow() {
 - [ ] LoadingApp
   - [ ] Define State with progress tracking
   - [ ] Implement async data fetching
-  - [ ] Implement view() with ProgressBar
+  - [ ] Implement view() with spinner and task list
   - [ ] Handle success/failure states
   - [ ] Tests
 
