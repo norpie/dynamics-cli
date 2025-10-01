@@ -1,7 +1,7 @@
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Paragraph, Clear},
     style::{Style, Stylize},
 };
 use crossterm::event::KeyCode;
@@ -182,6 +182,40 @@ impl<Msg: Clone> FocusRegistry<Msg> {
     }
 }
 
+/// Information about a dropdown that needs to be rendered as an overlay
+pub struct DropdownInfo<Msg> {
+    pub select_area: Rect,              // The area of the select widget
+    pub options: Vec<String>,           // The dropdown options
+    pub selected: usize,                // Selected index
+    pub highlight: usize,               // Highlighted index
+    pub on_select: Option<fn(usize) -> Msg>,  // Callback when option selected
+}
+
+/// Stores dropdowns to be rendered as overlays after main UI
+pub struct DropdownRegistry<Msg> {
+    dropdowns: Vec<DropdownInfo<Msg>>,
+}
+
+impl<Msg: Clone> DropdownRegistry<Msg> {
+    pub fn new() -> Self {
+        Self {
+            dropdowns: Vec::new(),
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.dropdowns.clear();
+    }
+
+    pub fn register(&mut self, info: DropdownInfo<Msg>) {
+        self.dropdowns.push(info);
+    }
+
+    pub fn dropdowns(&self) -> &[DropdownInfo<Msg>] {
+        &self.dropdowns
+    }
+}
+
 /// Renders elements to the terminal
 pub struct Renderer;
 
@@ -191,17 +225,20 @@ impl Renderer {
         theme: &Theme,
         registry: &mut InteractionRegistry<Msg>,
         focus_registry: &mut FocusRegistry<Msg>,
+        dropdown_registry: &mut DropdownRegistry<Msg>,
         focused_id: Option<&FocusId>,
         element: &Element<Msg>,
         area: Rect,
     ) {
-        Self::render_element(frame, theme, registry, focus_registry, focused_id, element, area, false);
+        Self::render_element(frame, theme, registry, focus_registry, dropdown_registry, focused_id, element, area, false);
+        // After rendering main UI, render all dropdowns as overlays
+        Self::render_dropdowns(frame, theme, registry, dropdown_registry);
     }
 
     /// Check if an element or its descendants contain a focusable with the given ID
     fn element_contains_focus<Msg>(element: &Element<Msg>, focused_id: &FocusId) -> bool {
         match element {
-            Element::Button { id, .. } | Element::List { id, .. } | Element::TextInput { id, .. } | Element::Tree { id, .. } | Element::Scrollable { id, .. } => id == focused_id,
+            Element::Button { id, .. } | Element::List { id, .. } | Element::TextInput { id, .. } | Element::Tree { id, .. } | Element::Scrollable { id, .. } | Element::Select { id, .. } => id == focused_id,
             Element::Column { items, .. } | Element::Row { items, .. } => {
                 items.iter().any(|(_, child)| Self::element_contains_focus(child, focused_id))
             }
@@ -305,6 +342,31 @@ impl Renderer {
         })
     }
 
+    /// Create on_key handler for select elements (dropdown navigation)
+    fn select_on_key<Msg: Clone + Send + 'static>(
+        is_open: bool,
+        on_toggle: Option<Msg>,
+        on_navigate: Option<fn(KeyCode) -> Msg>,
+    ) -> Box<dyn Fn(KeyCode) -> Option<Msg> + Send> {
+        Box::new(move |key| {
+            if !is_open {
+                // Closed: Enter/Space toggles dropdown
+                match key {
+                    KeyCode::Enter | KeyCode::Char(' ') => on_toggle.clone(),
+                    _ => None,
+                }
+            } else {
+                // Open: Up/Down/Enter/Esc handled via on_navigate
+                match key {
+                    KeyCode::Up | KeyCode::Down | KeyCode::Enter | KeyCode::Esc => {
+                        on_navigate.map(|f| f(key))
+                    }
+                    _ => None,
+                }
+            }
+        })
+    }
+
     /// Calculate ratatui Constraints from our LayoutConstraints
     fn calculate_constraints<Msg>(
         items: &[(LayoutConstraint, Element<Msg>)],
@@ -349,6 +411,7 @@ impl Renderer {
         theme: &Theme,
         registry: &mut InteractionRegistry<Msg>,
         focus_registry: &mut FocusRegistry<Msg>,
+        dropdown_registry: &mut DropdownRegistry<Msg>,
         focused_id: Option<&FocusId>,
         element: &Element<Msg>,
         area: Rect,
@@ -440,7 +503,7 @@ impl Renderer {
 
                 // Render each child
                 for ((_, child), chunk) in items.iter().zip(chunks.iter()) {
-                    Self::render_element(frame, theme, registry, focus_registry, focused_id, child, *chunk, inside_panel);
+                    Self::render_element(frame, theme, registry, focus_registry, dropdown_registry, focused_id, child, *chunk, inside_panel);
                 }
             }
 
@@ -459,7 +522,7 @@ impl Renderer {
 
                 // Render each child
                 for ((_, child), chunk) in items.iter().zip(chunks.iter()) {
-                    Self::render_element(frame, theme, registry, focus_registry, focused_id, child, *chunk, inside_panel);
+                    Self::render_element(frame, theme, registry, focus_registry, dropdown_registry, focused_id, child, *chunk, inside_panel);
                 }
             }
 
@@ -471,7 +534,7 @@ impl Renderer {
                     width: area.width.saturating_sub(padding * 2),
                     height: area.height.saturating_sub(padding * 2),
                 };
-                Self::render_element(frame, theme, registry, focus_registry, focused_id, child, padded_area, inside_panel);
+                Self::render_element(frame, theme, registry, focus_registry, dropdown_registry, focused_id, child, padded_area, inside_panel);
             }
 
             Element::Panel { child, title } => {
@@ -505,7 +568,7 @@ impl Renderer {
                 frame.render_widget(block, area);
 
                 // Render child in the inner area, marking it as inside a panel
-                Self::render_element(frame, theme, registry, focus_registry, focused_id, child, inner_area, true);
+                Self::render_element(frame, theme, registry, focus_registry, dropdown_registry, focused_id, child, inner_area, true);
             }
 
             Element::List {
@@ -561,7 +624,7 @@ impl Renderer {
 
                     // Render each visible item
                     for ((_, child), chunk) in visible_items.iter().zip(chunks.iter()) {
-                        Self::render_element(frame, theme, registry, focus_registry, focused_id, child, *chunk, inside_panel);
+                        Self::render_element(frame, theme, registry, focus_registry, dropdown_registry, focused_id, child, *chunk, inside_panel);
                     }
                 }
 
@@ -729,7 +792,7 @@ impl Renderer {
 
                     // Render each visible item
                     for ((_, child), chunk) in visible_items.iter().zip(chunks.iter()) {
-                        Self::render_element(frame, theme, registry, focus_registry, focused_id, child, *chunk, inside_panel);
+                        Self::render_element(frame, theme, registry, focus_registry, dropdown_registry, focused_id, child, *chunk, inside_panel);
                     }
 
                     // Register click handlers for nodes
@@ -862,13 +925,13 @@ impl Renderer {
 
                             // Render each visible item
                             for ((_, item_child), chunk) in visible_items.iter().zip(chunks.iter()) {
-                                Self::render_element(frame, theme, registry, focus_registry, focused_id, item_child, *chunk, inside_panel);
+                                Self::render_element(frame, theme, registry, focus_registry, dropdown_registry, focused_id, item_child, *chunk, inside_panel);
                             }
                         }
                     }
                     _ => {
                         // For other element types, render normally (can't virtual scroll)
-                        Self::render_element(frame, theme, registry, focus_registry, focused_id, child, content_area, inside_panel);
+                        Self::render_element(frame, theme, registry, focus_registry, dropdown_registry, focused_id, child, content_area, inside_panel);
                     }
                 }
 
@@ -909,6 +972,87 @@ impl Renderer {
                 }
             }
 
+            Element::Select {
+                id,
+                options,
+                selected,
+                is_open,
+                highlight,
+                on_select,
+                on_toggle,
+                on_navigate,
+                on_focus,
+                on_blur,
+            } => {
+                // Register in focus registry
+                focus_registry.register_focusable(FocusableInfo {
+                    id: id.clone(),
+                    rect: area,
+                    on_key: Self::select_on_key(*is_open, on_toggle.clone(), on_navigate.clone()),
+                    on_focus: on_focus.clone(),
+                    on_blur: on_blur.clone(),
+                    inside_panel,
+                });
+
+                let is_focused = focused_id == Some(id);
+
+                // Select should only use 3 lines (border + content + border), not the full allocated area
+                let select_height = 3;
+                let select_area = Rect {
+                    x: area.x,
+                    y: area.y,
+                    width: area.width,
+                    height: select_height.min(area.height),
+                };
+
+                // Determine border color
+                let border_color = if is_focused && !inside_panel {
+                    theme.lavender
+                } else {
+                    theme.overlay0
+                };
+
+                // Get selected option text
+                let selected_text = if *selected < options.len() {
+                    &options[*selected]
+                } else {
+                    ""
+                };
+
+                // Render closed state: Panel with selected value + arrow
+                let arrow = if *is_open { " ▲" } else { " ▼" };
+                let display_text = format!("{}{}", selected_text, arrow);
+
+                let block = Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(border_color))
+                    .style(Style::default().bg(theme.base));
+
+                let inner_area = block.inner(select_area);
+                frame.render_widget(block, select_area);
+
+                // Render selected text
+                let text_widget = Paragraph::new(display_text)
+                    .style(Style::default().fg(theme.text));
+                frame.render_widget(text_widget, inner_area);
+
+                // Register click handler for toggle
+                if let Some(toggle_msg) = on_toggle {
+                    registry.register_click(select_area, toggle_msg.clone());
+                }
+
+                // If open, register dropdown for overlay rendering (rendered after main UI)
+                if *is_open && !options.is_empty() {
+                    dropdown_registry.register(DropdownInfo {
+                        select_area,
+                        options: options.clone(),
+                        selected: *selected,
+                        highlight: *highlight,
+                        on_select: *on_select,
+                    });
+                }
+            }
+
             Element::Stack { layers } => {
                 // Render all layers visually
                 for (layer_idx, layer) in layers.iter().enumerate() {
@@ -924,7 +1068,7 @@ impl Renderer {
                     focus_registry.push_layer(layer_idx);
 
                     // Render the layer element
-                    Self::render_element(frame, theme, registry, focus_registry, focused_id, &layer.element, layer_area, inside_panel);
+                    Self::render_element(frame, theme, registry, focus_registry, dropdown_registry, focused_id, &layer.element, layer_area, inside_panel);
 
                     // Pop focus layer context
                     focus_registry.pop_layer();
@@ -938,7 +1082,7 @@ impl Renderer {
 
                     // Re-push the topmost layer context
                     focus_registry.push_layer(layer_idx);
-                    Self::render_element(frame, theme, registry, focus_registry, focused_id, &last_layer.element, layer_area, inside_panel);
+                    Self::render_element(frame, theme, registry, focus_registry, dropdown_registry, focused_id, &last_layer.element, layer_area, inside_panel);
                     focus_registry.pop_layer();
                 }
             }
@@ -1033,6 +1177,84 @@ impl Renderer {
             _ => {
                 // Default: 50% of container
                 (container.width / 2, container.height / 2)
+            }
+        }
+    }
+
+    /// Render all registered dropdowns as overlays (called after main UI rendering)
+    fn render_dropdowns<Msg: Clone>(
+        frame: &mut Frame,
+        theme: &Theme,
+        registry: &mut InteractionRegistry<Msg>,
+        dropdown_registry: &DropdownRegistry<Msg>,
+    ) {
+        for dropdown in dropdown_registry.dropdowns() {
+            // Calculate dropdown position (below the select, or above if no room)
+            let dropdown_height = (dropdown.options.len() as u16).min(10) + 2; // +2 for borders
+            let dropdown_y = if dropdown.select_area.y + dropdown.select_area.height + dropdown_height <= frame.size().height {
+                // Render below
+                dropdown.select_area.y + dropdown.select_area.height
+            } else {
+                // Render above
+                dropdown.select_area.y.saturating_sub(dropdown_height)
+            };
+
+            let dropdown_area = Rect {
+                x: dropdown.select_area.x,
+                y: dropdown_y,
+                width: dropdown.select_area.width,
+                height: dropdown_height,
+            };
+
+            // First, clear the area to remove any bleed-through
+            frame.render_widget(Clear, dropdown_area);
+
+            // Then render a solid background fill
+            let background = Paragraph::new("")
+                .style(Style::default().bg(theme.base));
+            frame.render_widget(background, dropdown_area);
+
+            // Then render dropdown panel with borders on top
+            let dropdown_block = Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(theme.overlay1));
+
+            let dropdown_inner = dropdown_block.inner(dropdown_area);
+            frame.render_widget(dropdown_block, dropdown_area);
+
+            // Render options (simple iteration, no virtual scrolling needed for small lists)
+            let max_visible = dropdown_inner.height as usize;
+            let num_to_render = dropdown.options.len().min(max_visible);
+
+            for idx in 0..num_to_render {
+                let line_area = Rect {
+                    x: dropdown_inner.x,
+                    y: dropdown_inner.y + idx as u16,
+                    width: dropdown_inner.width,
+                    height: 1,
+                };
+
+                let option_text = &dropdown.options[idx];
+
+                // Determine styling for this option
+                let (prefix, fg_color, bg_color) = if idx == dropdown.highlight {
+                    ("> ", theme.text, theme.surface0)
+                } else if idx == dropdown.selected {
+                    ("✓ ", theme.green, theme.base)
+                } else {
+                    ("  ", theme.text, theme.base)
+                };
+
+                // Render the option text with background
+                let option_display = format!("{}{}", prefix, option_text);
+                let option_widget = Paragraph::new(option_display)
+                    .style(Style::default().fg(fg_color).bg(bg_color));
+                frame.render_widget(option_widget, line_area);
+
+                // Register click handler for this option
+                if let Some(select_fn) = dropdown.on_select {
+                    registry.register_click(line_area, select_fn(idx));
+                }
             }
         }
     }

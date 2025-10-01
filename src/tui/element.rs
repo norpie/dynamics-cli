@@ -173,6 +173,20 @@ pub enum Element<Msg> {
         on_focus: Option<Msg>,
         on_blur: Option<Msg>,
     },
+
+    /// Select/Dropdown widget
+    Select {
+        id: FocusId,
+        options: Vec<String>,               // Display labels for options
+        selected: usize,                    // Selected index
+        is_open: bool,                      // Dropdown open?
+        highlight: usize,                   // Highlighted option (when open)
+        on_select: Option<fn(usize) -> Msg>,  // Called when option selected
+        on_toggle: Option<Msg>,             // Called when dropdown toggled
+        on_navigate: Option<fn(crossterm::event::KeyCode) -> Msg>,  // Called for keyboard navigation when open
+        on_focus: Option<Msg>,
+        on_blur: Option<Msg>,
+    },
 }
 
 impl<Msg> Element<Msg> {
@@ -332,12 +346,20 @@ impl<Msg> Element<Msg> {
             Element::Column { .. } => LayoutConstraint::Fill(1),
             Element::Row { .. } => LayoutConstraint::Fill(1),
             Element::Container { .. } => LayoutConstraint::Fill(1),
-            Element::Panel { .. } => LayoutConstraint::Fill(1),
+            Element::Panel { child, .. } => {
+                // Panel sizes to child + 2 lines for borders (top + bottom)
+                match child.default_constraint() {
+                    LayoutConstraint::Length(n) => LayoutConstraint::Length(n + 2),
+                    LayoutConstraint::Min(n) => LayoutConstraint::Min(n + 2),
+                    LayoutConstraint::Fill(w) => LayoutConstraint::Fill(w),
+                }
+            }
             Element::Stack { .. } => LayoutConstraint::Fill(1),
             Element::List { .. } => LayoutConstraint::Fill(1),
             Element::TextInput { .. } => LayoutConstraint::Length(1),
             Element::Tree { .. } => LayoutConstraint::Fill(1),
             Element::Scrollable { .. } => LayoutConstraint::Fill(1),
+            Element::Select { .. } => LayoutConstraint::Length(3),  // Closed: 3 lines (border + content + border)
         }
     }
 
@@ -438,6 +460,29 @@ impl<Msg> Element<Msg> {
             scroll_offset: state.scroll_offset(),
             content_height: None,
             on_scroll: None,
+            on_focus: None,
+            on_blur: None,
+        }
+    }
+
+    /// Create a select/dropdown element
+    pub fn select(
+        id: FocusId,
+        options: Vec<String>,
+        state: &mut crate::tui::widgets::SelectState,
+    ) -> SelectBuilder<Msg> {
+        // Update state with current option count
+        state.update_option_count(options.len());
+
+        SelectBuilder {
+            id,
+            options,
+            selected: state.selected(),
+            is_open: state.is_open(),
+            highlight: state.highlighted(),
+            on_select: None,
+            on_toggle: None,
+            on_navigate: None,
             on_focus: None,
             on_blur: None,
         }
@@ -842,6 +887,65 @@ impl<Msg> ScrollableBuilder<Msg> {
             scroll_offset: self.scroll_offset,
             content_height: self.content_height,
             on_scroll: self.on_scroll,
+            on_focus: self.on_focus,
+            on_blur: self.on_blur,
+        }
+    }
+}
+
+/// Builder for select/dropdown elements
+pub struct SelectBuilder<Msg> {
+    id: FocusId,
+    options: Vec<String>,
+    selected: usize,
+    is_open: bool,
+    highlight: usize,
+    on_select: Option<fn(usize) -> Msg>,
+    on_toggle: Option<Msg>,
+    on_navigate: Option<fn(crossterm::event::KeyCode) -> Msg>,
+    on_focus: Option<Msg>,
+    on_blur: Option<Msg>,
+}
+
+impl<Msg> SelectBuilder<Msg> {
+    /// Set callback when option is selected
+    pub fn on_select(mut self, msg: fn(usize) -> Msg) -> Self {
+        self.on_select = Some(msg);
+        self
+    }
+
+    /// Set callback when dropdown is toggled
+    pub fn on_toggle(mut self, msg: Msg) -> Self {
+        self.on_toggle = Some(msg);
+        self
+    }
+
+    /// Set callback for keyboard navigation when dropdown is open
+    pub fn on_navigate(mut self, msg: fn(crossterm::event::KeyCode) -> Msg) -> Self {
+        self.on_navigate = Some(msg);
+        self
+    }
+
+    pub fn on_focus(mut self, msg: Msg) -> Self {
+        self.on_focus = Some(msg);
+        self
+    }
+
+    pub fn on_blur(mut self, msg: Msg) -> Self {
+        self.on_blur = Some(msg);
+        self
+    }
+
+    pub fn build(self) -> Element<Msg> {
+        Element::Select {
+            id: self.id,
+            options: self.options,
+            selected: self.selected,
+            is_open: self.is_open,
+            highlight: self.highlight,
+            on_select: self.on_select,
+            on_toggle: self.on_toggle,
+            on_navigate: self.on_navigate,
             on_focus: self.on_focus,
             on_blur: self.on_blur,
         }

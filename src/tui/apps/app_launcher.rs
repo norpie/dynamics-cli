@@ -50,6 +50,11 @@ impl Default for State {
                     name: "Example 5".to_string(),
                     description: "Tree widget demo - hierarchical navigation".to_string(),
                 },
+                AppInfo {
+                    id: AppId::Example6,
+                    name: "Example 6".to_string(),
+                    description: "Select widget demo - dropdowns and options".to_string(),
+                },
             ],
             list_state: ListState::with_selection(),
             initialized: false,

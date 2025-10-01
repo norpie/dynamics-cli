@@ -6,7 +6,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use anyhow::Result;
 use std::collections::HashMap;
 
-use crate::tui::{AppId, Runtime, AppRuntime, apps::{AppLauncher, Example1, Example2, Example3, Example4, Example5, LoadingScreen, ErrorScreen}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App};
+use crate::tui::{AppId, Runtime, AppRuntime, apps::{AppLauncher, Example1, Example2, Example3, Example4, Example5, Example6, LoadingScreen, ErrorScreen}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App};
 use crate::tui::element::{ColumnBuilder, RowBuilder, FocusId};
 use crate::tui::widgets::ScrollableState;
 
@@ -34,6 +34,7 @@ impl MultiAppRuntime {
         runtimes.insert(AppId::Example3, Box::new(Runtime::<Example3>::new()));
         runtimes.insert(AppId::Example4, Box::new(Runtime::<Example4>::new()));
         runtimes.insert(AppId::Example5, Box::new(Runtime::<Example5>::new()));
+        runtimes.insert(AppId::Example6, Box::new(Runtime::<Example6>::new()));
         runtimes.insert(AppId::LoadingScreen, Box::new(Runtime::<LoadingScreen>::new()));
         runtimes.insert(AppId::ErrorScreen, Box::new(Runtime::<ErrorScreen>::new()));
 
@@ -197,10 +198,11 @@ impl MultiAppRuntime {
         .build();
 
         use crate::tui::{Renderer, InteractionRegistry};
-        use crate::tui::renderer::FocusRegistry;
+        use crate::tui::renderer::{FocusRegistry, DropdownRegistry};
         let mut registry: InteractionRegistry<()> = InteractionRegistry::new();
         let mut focus_registry: FocusRegistry<()> = FocusRegistry::new();
-        Renderer::render(frame, theme, &mut registry, &mut focus_registry, None, &header, area);
+        let mut dropdown_registry: DropdownRegistry<()> = DropdownRegistry::new();
+        Renderer::render(frame, theme, &mut registry, &mut focus_registry, &mut dropdown_registry, None, &header, area);
     }
 
     fn render_help_menu(&mut self, frame: &mut Frame, area: ratatui::layout::Rect, theme: &Theme) {
@@ -339,10 +341,11 @@ impl MultiAppRuntime {
         .build();
 
         use crate::tui::{Renderer, InteractionRegistry};
-        use crate::tui::renderer::FocusRegistry;
+        use crate::tui::renderer::{FocusRegistry, DropdownRegistry};
         let mut registry: InteractionRegistry<()> = InteractionRegistry::new();
         let mut focus_registry: FocusRegistry<()> = FocusRegistry::new();
-        Renderer::render(frame, theme, &mut registry, &mut focus_registry, None, &help_modal, modal_area);
+        let mut dropdown_registry: DropdownRegistry<()> = DropdownRegistry::new();
+        Renderer::render(frame, theme, &mut registry, &mut focus_registry, &mut dropdown_registry, None, &help_modal, modal_area);
     }
 
     /// Poll async commands for all apps

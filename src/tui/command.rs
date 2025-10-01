@@ -40,6 +40,7 @@ pub enum AppId {
     Example3,
     Example4,
     Example5,
+    Example6,
     LoadingScreen,
     ErrorScreen,
 }

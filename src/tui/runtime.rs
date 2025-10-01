@@ -8,7 +8,7 @@ use std::pin::Pin;
 use std::future::Future;
 
 use crate::tui::{App, AppId, Command, Renderer, InteractionRegistry, Subscription};
-use crate::tui::renderer::{FocusRegistry, FocusableInfo};
+use crate::tui::renderer::{FocusRegistry, FocusableInfo, DropdownRegistry};
 use crate::tui::element::FocusId;
 use crate::tui::state::{RuntimeConfig, FocusMode};
 
@@ -42,6 +42,9 @@ pub struct Runtime<A: App> {
 
     /// Focus registry for keyboard focus
     focus_registry: FocusRegistry<A::Msg>,
+
+    /// Dropdown registry for select widget overlays
+    dropdown_registry: DropdownRegistry<A::Msg>,
 
     /// Currently focused element ID
     focused_id: Option<FocusId>,
@@ -78,6 +81,7 @@ impl<A: App> Runtime<A> {
             config,
             registry: InteractionRegistry::new(),
             focus_registry: FocusRegistry::new(),
+            dropdown_registry: DropdownRegistry::new(),
             focused_id: None,
             key_subscriptions: HashMap::new(),
             event_bus: HashMap::new(),
@@ -533,6 +537,7 @@ impl<A: App> Runtime<A> {
         // Clear registries for this frame
         self.registry.clear();
         self.focus_registry.clear();
+        self.dropdown_registry.clear();
 
         // Get the view from the app
         let view = A::view(&mut self.state, &self.config.theme);
@@ -543,6 +548,7 @@ impl<A: App> Runtime<A> {
             &self.config.theme,
             &mut self.registry,
             &mut self.focus_registry,
+            &mut self.dropdown_registry,
             self.focused_id.as_ref(),
             &view,
             area,
