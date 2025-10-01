@@ -532,24 +532,20 @@ fn test_delete_confirmation_flow() {
   - [x] Keyboard navigation (Up/Down/PageUp/PageDown/Home/End)
   - [x] Mouse support (click, scroll)
   - [x] Virtual scrolling optimization
-  - [ ] Tests
 - [x] Implement TextInput widget
   - [x] Text editing (insert, delete, cursor movement)
   - [x] Placeholder text
   - [x] Max length validation
   - [x] Borderless design (wraps in Panel for label + border)
-  - [ ] Tests
-- [ ] Implement Tree widget
-  - [ ] Hierarchical data structure
-  - [ ] Expand/collapse functionality
-  - [ ] Keyboard navigation
-  - [ ] Virtualized rendering
-  - [ ] Tests
+- [x] Implement Tree widget
+  - [x] Hierarchical data structure
+  - [x] Expand/collapse functionality
+  - [x] Keyboard navigation
+  - [x] Virtualized rendering
 - [x] Implement Tabs widget
   - [x] Tab bar rendering
   - [x] Content switching
   - [x] Keyboard navigation (Left/Right)
-  - [ ] Tests
 
 ### Phase 2: Simple Apps
 - [ ] MigrationSelectApp
@@ -558,19 +554,16 @@ fn test_delete_confirmation_flow() {
   - [ ] Implement view() with List widget
   - [ ] Add delete confirmation modal
   - [ ] Wire up navigation to other apps
-  - [ ] Tests
 - [ ] EnvironmentSelectApp
   - [ ] Define State & Msg for two-phase selection
   - [ ] Implement update() logic
   - [ ] Implement view() with dynamic title
   - [ ] Wire up navigation
-  - [ ] Tests
 - [ ] LoadingApp
   - [ ] Define State with progress tracking
   - [ ] Implement async data fetching
   - [ ] Implement view() with spinner and task list
   - [ ] Handle success/failure states
-  - [ ] Tests
 
 ### Phase 3: Complex App
 - [ ] UnifiedCompareApp - Structure
@@ -592,7 +585,6 @@ fn test_delete_confirmation_flow() {
   - [ ] Cross-tab communication (pub/sub)
   - [ ] Examples modal
   - [ ] Export functionality
-  - [ ] Tests
 
 ### Phase 4: Polish
 - [x] Migrate to Catppuccin theme colors
