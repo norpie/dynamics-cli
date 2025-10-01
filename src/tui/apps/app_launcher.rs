@@ -10,6 +10,7 @@ pub struct AppLauncher;
 
 #[derive(Clone)]
 pub enum Msg {
+    Initialize,
     LaunchApp(usize),
     ListNavigate(KeyCode),
 }
@@ -17,6 +18,7 @@ pub enum Msg {
 pub struct State {
     apps: Vec<AppInfo>,
     list_state: ListState,
+    initialized: bool,
 }
 
 impl Default for State {
@@ -35,6 +37,7 @@ impl Default for State {
                 },
             ],
             list_state: ListState::with_selection(),
+            initialized: false,
         }
     }
 }
@@ -68,6 +71,15 @@ impl App for AppLauncher {
 
     fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         match msg {
+            Msg::Initialize => {
+                // Auto-focus the list on app start
+                if !state.initialized {
+                    state.initialized = true;
+                    Command::set_focus(FocusId::new("app-list"))
+                } else {
+                    Command::None
+                }
+            }
             Msg::LaunchApp(idx) => {
                 if let Some(app_info) = state.apps.get(idx) {
                     Command::navigate_to(app_info.id)
@@ -95,57 +107,28 @@ impl App for AppLauncher {
         .on_navigate(Msg::ListNavigate)
         .build();
 
-        // Wrap list in panel to ensure consistent border
-        let list_panel = Element::panel(list)
+        // Just the list in a panel, filling the entire area
+        Element::panel(list)
             .title("Apps")
-            .build();
-
-        ColumnBuilder::new()
-            .add(
-                Element::styled_text(Line::from(vec![
-                    Span::styled("App Launcher", Style::default().fg(theme.blue).bold()),
-                ])),
-                LayoutConstraint::Length(1),
-            )
-            .add(
-                Element::text(""),
-                LayoutConstraint::Length(1),
-            )
-            .add(
-                Element::text("Select an app to launch:"),
-                LayoutConstraint::Length(1),
-            )
-            .add(
-                Element::text(""),
-                LayoutConstraint::Length(1),
-            )
-            .add(list_panel, LayoutConstraint::Fill(1))
-            .add(
-                Element::text(""),
-                LayoutConstraint::Length(1),
-            )
-            .add(
-                Element::styled_text(Line::from(vec![
-                    Span::styled("↑/↓: Navigate  ", Style::default().fg(theme.overlay1)),
-                    Span::styled("Enter: Launch  ", Style::default().fg(theme.overlay1)),
-                    Span::styled("Tab: Focus", Style::default().fg(theme.overlay1)),
-                ])),
-                LayoutConstraint::Length(1),
-            )
-            .spacing(0)
             .build()
     }
 
     fn subscriptions(state: &State) -> Vec<Subscription<Msg>> {
-        // Navigation is handled via focus system - no keyboard subscriptions needed
-        vec![]
+        let mut subs = vec![];
+
+        // Fire initialization once on app start
+        if !state.initialized {
+            subs.push(Subscription::timer(std::time::Duration::from_millis(1), Msg::Initialize));
+        }
+
+        subs
     }
 
     fn title() -> &'static str {
         "App Launcher"
     }
 
-    fn status(_state: &State, theme: &Theme) -> Option<Line<'static>> {
-        Some(Line::from(Span::styled("[Ready]", Style::default().fg(theme.green))))
+    fn status(_state: &State, _theme: &Theme) -> Option<Line<'static>> {
+        None
     }
 }
