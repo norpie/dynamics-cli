@@ -219,7 +219,7 @@ impl App for MigrationComparisonSelectApp {
             ]))
         } else {
             Some(Line::from(vec![
-                Span::styled("No migration selected", Style::default().fg(theme.subtext1))
+                Span::styled("Loading migration data...", Style::default().fg(theme.subtext1))
             ]))
         }
     }

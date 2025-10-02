@@ -34,24 +34,63 @@ pub enum Direction {
 }
 
 /// Load all available migrations from the embedded files
+/// Migrations are auto-discovered from files/ directory using include_dir!
 pub fn load_migrations() -> Result<BTreeMap<i64, Migration>> {
+    use include_dir::{include_dir, Dir};
+
+    // Embed the entire files directory at compile time
+    static MIGRATIONS_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/src/config/migrations/files");
+
     let mut migrations = BTreeMap::new();
 
-    // Migration 001: Initial schema
-    migrations.insert(1, Migration {
-        version: 1,
-        name: "initial".to_string(),
-        up_sql: include_str!("files/001_initial/up.sql").to_string(),
-        down_sql: include_str!("files/001_initial/down.sql").to_string(),
-    });
+    // Iterate through each migration directory (e.g., "001_initial", "002_indexes")
+    for entry in MIGRATIONS_DIR.dirs() {
+        let dir_name = entry.path().to_str()
+            .context("Invalid migration directory name")?;
 
-    // Migration 002: Indexes
-    migrations.insert(2, Migration {
-        version: 2,
-        name: "indexes".to_string(),
-        up_sql: include_str!("files/002_indexes/up.sql").to_string(),
-        down_sql: include_str!("files/002_indexes/down.sql").to_string(),
-    });
+        // Get just the directory name (last component)
+        let name_only = entry.path().file_name()
+            .and_then(|n| n.to_str())
+            .context("Invalid migration directory name")?;
+
+        // Parse version and name from directory name (format: NNN_name)
+        let parts: Vec<&str> = name_only.splitn(2, '_').collect();
+        if parts.len() != 2 {
+            anyhow::bail!("Invalid migration directory format: {}. Expected format: NNN_name", name_only);
+        }
+
+        let version: i64 = parts[0].parse()
+            .with_context(|| format!("Invalid migration version in directory: {}", name_only))?;
+        let name = parts[1].to_string();
+
+        // Read up.sql and down.sql from the directory
+        // Files are stored with full paths like "001_initial/up.sql"
+        let up_path = format!("{}/up.sql", name_only);
+        let down_path = format!("{}/down.sql", name_only);
+
+        let up_sql = MIGRATIONS_DIR.get_file(&up_path)
+            .with_context(|| format!("Missing up.sql in migration {}", dir_name))?
+            .contents_utf8()
+            .with_context(|| format!("up.sql is not valid UTF-8 in migration {}", dir_name))?
+            .to_string();
+
+        let down_sql = MIGRATIONS_DIR.get_file(&down_path)
+            .with_context(|| format!("Missing down.sql in migration {}", dir_name))?
+            .contents_utf8()
+            .with_context(|| format!("down.sql is not valid UTF-8 in migration {}", dir_name))?
+            .to_string();
+
+        migrations.insert(version, Migration {
+            version,
+            name,
+            up_sql,
+            down_sql,
+        });
+    }
+
+    if migrations.is_empty() {
+        anyhow::bail!("No migrations found in files directory");
+    }
 
     Ok(migrations)
 }
@@ -163,9 +202,19 @@ mod tests {
     #[test]
     fn test_load_migrations() {
         let migrations = load_migrations().unwrap();
-        assert!(!migrations.is_empty());
-        assert!(migrations.contains_key(&1));
-        assert!(migrations.contains_key(&2));
+        assert!(!migrations.is_empty(), "Should have at least one migration");
+
+        // Should have migrations 1, 2, and 3 auto-discovered
+        assert!(migrations.contains_key(&1), "Should have migration 001_initial");
+        assert!(migrations.contains_key(&2), "Should have migration 002_indexes");
+        assert!(migrations.contains_key(&3), "Should have migration 003_entity_cache");
+
+        // Verify each migration has up and down SQL
+        for (version, migration) in &migrations {
+            assert!(!migration.up_sql.is_empty(), "Migration {} should have up.sql", version);
+            assert!(!migration.down_sql.is_empty(), "Migration {} should have down.sql", version);
+            assert!(!migration.name.is_empty(), "Migration {} should have a name", version);
+        }
     }
 
     #[test]

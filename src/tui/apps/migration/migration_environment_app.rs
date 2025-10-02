@@ -224,7 +224,13 @@ impl App for MigrationEnvironmentApp {
                                         let client = manager.get_client(&source_env_clone).await.map_err(|e| e.to_string())?;
                                         let metadata_xml = client.fetch_metadata().await.map_err(|e| e.to_string())?;
                                         let entities = parse_entity_list(&metadata_xml).map_err(|e| e.to_string())?;
-                                        let _ = config.set_entity_cache(&source_env_clone, entities.clone()).await;
+
+                                        // Cache the entities and log result
+                                        match config.set_entity_cache(&source_env_clone, entities.clone()).await {
+                                            Ok(_) => log::info!("Successfully cached {} entities for {}", entities.len(), source_env_clone),
+                                            Err(e) => log::error!("Failed to cache entities for {}: {}", source_env_clone, e),
+                                        }
+
                                         Ok(entities)
                                     }
                                 }
@@ -248,7 +254,13 @@ impl App for MigrationEnvironmentApp {
                                         let client = manager.get_client(&target_env_clone).await.map_err(|e| e.to_string())?;
                                         let metadata_xml = client.fetch_metadata().await.map_err(|e| e.to_string())?;
                                         let entities = parse_entity_list(&metadata_xml).map_err(|e| e.to_string())?;
-                                        let _ = config.set_entity_cache(&target_env_clone, entities.clone()).await;
+
+                                        // Cache the entities and log result
+                                        match config.set_entity_cache(&target_env_clone, entities.clone()).await {
+                                            Ok(_) => log::info!("Successfully cached {} entities for {}", entities.len(), target_env_clone),
+                                            Err(e) => log::error!("Failed to cache entities for {}: {}", target_env_clone, e),
+                                        }
+
                                         Ok(entities)
                                     }
                                 }
