@@ -56,6 +56,11 @@ impl Default for State {
                     description: "Select widget demo - dropdowns and options".to_string(),
                 },
                 AppInfo {
+                    id: AppId::Example7,
+                    name: "Example 7".to_string(),
+                    description: "Autocomplete widget demo - fuzzy-matched input".to_string(),
+                },
+                AppInfo {
                     id: AppId::MigrationEnvironment,
                     name: "Migration Environments".to_string(),
                     description: "Migration environment selection".to_string(),

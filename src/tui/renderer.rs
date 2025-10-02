@@ -182,13 +182,19 @@ impl<Msg: Clone> FocusRegistry<Msg> {
     }
 }
 
+/// Type of dropdown callback
+pub enum DropdownCallback<Msg> {
+    Select(Option<fn(usize) -> Msg>),      // Select by index
+    Autocomplete(Option<fn(String) -> Msg>), // Select by string value
+}
+
 /// Information about a dropdown that needs to be rendered as an overlay
 pub struct DropdownInfo<Msg> {
     pub select_area: Rect,              // The area of the select widget
     pub options: Vec<String>,           // The dropdown options
-    pub selected: usize,                // Selected index
+    pub selected: Option<usize>,        // Selected index (None for autocomplete)
     pub highlight: usize,               // Highlighted index
-    pub on_select: Option<fn(usize) -> Msg>,  // Callback when option selected
+    pub on_select: DropdownCallback<Msg>,  // Callback when option selected
 }
 
 /// Stores dropdowns to be rendered as overlays after main UI
@@ -238,7 +244,7 @@ impl Renderer {
     /// Check if an element or its descendants contain a focusable with the given ID
     fn element_contains_focus<Msg>(element: &Element<Msg>, focused_id: &FocusId) -> bool {
         match element {
-            Element::Button { id, .. } | Element::List { id, .. } | Element::TextInput { id, .. } | Element::Tree { id, .. } | Element::Scrollable { id, .. } | Element::Select { id, .. } => id == focused_id,
+            Element::Button { id, .. } | Element::List { id, .. } | Element::TextInput { id, .. } | Element::Tree { id, .. } | Element::Scrollable { id, .. } | Element::Select { id, .. } | Element::Autocomplete { id, .. } => id == focused_id,
             Element::Column { items, .. } | Element::Row { items, .. } => {
                 items.iter().any(|(_, child)| Self::element_contains_focus(child, focused_id))
             }
@@ -363,6 +369,31 @@ impl Renderer {
                     }
                     _ => None,
                 }
+            }
+        })
+    }
+
+    /// Create on_key handler for autocomplete elements
+    fn autocomplete_on_key<Msg: Clone + Send + 'static>(
+        is_open: bool,
+        on_input: Option<fn(KeyCode) -> Msg>,
+        on_navigate: Option<fn(KeyCode) -> Msg>,
+    ) -> Box<dyn Fn(KeyCode) -> Option<Msg> + Send> {
+        Box::new(move |key| {
+            if is_open {
+                // Dropdown open: Up/Down/Enter/Esc go to navigate, others to input
+                match key {
+                    KeyCode::Up | KeyCode::Down | KeyCode::Enter | KeyCode::Esc => {
+                        on_navigate.map(|f| f(key))
+                    }
+                    _ => {
+                        // All other keys go to input for typing
+                        on_input.map(|f| f(key))
+                    }
+                }
+            } else {
+                // Dropdown closed: all keys go to input
+                on_input.map(|f| f(key))
             }
         })
     }
@@ -1045,9 +1076,105 @@ impl Renderer {
                     dropdown_registry.register(DropdownInfo {
                         select_area,
                         options: options.clone(),
-                        selected: *selected,
+                        selected: Some(*selected),
                         highlight: *highlight,
-                        on_select: *on_select,
+                        on_select: DropdownCallback::Select(*on_select),
+                    });
+                }
+            }
+
+            Element::Autocomplete {
+                id,
+                all_options: _,
+                current_input,
+                placeholder,
+                is_open,
+                filtered_options,
+                highlight,
+                on_input,
+                on_select,
+                on_navigate,
+                on_focus,
+                on_blur,
+            } => {
+                // Register in focus registry
+                focus_registry.register_focusable(FocusableInfo {
+                    id: id.clone(),
+                    rect: area,
+                    on_key: Self::autocomplete_on_key(*is_open, *on_input, *on_navigate),
+                    on_focus: on_focus.clone(),
+                    on_blur: on_blur.clone(),
+                    inside_panel,
+                });
+
+                let is_focused = focused_id == Some(id);
+
+                // Autocomplete uses 3 lines (border + content + border)
+                let input_height = 3;
+                let input_area = Rect {
+                    x: area.x,
+                    y: area.y,
+                    width: area.width,
+                    height: input_height.min(area.height),
+                };
+
+                // Determine border color
+                let border_color = if is_focused && !inside_panel {
+                    theme.lavender
+                } else {
+                    theme.overlay0
+                };
+
+                // Render input field
+                let block = Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(border_color))
+                    .style(Style::default().bg(theme.base));
+
+                let inner_area = block.inner(input_area);
+                frame.render_widget(block, input_area);
+
+                // Calculate visible width
+                let visible_width = inner_area.width.saturating_sub(2) as usize;
+
+                // Build display text
+                let display_text = if current_input.is_empty() && !is_focused {
+                    // Show placeholder
+                    if let Some(ph) = placeholder {
+                        format!(" {}", ph)
+                    } else {
+                        String::from(" ")
+                    }
+                } else {
+                    // Show current input with cursor if focused
+                    if is_focused {
+                        // Simple cursor at end (no scroll support for now)
+                        let visible_text: String = current_input.chars().take(visible_width - 2).collect();
+                        format!(" {}│", visible_text)
+                    } else {
+                        let visible_text: String = current_input.chars().take(visible_width - 1).collect();
+                        format!(" {}", visible_text)
+                    }
+                };
+
+                // Determine text style
+                let text_style = if current_input.is_empty() && !is_focused {
+                    Style::default().fg(theme.overlay1).italic()
+                } else {
+                    Style::default().fg(theme.text)
+                };
+
+                let text_widget = Paragraph::new(display_text).style(text_style);
+                frame.render_widget(text_widget, inner_area);
+
+                // If open, register dropdown for overlay rendering
+                if *is_open && !filtered_options.is_empty() {
+                    dropdown_registry.register(DropdownInfo {
+                        select_area: input_area,
+                        options: filtered_options.clone(),
+                        selected: None,  // No checkmark for autocomplete
+                        highlight: *highlight,
+                        on_select: DropdownCallback::Autocomplete(*on_select),
                     });
                 }
             }
@@ -1246,6 +1373,7 @@ impl Renderer {
                 Self::calculate_content_size(child, max_width, max_height)
             }
             Element::Select { .. } => (max_width.min(30), 3),
+            Element::Autocomplete { .. } => (max_width.min(40), 3),
             Element::Stack { layers } => {
                 // Stack size is the max of all layers
                 let mut max_w = 0u16;
@@ -1303,6 +1431,10 @@ impl Renderer {
             Element::TextInput { .. } => {
                 // Text input: fixed height (1 line), full width
                 (container.width, 1)
+            }
+            Element::Autocomplete { .. } => {
+                // Autocomplete: fixed height (3 lines including borders), full width
+                (container.width, 3)
             }
             _ => {
                 // Default: 50% of container
@@ -1369,7 +1501,7 @@ impl Renderer {
                 // Determine styling for this option
                 let (prefix, fg_color, bg_color) = if idx == dropdown.highlight {
                     ("> ", theme.text, theme.surface0)
-                } else if idx == dropdown.selected {
+                } else if Some(idx) == dropdown.selected {
                     ("✓ ", theme.green, theme.base)
                 } else {
                     ("  ", theme.text, theme.base)
@@ -1382,8 +1514,14 @@ impl Renderer {
                 frame.render_widget(option_widget, line_area);
 
                 // Register click handler for this option
-                if let Some(select_fn) = dropdown.on_select {
-                    registry.register_click(line_area, select_fn(idx));
+                match &dropdown.on_select {
+                    DropdownCallback::Select(Some(select_fn)) => {
+                        registry.register_click(line_area, select_fn(idx));
+                    }
+                    DropdownCallback::Autocomplete(Some(select_fn)) => {
+                        registry.register_click(line_area, select_fn(option_text.clone()));
+                    }
+                    _ => {}
                 }
             }
         }

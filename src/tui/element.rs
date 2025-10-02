@@ -189,6 +189,22 @@ pub enum Element<Msg> {
         on_focus: Option<Msg>,
         on_blur: Option<Msg>,
     },
+
+    /// Autocomplete input with fuzzy-matched dropdown
+    Autocomplete {
+        id: FocusId,
+        all_options: Vec<String>,           // Full list to filter against
+        current_input: String,              // Current input text
+        placeholder: Option<String>,        // Placeholder text when empty
+        is_open: bool,                      // Dropdown open?
+        filtered_options: Vec<String>,      // Filtered options (top 15)
+        highlight: usize,                   // Highlighted index in dropdown
+        on_input: Option<fn(crossterm::event::KeyCode) -> Msg>,  // Text input changes
+        on_select: Option<fn(String) -> Msg>,  // Option selected from dropdown
+        on_navigate: Option<fn(crossterm::event::KeyCode) -> Msg>,  // Dropdown navigation
+        on_focus: Option<Msg>,
+        on_blur: Option<Msg>,
+    },
 }
 
 impl<Msg> Element<Msg> {
@@ -371,6 +387,7 @@ impl<Msg> Element<Msg> {
             Element::Tree { .. } => LayoutConstraint::Fill(1),
             Element::Scrollable { .. } => LayoutConstraint::Fill(1),
             Element::Select { .. } => LayoutConstraint::Length(3),  // Closed: 3 lines (border + content + border)
+            Element::Autocomplete { .. } => LayoutConstraint::Length(3),  // Input: 3 lines (border + content + border)
         }
     }
 
@@ -493,6 +510,29 @@ impl<Msg> Element<Msg> {
             highlight: state.highlighted(),
             on_select: None,
             on_toggle: None,
+            on_navigate: None,
+            on_focus: None,
+            on_blur: None,
+        }
+    }
+
+    /// Create an autocomplete input with fuzzy-matched dropdown
+    pub fn autocomplete(
+        id: FocusId,
+        all_options: Vec<String>,
+        current_input: String,
+        state: &mut crate::tui::widgets::AutocompleteState,
+    ) -> AutocompleteBuilder<Msg> {
+        AutocompleteBuilder {
+            id,
+            all_options,
+            current_input,
+            placeholder: None,
+            is_open: state.is_open(),
+            filtered_options: state.filtered_options(),
+            highlight: state.highlighted(),
+            on_input: None,
+            on_select: None,
             on_navigate: None,
             on_focus: None,
             on_blur: None,
@@ -970,6 +1010,74 @@ impl<Msg> SelectBuilder<Msg> {
             highlight: self.highlight,
             on_select: self.on_select,
             on_toggle: self.on_toggle,
+            on_navigate: self.on_navigate,
+            on_focus: self.on_focus,
+            on_blur: self.on_blur,
+        }
+    }
+}
+
+pub struct AutocompleteBuilder<Msg> {
+    id: FocusId,
+    all_options: Vec<String>,
+    current_input: String,
+    placeholder: Option<String>,
+    is_open: bool,
+    filtered_options: Vec<String>,
+    highlight: usize,
+    on_input: Option<fn(crossterm::event::KeyCode) -> Msg>,
+    on_select: Option<fn(String) -> Msg>,
+    on_navigate: Option<fn(crossterm::event::KeyCode) -> Msg>,
+    on_focus: Option<Msg>,
+    on_blur: Option<Msg>,
+}
+
+impl<Msg> AutocompleteBuilder<Msg> {
+    /// Set placeholder text when input is empty
+    pub fn placeholder(mut self, text: impl Into<String>) -> Self {
+        self.placeholder = Some(text.into());
+        self
+    }
+
+    /// Set callback for text input changes
+    pub fn on_input(mut self, msg: fn(crossterm::event::KeyCode) -> Msg) -> Self {
+        self.on_input = Some(msg);
+        self
+    }
+
+    /// Set callback when option is selected from dropdown
+    pub fn on_select(mut self, msg: fn(String) -> Msg) -> Self {
+        self.on_select = Some(msg);
+        self
+    }
+
+    /// Set callback for dropdown navigation
+    pub fn on_navigate(mut self, msg: fn(crossterm::event::KeyCode) -> Msg) -> Self {
+        self.on_navigate = Some(msg);
+        self
+    }
+
+    pub fn on_focus(mut self, msg: Msg) -> Self {
+        self.on_focus = Some(msg);
+        self
+    }
+
+    pub fn on_blur(mut self, msg: Msg) -> Self {
+        self.on_blur = Some(msg);
+        self
+    }
+
+    pub fn build(self) -> Element<Msg> {
+        Element::Autocomplete {
+            id: self.id,
+            all_options: self.all_options,
+            current_input: self.current_input,
+            placeholder: self.placeholder,
+            is_open: self.is_open,
+            filtered_options: self.filtered_options,
+            highlight: self.highlight,
+            on_input: self.on_input,
+            on_select: self.on_select,
             on_navigate: self.on_navigate,
             on_focus: self.on_focus,
             on_blur: self.on_blur,

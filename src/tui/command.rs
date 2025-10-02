@@ -41,6 +41,7 @@ pub enum AppId {
     Example4,
     Example5,
     Example6,
+    Example7,
     LoadingScreen,
     ErrorScreen,
     MigrationEnvironment,
