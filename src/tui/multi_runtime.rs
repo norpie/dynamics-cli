@@ -168,6 +168,26 @@ impl MultiAppRuntime {
     }
 
     pub fn handle_mouse(&mut self, mouse_event: MouseEvent) -> Result<bool> {
+        use crossterm::event::MouseEventKind;
+
+        // When help menu is open, intercept scroll wheel events
+        if self.help_menu_open {
+            match mouse_event.kind {
+                MouseEventKind::ScrollUp => {
+                    self.help_scroll_state.scroll_up(3);  // 3 lines per scroll
+                    return Ok(true);
+                }
+                MouseEventKind::ScrollDown => {
+                    self.help_scroll_state.scroll_down(3);  // 3 lines per scroll
+                    return Ok(true);
+                }
+                _ => {
+                    // Other mouse events (clicks, moves) are ignored when help menu is open
+                    return Ok(true);
+                }
+            }
+        }
+
         let result = self.runtimes
             .get_mut(&self.active_app)
             .expect("Active app not found in runtimes")
