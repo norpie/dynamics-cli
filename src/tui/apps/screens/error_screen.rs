@@ -43,8 +43,14 @@ impl App for ErrorScreen {
                         "AppLauncher" => Some(AppId::AppLauncher),
                         "Example1" => Some(AppId::Example1),
                         "Example2" => Some(AppId::Example2),
+                        "Example3" => Some(AppId::Example3),
+                        "Example4" => Some(AppId::Example4),
+                        "Example5" => Some(AppId::Example5),
+                        "Example6" => Some(AppId::Example6),
                         "LoadingScreen" => Some(AppId::LoadingScreen),
                         "ErrorScreen" => Some(AppId::ErrorScreen),
+                        "MigrationEnvironment" => Some(AppId::MigrationEnvironment),
+                        "MigrationComparisonSelect" => Some(AppId::MigrationComparisonSelect),
                         _ => None,
                     });
 
