@@ -306,11 +306,17 @@ impl App for MigrationComparisonSelectApp {
         if let Some(ref migration_name) = state.migration_name {
             let source = state.source_env.as_deref().unwrap_or("?");
             let target = state.target_env.as_deref().unwrap_or("?");
+            let source_count = state.source_entities.len();
+            let target_count = state.target_entities.len();
             Some(Line::from(vec![
                 Span::styled(migration_name.clone(), Style::default().fg(theme.text)),
                 Span::styled(
                     format!(" ({} → {})", source, target),
                     Style::default().fg(theme.subtext1),
+                ),
+                Span::styled(
+                    format!(" ({}:{})", source_count, target_count),
+                    Style::default().fg(theme.overlay1),
                 ),
             ]))
         } else {
