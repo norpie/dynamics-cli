@@ -10,6 +10,52 @@ use crate::tui::{AppId, Runtime, AppRuntime, apps::{AppLauncher, Example1, Examp
 use crate::tui::element::{ColumnBuilder, RowBuilder, FocusId};
 use crate::tui::widgets::ScrollableState;
 
+/// Format a KeyCode for display (e.g., Char('i') → "i", F(1) → "F1")
+fn format_key(key: &KeyCode) -> String {
+    match key {
+        KeyCode::Char(c) => c.to_string(),
+        KeyCode::F(n) => format!("F{}", n),
+        KeyCode::Enter => "Enter".to_string(),
+        KeyCode::Tab => "Tab".to_string(),
+        KeyCode::Backspace => "Backspace".to_string(),
+        KeyCode::Esc => "Esc".to_string(),
+        KeyCode::Up => "↑".to_string(),
+        KeyCode::Down => "↓".to_string(),
+        KeyCode::Left => "←".to_string(),
+        KeyCode::Right => "→".to_string(),
+        KeyCode::Home => "Home".to_string(),
+        KeyCode::End => "End".to_string(),
+        KeyCode::PageUp => "PgUp".to_string(),
+        KeyCode::PageDown => "PgDn".to_string(),
+        KeyCode::Delete => "Del".to_string(),
+        KeyCode::Insert => "Ins".to_string(),
+        _ => format!("{:?}", key),
+    }
+}
+
+/// Group keybindings by description and format as aliases (e.g., "n/N")
+fn group_and_format_bindings(bindings: &[(KeyCode, String)]) -> Vec<(String, String)> {
+    let mut grouped: HashMap<String, Vec<String>> = HashMap::new();
+
+    for (key, desc) in bindings {
+        grouped.entry(desc.clone())
+            .or_default()
+            .push(format_key(key));
+    }
+
+    let mut result: Vec<(String, String)> = grouped.into_iter()
+        .map(|(desc, mut keys)| {
+            keys.sort();  // Consistent ordering
+            let key_str = keys.join("/");
+            (key_str, desc)
+        })
+        .collect();
+
+    // Sort by key string for consistent display
+    result.sort_by(|a, b| a.0.cmp(&b.0));
+    result
+}
+
 /// Manages multiple app runtimes and handles navigation between them
 pub struct MultiAppRuntime {
     /// All registered app runtimes, stored as trait objects for type erasure
@@ -250,8 +296,8 @@ impl MultiAppRuntime {
             Span::styled("▼ Global", Style::default().fg(theme.peach).bold())
         ])).build());
 
-        for (key, description) in &global_bindings {
-            let key_str = format!("{:?}", key);
+        let formatted_global = group_and_format_bindings(&global_bindings);
+        for (key_str, description) in &formatted_global {
             let line = Line::from(vec![
                 Span::styled(format!("  {:13}", key_str), Style::default().fg(theme.mauve)),
                 Span::raw("  "),
@@ -267,8 +313,8 @@ impl MultiAppRuntime {
             Span::styled(format!("▼ {}", current_app_data.1), Style::default().fg(theme.blue).bold())
         ])).build());
 
-        for (key, description) in &current_app_data.2 {
-            let key_str = format!("{:?}", key);
+        let formatted_current = group_and_format_bindings(&current_app_data.2);
+        for (key_str, description) in &formatted_current {
             let line = Line::from(vec![
                 Span::styled(format!("  {:13}", key_str), Style::default().fg(theme.green)),
                 Span::raw("  "),
@@ -285,8 +331,8 @@ impl MultiAppRuntime {
                 Span::styled(format!("▼ {}", app_title), Style::default().fg(theme.overlay1).bold())
             ])).build());
 
-            for (key, description) in app_bindings {
-                let key_str = format!("{:?}", key);
+            let formatted_other = group_and_format_bindings(app_bindings);
+            for (key_str, description) in &formatted_other {
                 let line = Line::from(vec![
                     Span::styled(format!("  {:13}", key_str), Style::default().fg(theme.overlay2)),
                     Span::raw("  "),
