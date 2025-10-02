@@ -5,222 +5,20 @@ use ratatui::{
     style::{Style, Stylize},
 };
 use crossterm::event::KeyCode;
-use std::collections::HashMap;
 use crate::tui::{Element, Theme, LayoutConstraint, Layer, Alignment as LayerAlignment};
 use crate::tui::element::FocusId;
 
-/// Stores interaction handlers for UI elements
-/// Maps (Rect, InteractionType) -> Message
-pub struct InteractionRegistry<Msg> {
-    click_handlers: Vec<(Rect, Msg)>,
-    hover_handlers: Vec<(Rect, Msg)>,
-    hover_exit_handlers: Vec<(Rect, Msg)>,
-}
+// Re-export registries
+mod interaction_registry;
+mod focus_registry;
+mod dropdown_registry;
+mod widgets;
 
-impl<Msg: Clone> InteractionRegistry<Msg> {
-    pub fn new() -> Self {
-        Self {
-            click_handlers: Vec::new(),
-            hover_handlers: Vec::new(),
-            hover_exit_handlers: Vec::new(),
-        }
-    }
+pub use interaction_registry::InteractionRegistry;
+pub use focus_registry::{FocusRegistry, FocusableInfo, LayerFocusContext};
+pub use dropdown_registry::{DropdownRegistry, DropdownInfo, DropdownCallback};
 
-    pub fn register_click(&mut self, rect: Rect, msg: Msg) {
-        self.click_handlers.push((rect, msg));
-    }
-
-    pub fn register_hover(&mut self, rect: Rect, msg: Msg) {
-        self.hover_handlers.push((rect, msg));
-    }
-
-    pub fn register_hover_exit(&mut self, rect: Rect, msg: Msg) {
-        self.hover_exit_handlers.push((rect, msg));
-    }
-
-    pub fn find_click(&self, x: u16, y: u16) -> Option<Msg> {
-        // Search in reverse order so topmost layers are checked first
-        for (rect, msg) in self.click_handlers.iter().rev() {
-            if self.point_in_rect(x, y, *rect) {
-                return Some(msg.clone());
-            }
-        }
-        None
-    }
-
-    pub fn find_hover(&self, x: u16, y: u16) -> Option<Msg> {
-        // Search in reverse order so topmost layers are checked first
-        for (rect, msg) in self.hover_handlers.iter().rev() {
-            if self.point_in_rect(x, y, *rect) {
-                return Some(msg.clone());
-            }
-        }
-        None
-    }
-
-    pub fn find_hover_exit(&self, x: u16, y: u16) -> Option<Msg> {
-        // Search in reverse order so topmost layers are checked first
-        for (rect, msg) in self.hover_exit_handlers.iter().rev() {
-            if self.point_in_rect(x, y, *rect) {
-                return Some(msg.clone());
-            }
-        }
-        None
-    }
-
-    pub fn clear(&mut self) {
-        self.click_handlers.clear();
-        self.hover_handlers.clear();
-        self.hover_exit_handlers.clear();
-    }
-
-    fn point_in_rect(&self, x: u16, y: u16, rect: Rect) -> bool {
-        x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height
-    }
-}
-
-/// Information about a focusable element
-pub struct FocusableInfo<Msg> {
-    pub id: FocusId,
-    pub rect: Rect,
-    pub on_key: Box<dyn Fn(KeyCode) -> Option<Msg> + Send>,
-    pub on_focus: Option<Msg>,
-    pub on_blur: Option<Msg>,
-    pub inside_panel: bool,  // True if this element is inside a Panel
-}
-
-/// Focus context for a single layer in the UI
-pub struct LayerFocusContext<Msg> {
-    pub layer_index: usize,
-    pub focusables: Vec<FocusableInfo<Msg>>,
-}
-
-/// Stores focus information for UI elements, organized by layer
-pub struct FocusRegistry<Msg> {
-    layers: Vec<LayerFocusContext<Msg>>,
-}
-
-impl<Msg: Clone> FocusRegistry<Msg> {
-    pub fn new() -> Self {
-        Self {
-            layers: vec![LayerFocusContext {
-                layer_index: 0,
-                focusables: Vec::new(),
-            }],
-        }
-    }
-
-    pub fn clear(&mut self) {
-        self.layers.clear();
-        self.layers.push(LayerFocusContext {
-            layer_index: 0,
-            focusables: Vec::new(),
-        });
-    }
-
-    pub fn push_layer(&mut self, layer_index: usize) {
-        self.layers.push(LayerFocusContext {
-            layer_index,
-            focusables: Vec::new(),
-        });
-    }
-
-    pub fn pop_layer(&mut self) {
-        if self.layers.len() > 1 {
-            self.layers.pop();
-        }
-    }
-
-    fn current_layer_mut(&mut self) -> &mut LayerFocusContext<Msg> {
-        self.layers.last_mut().expect("FocusRegistry should always have at least one layer")
-    }
-
-    pub fn register_focusable(&mut self, info: FocusableInfo<Msg>) {
-        // Check for duplicate IDs and warn/panic
-        if self.current_layer_mut().focusables.iter().any(|f| f.id == info.id) {
-            #[cfg(debug_assertions)]
-            panic!("Duplicate FocusId detected: {:?}. Each focusable element must have a unique ID within its layer.", info.id);
-
-            #[cfg(not(debug_assertions))]
-            eprintln!("WARNING: Duplicate FocusId: {:?} - last registration wins", info.id);
-        }
-
-        self.current_layer_mut().focusables.push(info);
-    }
-
-    pub fn active_layer(&self) -> Option<&LayerFocusContext<Msg>> {
-        self.layers.last()
-    }
-
-    pub fn find_in_active_layer(&self, id: &FocusId) -> Option<&FocusableInfo<Msg>> {
-        self.active_layer()?.focusables.iter().find(|f| &f.id == id)
-    }
-
-    pub fn focusable_ids_in_active_layer(&self) -> Vec<FocusId> {
-        self.active_layer()
-            .map(|layer| layer.focusables.iter().map(|f| f.id.clone()).collect())
-            .unwrap_or_default()
-    }
-
-    pub fn find_at_position(&self, x: u16, y: u16) -> Option<FocusId> {
-        self.active_layer()?
-            .focusables
-            .iter()
-            .rev()
-            .find(|f| self.point_in_rect(x, y, f.rect))
-            .map(|f| f.id.clone())
-    }
-
-    pub fn contains(&self, id: &FocusId) -> bool {
-        self.layers.iter().any(|layer| {
-            layer.focusables.iter().any(|f| &f.id == id)
-        })
-    }
-
-    fn point_in_rect(&self, x: u16, y: u16, rect: Rect) -> bool {
-        x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height
-    }
-}
-
-/// Type of dropdown callback
-pub enum DropdownCallback<Msg> {
-    Select(Option<fn(usize) -> Msg>),      // Select by index
-    Autocomplete(Option<fn(String) -> Msg>), // Select by string value
-}
-
-/// Information about a dropdown that needs to be rendered as an overlay
-pub struct DropdownInfo<Msg> {
-    pub select_area: Rect,              // The area of the select widget
-    pub options: Vec<String>,           // The dropdown options
-    pub selected: Option<usize>,        // Selected index (None for autocomplete)
-    pub highlight: usize,               // Highlighted index
-    pub on_select: DropdownCallback<Msg>,  // Callback when option selected
-}
-
-/// Stores dropdowns to be rendered as overlays after main UI
-pub struct DropdownRegistry<Msg> {
-    dropdowns: Vec<DropdownInfo<Msg>>,
-}
-
-impl<Msg: Clone> DropdownRegistry<Msg> {
-    pub fn new() -> Self {
-        Self {
-            dropdowns: Vec::new(),
-        }
-    }
-
-    pub fn clear(&mut self) {
-        self.dropdowns.clear();
-    }
-
-    pub fn register(&mut self, info: DropdownInfo<Msg>) {
-        self.dropdowns.push(info);
-    }
-
-    pub fn dropdowns(&self) -> &[DropdownInfo<Msg>] {
-        &self.dropdowns
-    }
-}
+use widgets::{primitives, layout};
 
 /// Renders elements to the terminal
 pub struct Renderer;
@@ -398,44 +196,6 @@ impl Renderer {
         })
     }
 
-    /// Calculate ratatui Constraints from our LayoutConstraints
-    fn calculate_constraints<Msg>(
-        items: &[(LayoutConstraint, Element<Msg>)],
-        available_space: u16,
-    ) -> Vec<Constraint> {
-        // Pass 1: Calculate fixed and minimum sizes
-        let mut fixed_total = 0u16;
-        let mut fill_total_weight = 0u16;
-
-        for (constraint, _) in items {
-            match constraint {
-                LayoutConstraint::Length(n) => fixed_total += n,
-                LayoutConstraint::Min(n) => fixed_total += n,
-                LayoutConstraint::Fill(weight) => fill_total_weight += weight,
-            }
-        }
-
-        // Pass 2: Calculate remaining space for Fill elements
-        let remaining = available_space.saturating_sub(fixed_total);
-
-        // Pass 3: Build ratatui constraints
-        items
-            .iter()
-            .map(|(constraint, _)| match constraint {
-                LayoutConstraint::Length(n) => Constraint::Length(*n),
-                LayoutConstraint::Min(n) => Constraint::Min(*n),
-                LayoutConstraint::Fill(weight) => {
-                    if fill_total_weight > 0 {
-                        // Calculate proportional space
-                        let space = (remaining as u32 * *weight as u32 / fill_total_weight as u32) as u16;
-                        Constraint::Length(space)
-                    } else {
-                        Constraint::Length(0)
-                    }
-                }
-            })
-            .collect()
-    }
 
     fn render_element<Msg: Clone + Send + 'static>(
         frame: &mut Frame,
@@ -448,23 +208,13 @@ impl Renderer {
         area: Rect,
         inside_panel: bool,
     ) {
+        // Handle primitives (None, Text, StyledText)
+        if primitives::is_primitive(element) {
+            primitives::render_primitive(frame, theme, element, area);
+            return;
+        }
+
         match element {
-            Element::None => {}
-
-            Element::Text { content, style } => {
-                let default_style = Style::default().fg(theme.text);
-                let widget = Paragraph::new(content.as_str())
-                    .style(style.unwrap_or(default_style));
-                frame.render_widget(widget, area);
-            }
-
-            Element::StyledText { line, background } => {
-                let mut widget = Paragraph::new(line.clone());
-                if let Some(bg_style) = background {
-                    widget = widget.style(*bg_style);
-                }
-                frame.render_widget(widget, area);
-            }
 
             Element::Button {
                 id,
@@ -519,52 +269,15 @@ impl Renderer {
             }
 
             Element::Column { items, spacing } => {
-                if items.is_empty() {
-                    return;
-                }
-
-                // Calculate ratatui constraints from layout constraints
-                let constraints = Self::calculate_constraints(items, area.height);
-
-                let chunks = Layout::default()
-                    .direction(Direction::Vertical)
-                    .constraints(constraints)
-                    .split(area);
-
-                // Render each child
-                for ((_, child), chunk) in items.iter().zip(chunks.iter()) {
-                    Self::render_element(frame, theme, registry, focus_registry, dropdown_registry, focused_id, child, *chunk, inside_panel);
-                }
+                layout::render_column(frame, theme, registry, focus_registry, dropdown_registry, focused_id, items, *spacing, area, inside_panel, Self::render_element);
             }
 
             Element::Row { items, spacing } => {
-                if items.is_empty() {
-                    return;
-                }
-
-                // Calculate ratatui constraints from layout constraints
-                let constraints = Self::calculate_constraints(items, area.width);
-
-                let chunks = Layout::default()
-                    .direction(Direction::Horizontal)
-                    .constraints(constraints)
-                    .split(area);
-
-                // Render each child
-                for ((_, child), chunk) in items.iter().zip(chunks.iter()) {
-                    Self::render_element(frame, theme, registry, focus_registry, dropdown_registry, focused_id, child, *chunk, inside_panel);
-                }
+                layout::render_row(frame, theme, registry, focus_registry, dropdown_registry, focused_id, items, *spacing, area, inside_panel, Self::render_element);
             }
 
             Element::Container { child, padding } => {
-                // Apply padding by shrinking the area
-                let padded_area = Rect {
-                    x: area.x + padding,
-                    y: area.y + padding,
-                    width: area.width.saturating_sub(padding * 2),
-                    height: area.height.saturating_sub(padding * 2),
-                };
-                Self::render_element(frame, theme, registry, focus_registry, dropdown_registry, focused_id, child, padded_area, inside_panel);
+                layout::render_container(frame, theme, registry, focus_registry, dropdown_registry, focused_id, child, *padding, area, inside_panel, Self::render_element);
             }
 
             Element::Panel { child, title, .. } => {
@@ -1221,6 +934,11 @@ impl Renderer {
                         }
                     }
                 }
+            }
+
+            // Primitives are handled at the top of the function
+            Element::None | Element::Text { .. } | Element::StyledText { .. } => {
+                unreachable!("Primitives should be handled before the match statement")
             }
         }
     }
