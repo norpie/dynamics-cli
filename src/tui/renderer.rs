@@ -471,9 +471,8 @@ impl Renderer {
 
                 // Render button widget
                 let default_style = Style::default().fg(theme.text);
-                // Only show focus border on button itself if NOT inside a panel
-                // (panels will show focus on their border instead)
-                let border_style = if is_focused && !inside_panel {
+                // Always show focus border on button (unlike other widgets, buttons need clear visual focus)
+                let border_style = if is_focused {
                     Style::default().fg(theme.lavender)
                 } else {
                     Style::default().fg(theme.overlay0)
@@ -1085,6 +1084,15 @@ impl Renderer {
                     focus_registry.push_layer(layer_idx);
                     Self::render_element(frame, theme, registry, focus_registry, dropdown_registry, focused_id, &last_layer.element, layer_area, inside_panel);
                     // Keep the layer pushed so focusables remain in active layer
+
+                    // Debug: Log focus registry state
+                    if let Some(layer) = focus_registry.active_layer() {
+                        log::debug!("Focus registry layer {} has {} focusables",
+                                   layer.layer_index, layer.focusables.len());
+                        for focusable in &layer.focusables {
+                            log::debug!("  Focusable: {:?} at {:?}", focusable.id, focusable.rect);
+                        }
+                    }
                 }
             }
         }
