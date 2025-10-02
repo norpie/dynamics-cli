@@ -75,9 +75,13 @@ impl App for MigrationComparisonSelectApp {
     type Msg = Msg;
 
     fn update(state: &mut Self::State, msg: Self::Msg) -> Command<Self::Msg> {
+        log::debug!("MigrationComparisonSelectApp::update() called with message");
         match msg {
             Msg::ComparisonDataReceived(data) => {
-                log::info!("Comparison data received: {} ({} -> {})", data.migration_name, data.source_env, data.target_env);
+                log::info!("✓ ComparisonDataReceived message processed in update()");
+                log::info!("  Migration: {} ({} -> {})", data.migration_name, data.source_env, data.target_env);
+                log::info!("  Source entities: {}, Target entities: {}, Comparisons: {}",
+                    data.source_entities.len(), data.target_entities.len(), data.comparisons.len());
                 state.migration_name = Some(data.migration_name);
                 state.source_env = Some(data.source_env);
                 state.target_env = Some(data.target_env);
@@ -88,8 +92,7 @@ impl App for MigrationComparisonSelectApp {
                 if !state.comparisons.is_empty() {
                     state.list_state.select(Some(0));
                 }
-                log::debug!("Loaded {} comparisons, {} source entities, {} target entities",
-                    state.comparisons.len(), state.source_entities.len(), state.target_entities.len());
+                log::info!("✓ State updated successfully");
                 Command::None
             }
             Msg::ComparisonsLoaded(result) => {
@@ -136,6 +139,8 @@ impl App for MigrationComparisonSelectApp {
     }
 
     fn view(state: &mut Self::State, theme: &Theme) -> Element<Self::Msg> {
+        log::trace!("MigrationComparisonSelectApp::view() - migration_name={:?}, comparisons={}",
+            state.migration_name, state.comparisons.len());
         let list_content = if state.comparisons.is_empty() {
             Element::text("")
         } else {
@@ -158,9 +163,19 @@ impl App for MigrationComparisonSelectApp {
         let mut subs = vec![
             // Listen for comparison data from MigrationEnvironmentApp
             Subscription::subscribe("comparison_data", |data| {
-                serde_json::from_value::<crate::tui::apps::migration::migration_environment_app::ComparisonData>(data)
-                    .ok()
-                    .map(Msg::ComparisonDataReceived)
+                log::info!("✓ Subscription handler called for 'comparison_data' event");
+                log::debug!("  Raw data: {:?}", data);
+                match serde_json::from_value::<crate::tui::apps::migration::migration_environment_app::ComparisonData>(data.clone()) {
+                    Ok(comparison_data) => {
+                        log::info!("✓ Successfully deserialized comparison data");
+                        Some(Msg::ComparisonDataReceived(comparison_data))
+                    }
+                    Err(e) => {
+                        log::error!("✗ Failed to deserialize comparison data: {}", e);
+                        log::error!("  Data was: {:?}", data);
+                        None
+                    }
+                }
             }),
             // Listen for entities loaded events
             Subscription::subscribe("entities_loaded", |data| {
@@ -201,6 +216,7 @@ impl App for MigrationComparisonSelectApp {
     }
 
     fn status(state: &Self::State, theme: &Theme) -> Option<Line<'static>> {
+        log::trace!("MigrationComparisonSelectApp::status() - migration_name={:?}", state.migration_name);
         if let Some(ref migration_name) = state.migration_name {
             let source = state.source_env.as_deref().unwrap_or("?");
             let target = state.target_env.as_deref().unwrap_or("?");

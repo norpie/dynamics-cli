@@ -91,6 +91,7 @@ pub enum Msg {
     SourceEntitiesLoaded(Result<Vec<String>, String>),
     TargetEntitiesLoaded(Result<Vec<String>, String>),
     AllDataLoaded(Result<ComparisonData, String>),
+    PublishComparisonData(ComparisonData),
     ListNavigate(KeyCode),
     OpenCreateModal,
     EnvironmentsLoaded(Result<Vec<String>, String>),
@@ -214,7 +215,7 @@ impl App for MigrationEnvironmentApp {
                                 let config = crate::config();
                                 let manager = crate::client_manager();
 
-                                match config.get_entity_cache(&source_env_clone, 24).await {
+                                let result = match config.get_entity_cache(&source_env_clone, 24).await {
                                     Ok(Some(cached)) => {
                                         log::debug!("Using cached entities for source: {}", source_env_clone);
                                         Ok(cached)
@@ -233,7 +234,9 @@ impl App for MigrationEnvironmentApp {
 
                                         Ok(entities)
                                     }
-                                }
+                                };
+                                log::info!("✓ Source entity async task complete, returning result");
+                                result
                             },
                             Msg::SourceEntitiesLoaded,
                         ),
@@ -244,7 +247,7 @@ impl App for MigrationEnvironmentApp {
                                 let config = crate::config();
                                 let manager = crate::client_manager();
 
-                                match config.get_entity_cache(&target_env_clone, 24).await {
+                                let result = match config.get_entity_cache(&target_env_clone, 24).await {
                                     Ok(Some(cached)) => {
                                         log::debug!("Using cached entities for target: {}", target_env_clone);
                                         Ok(cached)
@@ -263,7 +266,9 @@ impl App for MigrationEnvironmentApp {
 
                                         Ok(entities)
                                     }
-                                }
+                                };
+                                log::info!("✓ Target entity async task complete, returning result");
+                                result
                             },
                             Msg::TargetEntitiesLoaded,
                         ),
@@ -273,6 +278,7 @@ impl App for MigrationEnvironmentApp {
                 }
             }
             Msg::SourceEntitiesLoaded(result) => {
+                log::info!("✓ Msg::SourceEntitiesLoaded received in update()");
                 // Store source result and publish progress
                 state.source_entities_partial = Some(result.clone());
 
@@ -298,9 +304,66 @@ impl App for MigrationEnvironmentApp {
                     }
                 }
 
+                // Check if both tasks are done
+                if state.source_entities_partial.is_some() && state.target_entities_partial.is_some() {
+                    log::info!("Both entity loading tasks complete, preparing final data");
+                    let migration_name = state.loading_migration_name.as_ref().unwrap().clone();
+                    let source_env_clone = state.loading_source_env.as_ref().unwrap().clone();
+                    let target_env_clone = state.loading_target_env.as_ref().unwrap().clone();
+
+                    // Both done - check results
+                    let source_result = state.source_entities_partial.as_ref().unwrap().clone();
+                    let target_result = state.target_entities_partial.as_ref().unwrap().clone();
+
+                    // Clear loading state
+                    state.loading_migration_name = None;
+                    state.loading_source_env = None;
+                    state.loading_target_env = None;
+                    state.source_entities_partial = None;
+                    state.target_entities_partial = None;
+
+                    // If either failed, navigate to error screen
+                    if source_result.is_err() || target_result.is_err() {
+                        let error = if let Err(e) = source_result {
+                            e
+                        } else {
+                            target_result.unwrap_err()
+                        };
+                        commands.push(Command::publish("error:init", serde_json::json!({
+                            "message": format!("Failed to load entities: {}", error),
+                            "target": "MigrationEnvironment",
+                        })));
+                        commands.push(Command::navigate_to(AppId::ErrorScreen));
+                    } else {
+                        // Both succeeded - wait a moment for UI to show both complete, then load comparisons and navigate
+                        let source_entities = source_result.unwrap();
+                        let target_entities = target_result.unwrap();
+
+                        commands.push(Command::perform(
+                            async move {
+                                // Give UI time to render both tasks as complete
+                                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+                                let config = crate::config();
+                                let comparisons = config.get_comparisons(&migration_name).await.map_err(|e| e.to_string())?;
+                                Ok::<_, String>(ComparisonData {
+                                    migration_name,
+                                    source_env: source_env_clone,
+                                    target_env: target_env_clone,
+                                    comparisons,
+                                    source_entities,
+                                    target_entities,
+                                })
+                            },
+                            Msg::AllDataLoaded,
+                        ));
+                    }
+                }
+
                 Command::batch(commands)
             }
             Msg::TargetEntitiesLoaded(result) => {
+                log::info!("✓ Msg::TargetEntitiesLoaded received in update()");
                 // Store target result and publish progress
                 state.target_entities_partial = Some(result.clone());
 
@@ -388,10 +451,16 @@ impl App for MigrationEnvironmentApp {
                     Ok(data) => {
                         log::info!("All data loaded successfully");
                         Command::batch(vec![
-                            // Publish data to comparison select app
-                            Command::publish("comparison_data", serde_json::to_value(&data).unwrap()),
                             // Navigate to comparison select
                             Command::navigate_to(AppId::MigrationComparisonSelect),
+                            // Delay publish slightly to ensure app is initialized
+                            Command::perform(
+                                async move {
+                                    tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                                    data
+                                },
+                                Msg::PublishComparisonData,
+                            ),
                         ])
                     }
                     Err(e) => {
@@ -407,6 +476,13 @@ impl App for MigrationEnvironmentApp {
                         ])
                     }
                 }
+            }
+            Msg::PublishComparisonData(data) => {
+                log::info!("Publishing comparison data after navigation delay");
+                log::debug!("Data: migration={}, source={}, target={}, source_entities={}, target_entities={}, comparisons={}",
+                    data.migration_name, data.source_env, data.target_env,
+                    data.source_entities.len(), data.target_entities.len(), data.comparisons.len());
+                Command::publish("comparison_data", serde_json::to_value(&data).unwrap())
             }
             Msg::ListNavigate(key) => {
                 let visible_height = 20;
