@@ -45,6 +45,8 @@ pub struct State {
     show_create_modal: bool,
     create_form: CreateMigrationForm,
     available_environments: Vec<String>,
+    show_delete_confirm: bool,
+    delete_migration_name: Option<String>,
 }
 
 #[derive(Clone, Default)]
@@ -83,6 +85,10 @@ pub enum Msg {
     CreateFormSubmit,
     CreateFormCancel,
     MigrationCreated(Result<(), String>),
+    RequestDelete,
+    ConfirmDelete,
+    CancelDelete,
+    MigrationDeleted(Result<(), String>),
 }
 
 impl App for MigrationEnvironmentApp {
@@ -288,6 +294,55 @@ impl App for MigrationEnvironmentApp {
                 state.show_create_modal = false;
                 Command::None
             }
+            Msg::RequestDelete => {
+                // Get selected migration name
+                if let Some(selected_idx) = state.list_state.selected() {
+                    if let Some(migration) = state.environments.get(selected_idx) {
+                        state.delete_migration_name = Some(migration.name.clone());
+                        state.show_delete_confirm = true;
+                    }
+                }
+                Command::None
+            }
+            Msg::ConfirmDelete => {
+                if let Some(name) = state.delete_migration_name.clone() {
+                    state.show_delete_confirm = false;
+                    // Async delete from database
+                    Command::perform(
+                        async move {
+                            let config = crate::config();
+                            config.delete_migration(&name).await.map_err(|e| e.to_string())
+                        },
+                        Msg::MigrationDeleted
+                    )
+                } else {
+                    Command::None
+                }
+            }
+            Msg::CancelDelete => {
+                state.show_delete_confirm = false;
+                state.delete_migration_name = None;
+                Command::None
+            }
+            Msg::MigrationDeleted(result) => {
+                match result {
+                    Ok(_) => {
+                        state.delete_migration_name = None;
+                        // Reload migration list
+                        Command::perform(
+                            async {
+                                let config = crate::config();
+                                config.list_migrations().await.map_err(|e| e.to_string())
+                            },
+                            Msg::MigrationsLoaded
+                        )
+                    }
+                    Err(e) => {
+                        log::error!("Failed to delete migration: {}", e);
+                        Command::None
+                    }
+                }
+            }
             Msg::MigrationCreated(Ok(())) => {
                 // Reload migrations list
                 Command::perform(
@@ -317,7 +372,20 @@ impl App for MigrationEnvironmentApp {
             .title("Select Migration Environment")
             .build();
 
-        if state.show_create_modal {
+        if state.show_delete_confirm {
+            // Render delete confirmation modal
+            let migration_name = state.delete_migration_name.as_deref().unwrap_or("Unknown");
+
+            Element::modal_confirm(
+                main_ui,
+                "Delete Migration",
+                format!("Delete migration '{}'?", migration_name),
+                FocusId::new("delete-cancel"),
+                Msg::CancelDelete,
+                FocusId::new("delete-confirm"),
+                Msg::ConfirmDelete,
+            )
+        } else if state.show_create_modal {
             use crate::tui::element::{ColumnBuilder, RowBuilder, Alignment};
             use crate::tui::LayoutConstraint;
 
@@ -466,9 +534,11 @@ impl App for MigrationEnvironmentApp {
             subs.push(Subscription::timer(std::time::Duration::from_millis(1), Msg::Initialize));
         }
 
-        if !state.show_create_modal {
+        if !state.show_create_modal && !state.show_delete_confirm {
             subs.push(Subscription::keyboard(KeyCode::Char('n'), "Create new migration", Msg::OpenCreateModal));
             subs.push(Subscription::keyboard(KeyCode::Char('N'), "Create new migration", Msg::OpenCreateModal));
+            subs.push(Subscription::keyboard(KeyCode::Char('d'), "Delete migration", Msg::RequestDelete));
+            subs.push(Subscription::keyboard(KeyCode::Char('D'), "Delete migration", Msg::RequestDelete));
         }
 
         subs
@@ -488,6 +558,8 @@ impl State {
             show_create_modal: false,
             create_form: CreateMigrationForm::default(),
             available_environments: vec![],
+            show_delete_confirm: false,
+            delete_migration_name: None,
         }
     }
 }

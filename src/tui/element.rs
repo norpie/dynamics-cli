@@ -335,6 +335,8 @@ impl<Msg> Element<Msg> {
                         .build()
                 )
                 .title("Confirmation")
+                .width(60)
+                .height(15)
                 .build()
             ).center(),
         ])
