@@ -1,628 +1,320 @@
-# Migration TUI → Elm-Inspired Framework: Full Analysis & Proposal
+# Migration TUI - Implementation Status
 
 ## Executive Summary
 
-The existing migration module is a **substantial TUI implementation** (~36k LOC) with rich features:
-- **7 screens** with complex navigation flows
-- **13+ reusable components** (lists, modals, trees, field renderers)
-- **Advanced features**: mouse support, async loading, hierarchical trees, field mapping, export
+The Dynamics 365 data migration tool is being built using the Elm-inspired TUI framework. This document tracks progress on migrating the existing migration module (~36k LOC) to the new architecture.
 
-**Goal**: Migrate this to the new Elm-inspired TUI framework to gain:
-- **Predictable state management** (pure update functions)
-- **Cleaner architecture** (Msg/State pattern vs. mutable Screen trait)
-- **Better testability** (pure functions vs. stateful rendering)
-- **Reusable widgets** for other apps
+**Current Status**: Phase 2 in progress (simple apps completed, complex comparison screen pending)
 
 ---
 
-## 1. Current Implementation Analysis
+## Phase Status
 
-### 1.1 Architecture Pattern
+### ✅ Phase 1: Framework Widgets (COMPLETE)
 
-**Current (raw ratatui)**:
-```rust
-trait Screen {
-    fn render(&mut self, f: &mut Frame, area: Rect);
-    fn handle_event(&mut self, event: Event) -> ScreenResult;
-    fn get_footer_actions(&self) -> Vec<FooterAction>;
-    fn check_navigation(&mut self) -> Option<ScreenResult>;  // Async nav
-}
-```
+All required widgets have been implemented:
+- ✅ **List widget** - Selection, keyboard nav, mouse support, virtual scrolling
+- ✅ **TextInput widget** - Text editing, placeholder, validation, cursor movement
+- ✅ **Tree widget** - Hierarchical data, expand/collapse, virtualized rendering
+- ✅ **Tabs widget** - Tab bar, content switching, keyboard navigation
+- ✅ **Scrollable widget** - General-purpose scrollable container
+- ✅ **Select widget** - Dropdown component with keyboard/mouse navigation
+- ✅ **Autocomplete widget** - Fuzzy matching, dropdown suggestions, cursor management
 
-**Issues**:
-- `&mut self` in `render()` - allows mutation during rendering
-- `RefCell` everywhere for interior mutability
-- No clear data flow (events → state → view)
-- Hard to test (stateful components)
+### 🔄 Phase 2: Simple Apps (IN PROGRESS)
 
-### 1.2 Screens (Navigation Flow)
+#### ✅ MigrationEnvironmentApp (COMPLETE)
+**Purpose**: Manage migrations (source/target environment pairs)
 
-| Screen | Purpose | Complexity |
-|--------|---------|------------|
-| **MigrationSelectScreen** | List saved migrations, create new | ⭐⭐ Medium |
-| **EnvironmentSelectScreen** | Two-phase selection (source → target) | ⭐⭐ Medium |
-| **EntitySelectScreen** | Select entities to compare | ⭐⭐ Medium |
-| **ComparisonSelectScreen** | Select entity pair | ⭐⭐ Medium |
-| **LoadingScreen** | Async data fetch with progress | ⭐⭐ Medium |
-| **UnifiedCompareScreen** | Main comparison (4 tabs, field mapping) | ⭐⭐⭐⭐⭐ Very Complex |
+**Implemented Features**:
+- ✅ List saved migrations (sorted by last_used)
+- ✅ Create new migration with dual-select modal
+- ✅ Delete migration with confirmation dialog
+- ✅ Rename migration with modal
+- ✅ Auto-load environment list on startup
+- ✅ Entity metadata caching (24-hour TTL)
+- ✅ Parallel entity loading (source + target simultaneously)
+- ✅ LoadingScreen integration for async work
+- ✅ Progress tracking with independent task completion
+- ✅ Entity count display in status line (source:target)
+- ✅ Auto-discovery of database migrations using include_dir!
+- ✅ Pass pre-loaded comparison data to next screen
 
-### 1.3 Components (Reusable Widgets)
+**Technical Highlights**:
+- Uses SQLite for migration persistence
+- Entity cache prevents redundant API calls
+- Separate `Command::perform` for parallel async tasks
+- Pub/sub pattern for loading screen coordination
+- Foreign key constraints with CASCADE delete
 
-| Component | Description | Framework Equivalent |
-|-----------|-------------|---------------------|
-| **ListComponent** | Selectable list + mouse + scroll | ❌ **MISSING** - need List widget |
-| **FooterComponent** | Action bar with keybindings | ✅ Can build with Row/Text |
-| **ModalComponent** | Generic modal overlay | ✅ Stack/Layer exists |
-| **ConfirmationDialog** | Yes/No dialog | ✅ Can build with Panel/Button |
-| **LoadingModal** | Spinner + progress tracking | ✅ Can build (extract spinner) |
-| **PrefixMappingModal** | Prefix mapping config | ❌ Needs **TextInput** widget |
-| **ManualMappingModal** | Manual field mapping | ❌ Needs **TextInput** widget |
-| **ExamplesModal** | View example records | ✅ Can build with Column/Text |
-| **HierarchyTree** | Expandable tree structure | ❌ **MISSING** - complex widget |
-| **FieldRenderer** | Rich field rendering (type, required, mapping) | ✅ Can build with StyledText |
+**Files**:
+- `migration_environment_app.rs` (525 lines)
 
-### 1.4 Missing Framework Features (BLOCKERS)
+#### ✅ MigrationComparisonSelectApp (COMPLETE)
+**Purpose**: Manage entity comparisons within a migration
 
-**HIGH PRIORITY (Must have for migration)**:
-1. **List widget** - Used everywhere for selection ✅ **DONE**
-2. **TextInput widget** - Required for search, prefix mapping, manual mapping ✅ **DONE**
-3. **Tree/Hierarchy widget** - Core of UnifiedCompareScreen (fields tab) ✅ **DONE**
-4. **Tabs widget** - UnifiedCompareScreen has 4 tabs (Fields, Relationships, Views, Forms) ✅ **DONE**
+**Implemented Features**:
+- ✅ List saved comparisons for selected migration
+- ✅ Create new comparison with autocomplete modal
+  - ✅ Name input field
+  - ✅ Source entity autocomplete (fuzzy matching)
+  - ✅ Target entity autocomplete (fuzzy matching)
+  - ✅ Validation (required fields, entity existence)
+- ✅ Delete comparison with confirmation dialog
+- ✅ Rename comparison with modal
+- ✅ Receive pre-loaded entity lists from MigrationEnvironmentApp
+- ✅ Subscribe to entities_loaded events
+- ✅ Keybindings: n/N (create), d/D (delete), r/R (rename), Enter (select)
 
-**MEDIUM PRIORITY**:
-5. **Scrollable containers** - Long lists of fields/entities ✅ **DONE**
+**Technical Highlights**:
+- Autocomplete uses fuzzy-matcher crate (SkimMatcherV2)
+- Top 15 best matches displayed in dropdown
+- Cursor auto-positioning after selection
+- Modal confirmation for destructive actions
+- Entity validation against loaded metadata
 
-**LOW PRIORITY** (Can work around):
-7. Ergonomic macros (`column![]` vs. verbose builders)
+**Files**:
+- `migration_comparison_select_app.rs` (787 lines)
+
+#### ✅ LoadingScreen (ENHANCED)
+**Purpose**: Display async task progress with spinner and task list
+
+**Enhanced Features**:
+- ✅ Parallel task support (tasks complete independently)
+- ✅ Task tracking with status updates
+- ✅ Auto-navigation on completion
+- ✅ Pub/sub integration for progress updates
+- ✅ Spinner animation
+- ✅ Task list with completion indicators
+
+**Files**:
+- `apps/screens/loading_screen.rs` (existing, enhanced)
+
+### ⏳ Phase 3: Complex App (PENDING)
+
+#### ⏳ UnifiedCompareApp (NOT STARTED)
+**Purpose**: Main comparison screen with 4 tabs (Fields, Relationships, Views, Forms)
+
+**Planned Features**:
+- [ ] Define complex State type
+- [ ] Define Msg enum with all actions
+- [ ] Split into sub-modules (state.rs, msg.rs, update.rs, view.rs)
+- [ ] Fields tab with tree view
+- [ ] Field mapping functionality (prefix, manual)
+- [ ] Relationships tab
+- [ ] Views tab
+- [ ] Forms tab
+- [ ] Examples modal
+- [ ] Export functionality (JSON/Excel)
+- [ ] Cross-tab communication via pub/sub
+
+**Complexity Notes**:
+- 36+ fields in original implementation
+- Tree widget for hierarchical field display
+- Complex mapping algorithms (exact, prefix, manual)
+- Multiple modal overlays
+- Export integration
+
+**Estimated LOC**: ~2000-3000 lines across sub-modules
+
+### ⏳ Phase 4: Polish (PENDING)
+
+- ✅ Catppuccin theme migration
+- [ ] Help text/documentation
+- [ ] Performance benchmarking
+- [ ] Feature parity checklist vs. old implementation
+- [ ] User acceptance testing
+- [ ] Delete old implementation (~36k LOC)
 
 ---
 
-## 2. Mapping to App Trait Pattern
+## Database Schema
 
-### 2.1 Example: MigrationSelectScreen → MigrationSelectApp
-
-**Current (stateful)**:
-```rust
-pub struct MigrationSelectScreen {
-    migrations: Vec<SavedMigration>,
-    list: ListComponent<MigrationItem>,  // Mutable state
-    config: Config,
-    show_delete_confirmation: bool,
-    delete_confirmation_modal: Option<ModalComponent<ConfirmationDialog>>,
-}
-
-impl Screen for MigrationSelectScreen {
-    fn render(&mut self, f: &mut Frame, area: Rect) { /* ... */ }
-    fn handle_event(&mut self, event: Event) -> ScreenResult { /* ... */ }
-}
+**Migrations Table**:
+```sql
+CREATE TABLE migrations (
+    name TEXT PRIMARY KEY,
+    source_env TEXT NOT NULL,
+    target_env TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 ```
 
-**Proposed (pure functions)**:
+**Comparisons Table**:
+```sql
+CREATE TABLE comparisons (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    migration_name TEXT NOT NULL,
+    name TEXT NOT NULL,
+    source_entity TEXT NOT NULL,
+    target_entity TEXT NOT NULL,
+    entity_comparison TEXT,  -- JSON
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (migration_name) REFERENCES migrations(name) ON DELETE CASCADE,
+    UNIQUE(migration_name, name)
+);
+```
+
+**Entity Cache Table**:
+```sql
+CREATE TABLE entity_cache (
+    environment_name TEXT PRIMARY KEY,
+    entities TEXT NOT NULL,  -- JSON array
+    cached_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (environment_name) REFERENCES environments(name) ON DELETE CASCADE
+);
+```
+
+---
+
+## Architecture Patterns
+
+### Elm-Inspired Pattern
+Every app follows the pattern:
 ```rust
-pub struct MigrationSelectApp;
+pub struct MigrationApp;
 
-#[derive(Clone)]
-pub struct State {
-    migrations: Vec<SavedMigration>,
-    selected_index: Option<usize>,
-    config: Config,
-    show_delete_confirmation: bool,
-    confirming_migration_name: Option<String>,
-}
-
-pub enum Msg {
-    MigrationSelected(usize),
-    CreateNew,
-    DeleteSelected,
-    ConfirmDelete,
-    CancelDelete,
-}
-
-impl App for MigrationSelectApp {
+impl App for MigrationApp {
     type State = State;
     type Msg = Msg;
 
-    fn update(state: &mut State, msg: Msg) -> Command<Msg> {
-        match msg {
-            Msg::MigrationSelected(idx) => {
-                let migration = state.migrations[idx].clone();
-                Command::navigate_to(AppId::ComparisonSelect(migration))
-            }
-            Msg::CreateNew => {
-                Command::navigate_to(AppId::EnvironmentSelect)
-            }
-            Msg::DeleteSelected => {
-                if let Some(idx) = state.selected_index {
-                    state.confirming_migration_name = Some(state.migrations[idx].name.clone());
-                    state.show_delete_confirmation = true;
-                }
-                Command::none()
-            }
-            Msg::ConfirmDelete => {
-                if let Some(name) = &state.confirming_migration_name {
-                    let config = state.config.clone();
-                    let name = name.clone();
-                    // Async command to delete + reload
-                    Command::perform(
-                        async move {
-                            config.remove_migration(&name)?;
-                            Ok(())
-                        },
-                        |_| Msg::DeleteComplete,
-                    )
-                } else {
-                    Command::none()
-                }
-            }
-            Msg::CancelDelete => {
-                state.show_delete_confirmation = false;
-                state.confirming_migration_name = None;
-                Command::none()
-            }
-        }
-    }
-
-    fn view(state: &State, theme: &Theme) -> Element<Msg> {
-        let migration_list = Element::list(
-            state.migrations.iter().map(|m| {
-                Element::text(format!("{} → {}", m.source_env, m.target_env))
-            }).collect()
-        )
-        .on_select(Msg::MigrationSelected)
-        .selected(state.selected_index)
-        .build();
-
-        let content = Element::panel(migration_list)
-            .title("Select Migration")
-            .build();
-
-        if state.show_delete_confirmation {
-            Element::stack(vec![
-                content,
-                // Confirmation modal
-                Element::panel(
-                    Element::column(vec![
-                        Element::text("Delete migration?"),
-                        Element::row(vec![
-                            Element::button("Delete").on_press(Msg::ConfirmDelete),
-                            Element::button("Cancel").on_press(Msg::CancelDelete),
-                        ]),
-                    ])
-                )
-                .title("Confirm Delete")
-                .build()
-            ])
-            .alignment(Alignment::Center)
-            .build()
-        } else {
-            content
-        }
-    }
-
-    fn subscriptions(state: &State) -> Vec<Subscription<Msg>> {
-        vec![
-            Subscription::keyboard(KeyCode::Char('n'), "New migration", Msg::CreateNew),
-            Subscription::keyboard(KeyCode::Delete, "Delete", Msg::DeleteSelected),
-        ]
-    }
+    fn update(state: &mut State, msg: Msg) -> Command<Msg>;
+    fn view(state: &mut State, theme: &Theme) -> Element<Msg>;
+    fn subscriptions(state: &State) -> Vec<Subscription<Msg>>;
 }
 ```
 
-**Benefits**:
-- Pure `update()` - no hidden state mutations
-- Pure `view()` - renders same output for same state
-- Testable: `update(&mut state, Msg::CreateNew)` → assert command
-- Clear data flow: Event → Msg → update → Command → view
-
----
-
-## 3. Proposed Module Structure
-
-```
-src/tui/apps/migration/
-├── mod.rs                          # Module exports
-├── types.rs                        # Shared types (SavedMigration, Config wrappers)
-│
-├── migration_select.rs             # App: Select/create/delete migrations
-├── environment_select.rs           # App: Select source + target environments
-├── entity_select.rs                # App: Select entities from environment
-├── comparison_select.rs            # App: Select entity pair to compare
-├── loading.rs                      # App: Async data loading with progress
-├── unified_compare/                # Most complex screen - needs sub-module
-│   ├── mod.rs                      # Main app
-│   ├── state.rs                    # State type (complex)
-│   ├── msg.rs                      # Msg type (complex)
-│   ├── update.rs                   # Update logic
-│   ├── view.rs                     # View function
-│   ├── tabs/                       # Tab-specific logic
-│   │   ├── fields_tab.rs           # Fields comparison view
-│   │   ├── relationships_tab.rs    # Relationships view
-│   │   ├── views_tab.rs            # Views comparison
-│   │   └── forms_tab.rs            # Forms comparison
-│   └── field_mapping.rs            # Field mapping logic
-│
-└── widgets/                        # Migration-specific widgets
-    ├── migration_list.rs           # List of migrations with actions
-    ├── entity_tree.rs              # Hierarchical entity browser
-    ├── field_comparison.rs         # Side-by-side field comparison
-    ├── mapping_indicator.rs        # Visual mapping indicator
-    └── progress_tracker.rs         # Fetch progress display
-```
-
-### 3.1 Widget Strategy
-
-**Option A: Implement missing widgets in framework first** (RECOMMENDED)
-- Pros: Reusable across all apps, cleaner API
-- Cons: More upfront work
-- **Widgets needed**: ~~List~~ ✅, TextInput, Tree, Tabs
-
-**Option B: Build migration-specific widgets, extract later**
-- Pros: Faster initial migration
-- Cons: Code duplication, harder to maintain
-
-**Recommendation**: Option A - the migration app needs these widgets, but so will other apps (contacts, deadlines). Invest in the framework.
-
----
-
-## 4. Implementation Phases
-
-### Phase 1: Build Missing Framework Widgets ⚙️
-
-**Goal**: Implement HIGH PRIORITY missing widgets
-
-1. **List widget** (src/tui/element.rs)
-   - Selection, keyboard nav (Up/Down/PageUp/PageDown)
-   - Mouse support (click, scroll)
-   - Virtual scrolling for 1000+ items
-   - `Element::list(items).on_select(Msg::ItemSelected)`
-
-2. **TextInput widget**
-   - Text editing (insert, backspace, cursor movement)
-   - Placeholder text
-   - `Element::text_input(value).on_change(Msg::InputChanged)`
-
-3. **Tree widget** (complex)
-   - Hierarchical structure with expand/collapse
-   - `Element::tree(root_node).on_expand(Msg::NodeExpanded)`
-   - Virtualized rendering
-
-4. **Tabs widget**
-   - Tab bar + content switching
-   - `Element::tabs().add("Tab1", view1).selected(0)`
-
-### Phase 2: Migrate Simple Screens 🏗️
-
-**Goal**: Convert simple screens to validate pattern
-
-1. **MigrationSelectApp**
-   - State: list of migrations, selected index, modal state
-   - Msg: Select, CreateNew, Delete, Confirm
-   - View: List + confirmation modal
-
-2. **EnvironmentSelectApp**
-   - State: phase (source vs. target), environments, selections
-   - Msg: SelectSource, SelectTarget
-   - View: List with title update
-
-3. **LoadingApp**
-   - State: progress tracking, async task handles
-   - Msg: UpdateProgress, FetchComplete, FetchFailed
-   - View: Spinner + progress bars
-
-### Phase 3: Migrate Complex Screen 🏔️
-
-**Goal**: Convert UnifiedCompareScreen
-
-**Challenges**:
-- Very stateful (36+ fields in current implementation)
-- 4 tabs with different views
-- Complex interactions (field mapping, prefix config)
-- Async data fetching
-
-**Strategy**:
-1. Split into sub-apps per tab (FieldsTab, RelationshipsTab, ViewsTab, FormsTab)
-2. Use pub/sub for cross-tab communication
-3. Shared state via parent app
-4. Extract field mapping logic to pure functions
-
-**State structure**:
+### Async Pattern
 ```rust
-pub struct UnifiedCompareState {
-    // Data
-    comparison: SavedComparison,
-    source_fields: Vec<FieldInfo>,
-    target_fields: Vec<FieldInfo>,
-    source_relationships: Vec<RelationshipInfo>,
-    target_relationships: Vec<RelationshipInfo>,
-    // ... views, forms, examples
-
-    // UI state
-    active_tab: TabId,  // Fields | Relationships | Views | Forms
-    field_mappings: HashMap<String, String>,
-    prefix_mappings: Vec<PrefixMapping>,
-    hide_matched: bool,
-    sort_mode: SortMode,
-
-    // Modal state
-    show_prefix_modal: bool,
-    show_manual_modal: bool,
-    show_examples_modal: bool,
-
-    // Selection state per tab
-    fields_tab: FieldsTabState,
-    relationships_tab: RelationshipsTabState,
-    views_tab: ViewsTabState,
-    forms_tab: FormsTabState,
-}
+Command::perform(
+    async move {
+        // Async work
+        let result = fetch_data().await?;
+        Ok(result)
+    },
+    Msg::DataLoaded
+)
 ```
 
-### Phase 4: Polish & Export 🎨
-
-**Goal**: Export functionality, refinements
-
-1. Implement export to JSON/Excel (reuse existing logic)
-2. Add keyboard shortcuts documentation
-3. Improve visual polish (animations, better colors)
-4. Performance optimization (virtual scrolling, memoization)
-
----
-
-## 5. Migration Strategy Decision Points
-
-### 5.1 Big Bang vs. Incremental?
-
-**Option A: Incremental (RECOMMENDED)**
-- Keep old `src/commands/migration/ui/` intact
-- Build new `src/tui/apps/migration/` in parallel
-- Switch when ready (feature flag or CLI arg `--new-ui`)
-- Fallback if issues
-
-**Option B: Big Bang**
-- Delete old implementation
-- Force completion
-- Risky if blockers emerge
-
-**Recommendation**: Incremental
-
-### 5.2 Reuse Components?
-
-**Question**: Can we reuse any existing components?
-
-**Answer**: Probably not directly. The existing components are tightly coupled to:
-- `Screen` trait (not `App` trait)
-- Mutable rendering (`&mut self`)
-- `RefCell` for state management
-- ratatui widgets directly (not our `Element` tree)
-
-**Exception**: Business logic can be extracted:
-- Field matching algorithms (src/commands/migration/ui/screens/comparison_apps/matching/)
-- Export logic (src/commands/migration/export.rs)
-- Data models (FieldInfo, ViewInfo, etc.)
-
-### 5.3 Testing Strategy
-
-**Current**: Minimal tests (UI is hard to test)
-
-**New**: Unit test pure functions
+### Pub/Sub Pattern
 ```rust
-#[test]
-fn test_migration_selection() {
-    let mut state = State::new();
-    let cmd = update(&mut state, Msg::MigrationSelected(0));
+// Publisher
+Command::publish("event_name", serde_json::to_value(&data)?);
 
-    assert!(matches!(cmd, Command::NavigateTo(_)));
-}
+// Subscriber
+Subscription::subscribe("event_name", |data| {
+    serde_json::from_value(data).ok().map(Msg::EventReceived)
+})
+```
 
-#[test]
-fn test_delete_confirmation_flow() {
-    let mut state = State::new();
+### Parallel Async Pattern
+```rust
+// Separate Command::perform for each independent task
+let cmd1 = Command::perform(fetch_source(), Msg::SourceLoaded);
+let cmd2 = Command::perform(fetch_target(), Msg::TargetLoaded);
+Command::batch(vec![cmd1, cmd2])
 
-    update(&mut state, Msg::DeleteSelected);
-    assert!(state.show_delete_confirmation);
-
-    update(&mut state, Msg::CancelDelete);
-    assert!(!state.show_delete_confirmation);
-}
+// Each task completes independently and publishes progress
 ```
 
 ---
 
-## 6. Risks & Mitigations
+## Global Features
 
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| **Missing widgets delay project** | High | Build widgets first (Phase 1) before migration |
-| **Framework limitations discovered** | Medium | Incremental migration allows pivoting |
-| **Lost features in migration** | Medium | Comprehensive feature checklist, side-by-side testing |
-| **Performance regression** | Low | Benchmark before/after, virtual scrolling |
-| **User disruption** | Low | Feature flag for gradual rollout |
+### Global Keybindings
+- **F1**: Toggle help menu
+- **Ctrl+Space**: Navigate to app launcher from anywhere
+- **Tab/Shift-Tab**: Focus next/previous element
+- **Esc**: Progressive unfocus (blur element → pass to app)
 
----
-
-## 7. Categorized Functionality
-
-### ✅ **Already Supported by Framework**
-
-- **Basic layout**: Column, Row, Panel, Container
-- **Text rendering**: Text, StyledText
-- **Mouse events**: Click, hover (via InteractionRegistry)
-- **Async commands**: Command::perform for background tasks
-- **Navigation**: Command::navigate_to between apps
-- **Modals**: Stack/Layer for overlays
-- **Theming**: Catppuccin colors (need to migrate from old STYLES)
-- **Keyboard shortcuts**: Subscription::keyboard
-
-### ✅ **Framework Widgets (ALL COMPLETE!)**
-
-- ~~**List widget**~~ ✅ **DONE** - Used in 6/7 screens
-- ~~**TextInput widget**~~ ✅ **DONE** - Required for 3+ modals
-- ~~**Tree/Hierarchy widget**~~ ✅ **DONE** - Core of UnifiedCompareScreen
-- ~~**Tabs widget**~~ ✅ **DONE** - UnifiedCompareScreen has 4 tabs
-- ~~**Scrollable containers**~~ ✅ **DONE** - General-purpose scrollable element
-
-### ❌ **Still Missing (Low Priority)**
-
-- **Ergonomic macros** - DX improvement (`column![]` vs. builders)
-
-### ⚙️ **Domain-Specific (Implement in migration/ module)**
-
-- Field matching algorithms (exact, prefix, manual)
-- Entity metadata fetching (API calls)
-- Export to JSON/Excel
-- Migration persistence (save/load from config)
-- Example record handling
+### Entity Caching
+- **TTL**: 24 hours
+- **Storage**: SQLite database
+- **Invalidation**: Automatic on expiration, manual delete via environment deletion
+- **Performance**: Eliminates redundant API calls for metadata
 
 ---
 
-## 8. Next Steps & Recommendations
+## Next Steps
 
-### ✅ Completed (Phase 1)
+### Immediate (Phase 3 Start)
+1. **Design UnifiedCompareApp state structure**
+   - Analyze old implementation's state
+   - Define State type with all necessary fields
+   - Design Msg enum for all user actions
 
-1. ~~**Build List widget**~~ ✅ **DONE**
-2. ~~**Build TextInput widget**~~ ✅ **DONE**
-3. ~~**Build Tree widget**~~ ✅ **DONE**
-4. ~~**Build Tabs widget**~~ ✅ **DONE**
-5. ~~**Build Scrollable widget**~~ ✅ **DONE**
+2. **Start with Fields tab**
+   - Most critical functionality
+   - Uses Tree widget for field hierarchy
+   - Field mapping logic (exact, prefix, manual)
 
-### 🔄 Immediate Actions (Phase 2)
+3. **Implement remaining tabs incrementally**
+   - Relationships tab
+   - Views tab
+   - Forms tab
 
-1. **Implement MigrationSelectApp**
-   - First app migration
-   - Validate Elm pattern with real use case
-   - Learn pain points
-   - Components: List widget, confirmation modal, async delete
+### Medium-Term
+4. **Export functionality**
+   - JSON export
+   - Excel export (reuse existing logic)
 
-2. **Implement EnvironmentSelectApp**
-   - Two-phase selection pattern
-   - State machine for source→target flow
-   - Refine widget APIs based on feedback
-
-3. **Implement LoadingApp**
-   - Async data fetching patterns
-   - Progress tracking
-   - Error handling
-   - Auto-navigation on completion
-
-### Medium-Term Goals (Phase 3)
-
-4. **Start UnifiedCompareApp**
-   - Most complex screen
-   - Use all widgets (List, Tree, Tabs, TextInput, Scrollable)
-   - Break into sub-modules
-   - Iterative refinement
-
-### Long-Term Vision (Phase 4)
-
-5. **Polish & refinement**
+5. **Polish**
    - Performance optimization
-   - Visual polish
+   - Visual improvements
    - User testing
 
+### Long-Term
 6. **Delete old implementation**
-   - Remove 36k LOC of old code
+   - Remove ~36k LOC of old migration code
+   - Clean up imports and dead code
    - Celebrate clean architecture 🎉
 
 ---
 
-## 9. Open Questions for Discussion
+## Technical Debt & Known Issues
 
-1. **Widget priority**: Agree on List → TextInput → Tree → Tabs order?
-2. **Tree widget complexity**: Implement from scratch or use ratatui-tree-widget?
-3. **Incremental migration**: Keep both implementations for how long?
-4. **Feature parity**: Which features can we defer (e.g., mouse hover on fields)?
-5. **Naming**: Keep "migration" name or rename to "entity-compare"?
+### Current
+- None (Phase 2 apps are feature-complete)
+
+### Anticipated (Phase 3)
+- UnifiedCompareApp will be complex (36+ state fields)
+- Field mapping algorithms need careful migration
+- Export functionality may require additional dependencies
 
 ---
 
-## 10. Task Checklist
+## Metrics
 
-### Phase 1: Framework Widgets
-- [x] Implement List widget in src/tui/element.rs
-  - [x] Basic rendering & selection state
-  - [x] Keyboard navigation (Up/Down/PageUp/PageDown/Home/End)
-  - [x] Mouse support (click, scroll)
-  - [x] Virtual scrolling optimization
-- [x] Implement TextInput widget
-  - [x] Text editing (insert, delete, cursor movement)
-  - [x] Placeholder text
-  - [x] Max length validation
-  - [x] Borderless design (wraps in Panel for label + border)
-- [x] Implement Tree widget
-  - [x] Hierarchical data structure
-  - [x] Expand/collapse functionality
-  - [x] Keyboard navigation
-  - [x] Virtualized rendering
-- [x] Implement Tabs widget
-  - [x] Tab bar rendering
-  - [x] Content switching
-  - [x] Keyboard navigation (Left/Right)
-- [x] Implement Scrollable widget
-  - [x] ScrollableState with navigation methods
-  - [x] Virtual scrolling for Column children
-  - [x] Scrollbar rendering with position indicator
-  - [x] Keyboard navigation (Up/Down/PageUp/PageDown/Home/End)
-  - [x] Auto content-height detection
-  - [x] Works with any Element type
+### Lines of Code
+- **Old Implementation**: ~36,000 LOC
+- **New Implementation (so far)**: ~1,500 LOC (MigrationEnvironmentApp + MigrationComparisonSelectApp + LoadingScreen enhancements)
+- **Framework Widgets**: ~3,500 LOC (List, TextInput, Tree, Tabs, Scrollable, Select, Autocomplete)
+- **Estimated Final**: ~5,000-6,000 LOC (including UnifiedCompareApp)
 
-### Phase 2: Simple Apps
-- [ ] MigrationSelectApp
-  - [ ] Define State & Msg types
-  - [ ] Implement update() logic
-  - [ ] Implement view() with List widget
-  - [ ] Add delete confirmation modal
-  - [ ] Wire up navigation to other apps
-- [ ] EnvironmentSelectApp
-  - [ ] Define State & Msg for two-phase selection
-  - [ ] Implement update() logic
-  - [ ] Implement view() with dynamic title
-  - [ ] Wire up navigation
-- [ ] LoadingApp
-  - [ ] Define State with progress tracking
-  - [ ] Implement async data fetching
-  - [ ] Implement view() with spinner and task list
-  - [ ] Handle success/failure states
+**Code Reduction**: ~83% reduction expected (36k → 6k LOC)
 
-### Phase 3: Complex App
-- [ ] UnifiedCompareApp - Structure
-  - [ ] Define complex State type
-  - [ ] Define Msg enum with all actions
-  - [ ] Split into sub-modules (state.rs, msg.rs, update.rs, view.rs)
-- [ ] UnifiedCompareApp - Fields Tab
-  - [ ] Extract field matching logic
-  - [ ] Implement fields comparison view
-  - [ ] Add field mapping functionality
-  - [ ] Prefix mapping modal
-  - [ ] Manual mapping modal
-- [ ] UnifiedCompareApp - Other Tabs
-  - [ ] Relationships tab
-  - [ ] Views tab
-  - [ ] Forms tab
-- [ ] UnifiedCompareApp - Integration
-  - [ ] Tab switching logic
-  - [ ] Cross-tab communication (pub/sub)
-  - [ ] Examples modal
-  - [ ] Export functionality
-
-### Phase 4: Polish
-- [x] Migrate to Catppuccin theme colors
-- [ ] Add help text/documentation
-- [ ] Performance benchmarking
-- [ ] Feature parity checklist vs. old implementation
-- [ ] User acceptance testing
-- [ ] Delete old implementation
+### Development Time
+- **Phase 1 (Widgets)**: ~3 weeks
+- **Phase 2 (Simple Apps)**: ~1 week
+- **Phase 3 (Complex App)**: Estimated ~2-3 weeks
+- **Phase 4 (Polish)**: Estimated ~1 week
 
 ---
 
 ## Conclusion
 
-The migration module is **substantial** (36k LOC) but **well-suited** for the Elm-inspired pattern. ~~The main blocker is **missing widgets** (List, TextInput, Tree, Tabs).~~ ✅ **ALL FRAMEWORK WIDGETS COMPLETE!**
+**Status**: Phase 2 complete, ready for Phase 3
 
-**Status**:
-1. ✅ **Phase 1 COMPLETE** - Build framework widgets (List, TextInput, Tree, Tabs, Scrollable)
-2. 🔄 **Phase 2 READY** - Migrate simple screens (MigrationSelectApp, EnvironmentSelectApp, LoadingApp)
-3. ⏳ **Phase 3 PENDING** - Migrate complex screen (UnifiedCompareApp)
-4. ⏳ **Phase 4 PENDING** - Polish & export
+**Achievements**:
+- ✅ All framework widgets implemented
+- ✅ Migration management fully functional
+- ✅ Comparison management with autocomplete
+- ✅ Entity caching working
+- ✅ Parallel async loading operational
+- ✅ Clean Elm-inspired architecture
 
-**Next Step**: Start Phase 2 - implement MigrationSelectApp
+**Next Milestone**: Begin UnifiedCompareApp (Fields tab first)
 
-**Payoff**: Clean architecture, testable code, reusable widgets for other apps, deletion of 36k LOC of technical debt.
+**Payoff**: Clean architecture, testable code, massive code reduction, reusable widgets
