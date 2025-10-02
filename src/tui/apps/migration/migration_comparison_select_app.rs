@@ -44,6 +44,7 @@ pub struct EntitiesLoadedData {
 #[derive(Clone)]
 pub enum Msg {
     MigrationSelected(MigrationSelectedData),
+    StartLoading(MigrationSelectedData),
     DataLoaded(Result<(Vec<SavedComparison>, Vec<String>, Vec<String>), String>),
     ComparisonsLoaded(Result<Vec<SavedComparison>, String>),
     EntitiesLoaded(EntitiesLoadedData),
@@ -90,7 +91,7 @@ impl App for MigrationComparisonSelectApp {
                 state.source_env = Some(data.source_env.clone());
                 state.target_env = Some(data.target_env.clone());
 
-                // Navigate to loading screen and load entities + comparisons
+                // Navigate to loading screen, then trigger loading via event
                 let loading_init = serde_json::json!({
                     "tasks": ["Loading entity metadata and comparisons"],
                     "target": "MigrationComparisonSelect",
@@ -101,12 +102,16 @@ impl App for MigrationComparisonSelectApp {
                 Command::batch(vec![
                     Command::publish("loading:init", loading_init),
                     Command::navigate_to(AppId::LoadingScreen),
-                    // Spawn async task to load entities and comparisons
-                    Command::perform(
-                        async move {
-                            use crate::api::metadata::parse_entity_list;
-
-                            log::info!("Starting entity and comparison loading for migration: {}", data.name);
+                    // Publish event to trigger loading AFTER navigation completes
+                    Command::publish("comparison:start_loading", serde_json::to_value(&data).unwrap()),
+                ])
+            }
+            Msg::StartLoading(data) => {
+                log::info!("Starting entity and comparison loading for migration: {}", data.name);
+                // Now that we're on the loading screen, start the async work
+                Command::perform(
+                    async move {
+                        use crate::api::metadata::parse_entity_list;
 
                             let config = crate::config();
                             let manager = crate::client_manager();
@@ -155,8 +160,7 @@ impl App for MigrationComparisonSelectApp {
                         |result| {
                             Msg::DataLoaded(result)
                         },
-                    ),
-                ])
+                    )
             }
             Msg::DataLoaded(result) => {
                 match result {
@@ -253,6 +257,12 @@ impl App for MigrationComparisonSelectApp {
                 serde_json::from_value::<MigrationSelectedData>(data)
                     .ok()
                     .map(Msg::MigrationSelected)
+            }),
+            // Listen for start loading event (fired after navigation to loading screen)
+            Subscription::subscribe("comparison:start_loading", |data| {
+                serde_json::from_value::<MigrationSelectedData>(data)
+                    .ok()
+                    .map(Msg::StartLoading)
             }),
             // Listen for entities loaded events
             Subscription::subscribe("entities_loaded", |data| {

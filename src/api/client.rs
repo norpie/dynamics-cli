@@ -477,7 +477,7 @@ impl DynamicsClient {
 
     /// Fetch entity metadata from Dynamics 365 $metadata endpoint
     pub async fn fetch_metadata(&self) -> anyhow::Result<String> {
-        let metadata_url = format!("{}$metadata", self.base_url);
+        let metadata_url = format!("{}/{}/$metadata", self.base_url, constants::api_path());
 
         // Apply rate limiting before making the request
         self.apply_rate_limiting().await?;
