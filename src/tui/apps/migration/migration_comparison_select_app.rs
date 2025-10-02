@@ -16,6 +16,7 @@ use ratatui::{
     text::{Line, Span},
 };
 use serde::{Deserialize, Serialize};
+use crate::{col, row, spacer, button_row, modal, use_constraints, error_display};
 
 pub struct MigrationComparisonSelectApp;
 
@@ -486,7 +487,8 @@ impl App for MigrationComparisonSelectApp {
     }
 
     fn view(state: &mut Self::State, theme: &Theme) -> Element<Self::Msg> {
-        use crate::tui::element::{Alignment, RowBuilder};
+        use crate::tui::element::Alignment;
+        use_constraints!();
 
         log::trace!("MigrationComparisonSelectApp::view() - migration_name={:?}, comparisons={}",
             state.migration_name, state.comparisons.len());
@@ -494,7 +496,7 @@ impl App for MigrationComparisonSelectApp {
             Element::text("")
         } else {
             Element::list(
-                FocusId::new("comparison-list"),
+                "comparison-list",
                 &state.comparisons,
                 &state.list_state,
                 theme,
@@ -515,18 +517,16 @@ impl App for MigrationComparisonSelectApp {
                 main_ui,
                 "Delete Comparison",
                 format!("Delete comparison '{}'?", comparison_name),
-                FocusId::new("delete-cancel"),
+                "delete-cancel",
                 Msg::CancelDelete,
-                FocusId::new("delete-confirm"),
+                "delete-confirm",
                 Msg::ConfirmDelete,
             )
         } else if state.show_rename_modal {
-            use crate::tui::element::{RowBuilder};
-
             // Name input
             let name_input = Element::panel(
                 Element::text_input(
-                    FocusId::new("rename-name-input"),
+                    "rename-name-input",
                     &state.rename_form.new_name,
                     &mut state.rename_form.name_input_state
                 )
@@ -538,32 +538,19 @@ impl App for MigrationComparisonSelectApp {
             .build();
 
             // Buttons
-            let buttons = RowBuilder::new()
-                .add(
-                    Element::button(FocusId::new("rename-cancel"), "Cancel")
-                        .on_press(Msg::RenameFormCancel)
-                        .build(),
-                    LayoutConstraint::Fill(1),
-                )
-                .add(Element::text("  "), LayoutConstraint::Length(2))
-                .add(
-                    Element::button(FocusId::new("rename-confirm"), "Rename")
-                        .on_press(Msg::RenameFormSubmit)
-                        .build(),
-                    LayoutConstraint::Fill(1),
-                )
-                .spacing(0)
-                .build();
+            let buttons = button_row![
+                ("rename-cancel", "Cancel", Msg::RenameFormCancel),
+                ("rename-confirm", "Rename", Msg::RenameFormSubmit),
+            ];
 
             // Modal content
             let modal_content = Element::panel(
                 Element::container(
-                    ColumnBuilder::new()
-                        .add(name_input, LayoutConstraint::Length(3))
-                        .add(Element::text(""), LayoutConstraint::Length(1))
-                        .add(buttons, LayoutConstraint::Length(3))
-                        .spacing(0)
-                        .build()
+                    col![
+                        name_input => Length(3),
+                        spacer!() => Length(1),
+                        buttons => Length(3),
+                    ]
                 )
                 .padding(2)
                 .build()
@@ -573,23 +560,12 @@ impl App for MigrationComparisonSelectApp {
             .height(13)
             .build();
 
-            Element::stack(vec![
-                crate::tui::Layer {
-                    element: main_ui,
-                    alignment: Alignment::TopLeft,
-                    dim_below: false,
-                },
-                crate::tui::Layer {
-                    element: modal_content,
-                    alignment: Alignment::Center,
-                    dim_below: true,
-                },
-            ])
+            modal!(main_ui, modal_content)
         } else if state.show_create_modal {
             // Name input (using TextInput directly without autocomplete for simple text)
             let name_input = Element::panel(
                 Element::text_input(
-                    FocusId::new("create-name-input"),
+                    "create-name-input",
                     &state.create_form.name,
                     &mut state.create_form.name_input_state,
                 )
@@ -606,7 +582,7 @@ impl App for MigrationComparisonSelectApp {
             ])).build();
 
             let source_autocomplete = Element::autocomplete(
-                FocusId::new("create-source-autocomplete"),
+                "create-source-autocomplete",
                 state.source_entities.as_ref().ok().cloned().unwrap_or_default(),
                 state.create_form.source_entity_field.value().to_string(),
                 &mut state.create_form.source_entity_field.state,
@@ -621,7 +597,7 @@ impl App for MigrationComparisonSelectApp {
             ])).build();
 
             let target_autocomplete = Element::autocomplete(
-                FocusId::new("create-target-autocomplete"),
+                "create-target-autocomplete",
                 state.target_entities.as_ref().ok().cloned().unwrap_or_default(),
                 state.create_form.target_entity_field.value().to_string(),
                 &mut state.create_form.target_entity_field.state,
@@ -630,61 +606,42 @@ impl App for MigrationComparisonSelectApp {
             .on_event(Msg::CreateFormTargetEvent)
             .build();
 
-            // Validation error display
-            let error_section = if let Some(ref error) = state.create_form.validation_error {
-                ColumnBuilder::new()
-                    .add(
-                        Element::styled_text(Line::from(vec![
-                            Span::styled(format!("⚠ {}", error), Style::default().fg(theme.red))
-                        ])).build(),
-                        LayoutConstraint::Length(1)
-                    )
-                    .add(Element::text(""), LayoutConstraint::Length(1))
-                    .spacing(0)
-                    .build()
-            } else {
-                Element::text("")
-            };
-
             // Buttons
-            let buttons = RowBuilder::new()
-                .add(
-                    Element::button(FocusId::new("create-cancel"), "Cancel")
-                        .on_press(Msg::CreateFormCancel)
-                        .build(),
-                    LayoutConstraint::Fill(1),
-                )
-                .add(Element::text("  "), LayoutConstraint::Length(2))
-                .add(
-                    Element::button(FocusId::new("create-confirm"), "Create")
-                        .on_press(Msg::CreateFormSubmit)
-                        .build(),
-                    LayoutConstraint::Fill(1),
-                )
-                .spacing(0)
-                .build();
+            let buttons = button_row![
+                ("create-cancel", "Cancel", Msg::CreateFormCancel),
+                ("create-confirm", "Create", Msg::CreateFormSubmit),
+            ];
 
             // Modal content
-            let mut modal_builder = ColumnBuilder::new()
-                .add(name_input, LayoutConstraint::Length(3))
-                .add(Element::text(""), LayoutConstraint::Length(1))
-                .add(source_label, LayoutConstraint::Length(1))
-                .add(source_autocomplete, LayoutConstraint::Length(3))
-                .add(Element::text(""), LayoutConstraint::Length(1))
-                .add(target_label, LayoutConstraint::Length(1))
-                .add(target_autocomplete, LayoutConstraint::Length(3))
-                .add(Element::text(""), LayoutConstraint::Length(1));
-
-            if state.create_form.validation_error.is_some() {
-                modal_builder = modal_builder.add(error_section, LayoutConstraint::Length(2));
-            }
-
-            modal_builder = modal_builder
-                .add(buttons, LayoutConstraint::Length(3))
-                .spacing(0);
+            let modal_body = if state.create_form.validation_error.is_some() {
+                col![
+                    name_input => Length(3),
+                    spacer!() => Length(1),
+                    source_label => Length(1),
+                    source_autocomplete => Length(3),
+                    spacer!() => Length(1),
+                    target_label => Length(1),
+                    target_autocomplete => Length(3),
+                    spacer!() => Length(1),
+                    error_display!(state.create_form.validation_error, theme) => Length(2),
+                    buttons => Length(3),
+                ]
+            } else {
+                col![
+                    name_input => Length(3),
+                    spacer!() => Length(1),
+                    source_label => Length(1),
+                    source_autocomplete => Length(3),
+                    spacer!() => Length(1),
+                    target_label => Length(1),
+                    target_autocomplete => Length(3),
+                    spacer!() => Length(1),
+                    buttons => Length(3),
+                ]
+            };
 
             let modal_content = Element::panel(
-                Element::container(modal_builder.build())
+                Element::container(modal_body)
                 .padding(2)
                 .build()
             )
@@ -693,18 +650,7 @@ impl App for MigrationComparisonSelectApp {
             .height(if state.create_form.validation_error.is_some() { 25 } else { 23 })
             .build();
 
-            Element::stack(vec![
-                crate::tui::Layer {
-                    element: main_ui,
-                    alignment: Alignment::TopLeft,
-                    dim_below: false,
-                },
-                crate::tui::Layer {
-                    element: modal_content,
-                    alignment: Alignment::Center,
-                    dim_below: true,
-                },
-            ])
+            modal!(main_ui, modal_content)
         } else {
             main_ui
         }

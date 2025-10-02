@@ -5,6 +5,7 @@ use crate::tui::widgets::{TextInputState, SelectState, SelectEvent};
 use crate::config::SavedMigration;
 use ratatui::text::{Line, Span};
 use ratatui::style::Style;
+use crate::{col, row, spacer, button_row, modal, use_constraints};
 
 pub struct MigrationEnvironmentApp;
 
@@ -447,7 +448,9 @@ impl App for MigrationEnvironmentApp {
     }
 
     fn view(state: &mut State, theme: &Theme) -> Element<Msg> {
-        let list = Element::list(FocusId::new("migration-list"), &state.environments, &state.list_state, theme)
+        use_constraints!();
+
+        let list = Element::list("migration-list", &state.environments, &state.list_state, theme)
             .on_activate(Msg::SelectEnvironment)
             .on_navigate(Msg::ListNavigate)
             .build();
@@ -464,19 +467,16 @@ impl App for MigrationEnvironmentApp {
                 main_ui,
                 "Delete Migration",
                 format!("Delete migration '{}'?", migration_name),
-                FocusId::new("delete-cancel"),
+                "delete-cancel",
                 Msg::CancelDelete,
-                FocusId::new("delete-confirm"),
+                "delete-confirm",
                 Msg::ConfirmDelete,
             )
         } else if state.show_rename_modal {
-            use crate::tui::element::{ColumnBuilder, RowBuilder};
-            use crate::tui::{LayoutConstraint, Layer};
-
             // Name input
             let name_input = Element::panel(
                 Element::text_input(
-                    FocusId::new("rename-name-input"),
+                    "rename-name-input",
                     &state.rename_form.new_name,
                     &state.rename_form.name_input_state
                 )
@@ -488,32 +488,19 @@ impl App for MigrationEnvironmentApp {
             .build();
 
             // Buttons
-            let buttons = RowBuilder::new()
-                .add(
-                    Element::button(FocusId::new("rename-cancel"), "Cancel")
-                        .on_press(Msg::RenameFormCancel)
-                        .build(),
-                    LayoutConstraint::Fill(1),
-                )
-                .add(Element::text("  "), LayoutConstraint::Length(2))
-                .add(
-                    Element::button(FocusId::new("rename-confirm"), "Rename")
-                        .on_press(Msg::RenameFormSubmit)
-                        .build(),
-                    LayoutConstraint::Fill(1),
-                )
-                .spacing(0)
-                .build();
+            let buttons = button_row![
+                ("rename-cancel", "Cancel", Msg::RenameFormCancel),
+                ("rename-confirm", "Rename", Msg::RenameFormSubmit),
+            ];
 
             // Modal content
             let modal_content = Element::panel(
                 Element::container(
-                    ColumnBuilder::new()
-                        .add(name_input, LayoutConstraint::Length(3))
-                        .add(Element::text(""), LayoutConstraint::Length(1))
-                        .add(buttons, LayoutConstraint::Length(3))
-                        .spacing(0)
-                        .build()
+                    col![
+                        name_input => Length(3),
+                        spacer!() => Length(1),
+                        buttons => Length(3),
+                    ]
                 )
                 .padding(2)
                 .build()
@@ -523,13 +510,9 @@ impl App for MigrationEnvironmentApp {
             .height(13)
             .build();
 
-            Element::stack(vec![
-                Layer::new(main_ui).dim(true),
-                Layer::new(modal_content).center(),
-            ])
+            modal!(main_ui, modal_content)
         } else if state.show_create_modal {
-            use crate::tui::element::{ColumnBuilder, RowBuilder, Alignment};
-            use crate::tui::LayoutConstraint;
+            use crate::tui::element::Alignment;
 
             // If environments haven't loaded yet, show loading message
             if state.available_environments.is_empty() {
@@ -545,18 +528,7 @@ impl App for MigrationEnvironmentApp {
                 .title("Create New Migration")
                 .build();
 
-                return Element::stack(vec![
-                    crate::tui::Layer {
-                        element: main_ui,
-                        alignment: Alignment::Center,
-                        dim_below: false,
-                    },
-                    crate::tui::Layer {
-                        element: loading_content,
-                        alignment: Alignment::Center,
-                        dim_below: true,
-                    },
-                ]);
+                return modal!(main_ui, loading_content, Alignment::Center);
             }
 
             // Get filtered environment options
@@ -569,7 +541,7 @@ impl App for MigrationEnvironmentApp {
             // Name input
             let name_input = Element::panel(
                 Element::text_input(
-                    FocusId::new("create-name-input"),
+                    "create-name-input",
                     &state.create_form.name,
                     &state.create_form.name_input_state
                 )
@@ -583,7 +555,7 @@ impl App for MigrationEnvironmentApp {
             // Source environment select
             let source_select = Element::panel(
                 Element::select(
-                    FocusId::new("create-source-select"),
+                    "create-source-select",
                     source_options,
                     &mut state.create_form.source_select_state
                 )
@@ -596,7 +568,7 @@ impl App for MigrationEnvironmentApp {
             // Target environment select
             let target_select = Element::panel(
                 Element::select(
-                    FocusId::new("create-target-select"),
+                    "create-target-select",
                     target_options,
                     &mut state.create_form.target_select_state
                 )
@@ -606,59 +578,38 @@ impl App for MigrationEnvironmentApp {
             .title("Target Environment")
             .build();
 
-            // Validation error display
-            let error_section = if let Some(ref error) = state.create_form.validation_error {
-                ColumnBuilder::new()
-                    .add(
-                        Element::styled_text(Line::from(vec![
-                            Span::styled(format!("⚠ {}", error), Style::default().fg(theme.red))
-                        ])).build(),
-                        LayoutConstraint::Length(1)
-                    )
-                    .add(Element::text(""), LayoutConstraint::Length(1))
-                    .spacing(0)
-                    .build()
-            } else {
-                Element::text("")
-            };
-
             // Buttons
-            let buttons = RowBuilder::new()
-                .add(
-                    Element::button(FocusId::new("create-cancel"), "Cancel")
-                        .on_press(Msg::CreateFormCancel)
-                        .build(),
-                    LayoutConstraint::Fill(1),
-                )
-                .add(Element::text("  "), LayoutConstraint::Length(2))
-                .add(
-                    Element::button(FocusId::new("create-confirm"), "Confirm")
-                        .on_press(Msg::CreateFormSubmit)
-                        .build(),
-                    LayoutConstraint::Fill(1),
-                )
-                .spacing(0)
-                .build();
+            let buttons = button_row![
+                ("create-cancel", "Cancel", Msg::CreateFormCancel),
+                ("create-confirm", "Confirm", Msg::CreateFormSubmit),
+            ];
 
             // Modal content - use explicit sizing for proper display
-            let mut modal_builder = ColumnBuilder::new()
-                .add(name_input, LayoutConstraint::Length(3))
-                .add(Element::text(""), LayoutConstraint::Length(1))
-                .add(source_select, LayoutConstraint::Length(10))
-                .add(Element::text(""), LayoutConstraint::Length(1))
-                .add(target_select, LayoutConstraint::Length(10))
-                .add(Element::text(""), LayoutConstraint::Length(1));
-
-            if state.create_form.validation_error.is_some() {
-                modal_builder = modal_builder.add(error_section, LayoutConstraint::Length(2));
-            }
-
-            modal_builder = modal_builder
-                .add(buttons, LayoutConstraint::Length(3))
-                .spacing(0);
+            let modal_body = if state.create_form.validation_error.is_some() {
+                col![
+                    name_input => Length(3),
+                    spacer!() => Length(1),
+                    source_select => Length(10),
+                    spacer!() => Length(1),
+                    target_select => Length(10),
+                    spacer!() => Length(1),
+                    crate::error_display!(state.create_form.validation_error, theme) => Length(2),
+                    buttons => Length(3),
+                ]
+            } else {
+                col![
+                    name_input => Length(3),
+                    spacer!() => Length(1),
+                    source_select => Length(10),
+                    spacer!() => Length(1),
+                    target_select => Length(10),
+                    spacer!() => Length(1),
+                    buttons => Length(3),
+                ]
+            };
 
             let modal_content = Element::panel(
-                Element::container(modal_builder.build())
+                Element::container(modal_body)
                 .padding(2)
                 .build()
             )
@@ -667,18 +618,7 @@ impl App for MigrationEnvironmentApp {
             .height(if state.create_form.validation_error.is_some() { 37 } else { 35 })
             .build();
 
-            Element::stack(vec![
-                crate::tui::Layer {
-                    element: main_ui,
-                    alignment: Alignment::TopLeft,
-                    dim_below: false,
-                },
-                crate::tui::Layer {
-                    element: modal_content,
-                    alignment: Alignment::Center,
-                    dim_below: true,
-                },
-            ])
+            modal!(main_ui, modal_content)
         } else {
             main_ui
         }
