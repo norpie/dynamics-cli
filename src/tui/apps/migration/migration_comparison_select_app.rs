@@ -5,6 +5,7 @@ use crate::tui::{
     subscription::Subscription,
     state::theme::Theme,
     widgets::list::{ListItem, ListState},
+    widgets::AutocompleteState,
 };
 use crate::config::repository::migrations::SavedComparison;
 use crossterm::event::KeyCode;
@@ -18,6 +19,17 @@ use serde::{Deserialize, Serialize};
 pub struct MigrationComparisonSelectApp;
 
 #[derive(Clone, Default)]
+pub struct CreateComparisonForm {
+    name: String,
+    name_input_state: crate::tui::widgets::TextInputState,
+    source_entity: String,
+    source_autocomplete_state: AutocompleteState,
+    target_entity: String,
+    target_autocomplete_state: AutocompleteState,
+    validation_error: Option<String>,
+}
+
+#[derive(Clone, Default)]
 pub struct State {
     migration_name: Option<String>,
     source_env: Option<String>,
@@ -26,6 +38,8 @@ pub struct State {
     list_state: ListState,
     source_entities: Vec<String>,
     target_entities: Vec<String>,
+    show_create_modal: bool,
+    create_form: CreateComparisonForm,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -42,6 +56,16 @@ pub enum Msg {
     ListNavigate(KeyCode),
     SelectComparison,
     CreateComparison,
+    CreateFormNameChanged(KeyCode),
+    CreateFormSourceInputChanged(KeyCode),
+    CreateFormSourceNavigate(KeyCode),
+    CreateFormSourceSelected(String),
+    CreateFormTargetInputChanged(KeyCode),
+    CreateFormTargetNavigate(KeyCode),
+    CreateFormTargetSelected(String),
+    CreateFormSubmit,
+    CreateFormCancel,
+    ComparisonCreated(Result<i64, String>),
     Back,
 }
 
@@ -130,15 +154,191 @@ impl App for MigrationComparisonSelectApp {
                 Command::None
             }
             Msg::CreateComparison => {
-                // TODO: Navigate to create comparison modal
-                log::info!("Create comparison");
+                state.show_create_modal = true;
+                state.create_form = CreateComparisonForm::default();
+                Command::set_focus(FocusId::new("create-name-input"))
+            }
+            Msg::CreateFormNameChanged(key) => {
+                if let Some(new_value) = state.create_form.name_input_state.handle_key(
+                    key,
+                    &state.create_form.name,
+                    Some(50), // Max 50 characters
+                ) {
+                    state.create_form.name = new_value;
+                }
                 Command::None
+            }
+            Msg::CreateFormSourceInputChanged(key) => {
+                if let Some(new_value) = state.create_form.source_autocomplete_state.handle_input_key(
+                    key,
+                    &state.create_form.source_entity,
+                    None,
+                ) {
+                    state.create_form.source_entity = new_value;
+                    state.create_form.source_autocomplete_state.update_filtered_options(
+                        &state.create_form.source_entity,
+                        &state.source_entities,
+                    );
+                }
+                Command::None
+            }
+            Msg::CreateFormSourceNavigate(key) => {
+                match key {
+                    KeyCode::Up => {
+                        state.create_form.source_autocomplete_state.navigate_prev();
+                    }
+                    KeyCode::Down => {
+                        state.create_form.source_autocomplete_state.navigate_next();
+                    }
+                    KeyCode::Enter => {
+                        if let Some(selected) = state.create_form.source_autocomplete_state.get_highlighted_option() {
+                            state.create_form.source_entity = selected.clone();
+                            state.create_form.source_autocomplete_state.close();
+                            state.create_form.source_autocomplete_state.set_cursor_to_end(&state.create_form.source_entity);
+                        }
+                    }
+                    KeyCode::Esc => {
+                        state.create_form.source_autocomplete_state.close();
+                    }
+                    _ => {}
+                }
+                Command::None
+            }
+            Msg::CreateFormSourceSelected(entity) => {
+                state.create_form.source_entity = entity.clone();
+                state.create_form.source_autocomplete_state.close();
+                state.create_form.source_autocomplete_state.set_cursor_to_end(&state.create_form.source_entity);
+                Command::None
+            }
+            Msg::CreateFormTargetInputChanged(key) => {
+                if let Some(new_value) = state.create_form.target_autocomplete_state.handle_input_key(
+                    key,
+                    &state.create_form.target_entity,
+                    None,
+                ) {
+                    state.create_form.target_entity = new_value;
+                    state.create_form.target_autocomplete_state.update_filtered_options(
+                        &state.create_form.target_entity,
+                        &state.target_entities,
+                    );
+                }
+                Command::None
+            }
+            Msg::CreateFormTargetNavigate(key) => {
+                match key {
+                    KeyCode::Up => {
+                        state.create_form.target_autocomplete_state.navigate_prev();
+                    }
+                    KeyCode::Down => {
+                        state.create_form.target_autocomplete_state.navigate_next();
+                    }
+                    KeyCode::Enter => {
+                        if let Some(selected) = state.create_form.target_autocomplete_state.get_highlighted_option() {
+                            state.create_form.target_entity = selected.clone();
+                            state.create_form.target_autocomplete_state.close();
+                            state.create_form.target_autocomplete_state.set_cursor_to_end(&state.create_form.target_entity);
+                        }
+                    }
+                    KeyCode::Esc => {
+                        state.create_form.target_autocomplete_state.close();
+                    }
+                    _ => {}
+                }
+                Command::None
+            }
+            Msg::CreateFormTargetSelected(entity) => {
+                state.create_form.target_entity = entity.clone();
+                state.create_form.target_autocomplete_state.close();
+                state.create_form.target_autocomplete_state.set_cursor_to_end(&state.create_form.target_entity);
+                Command::None
+            }
+            Msg::CreateFormSubmit => {
+                let name = state.create_form.name.trim().to_string();
+                let source_entity = state.create_form.source_entity.trim().to_string();
+                let target_entity = state.create_form.target_entity.trim().to_string();
+
+                if name.is_empty() {
+                    state.create_form.validation_error = Some("Comparison name is required".to_string());
+                    return Command::None;
+                }
+
+                if source_entity.is_empty() {
+                    state.create_form.validation_error = Some("Source entity is required".to_string());
+                    return Command::None;
+                }
+
+                if target_entity.is_empty() {
+                    state.create_form.validation_error = Some("Target entity is required".to_string());
+                    return Command::None;
+                }
+
+                // Validate that entities exist in their respective lists
+                if !state.source_entities.contains(&source_entity) {
+                    state.create_form.validation_error = Some(format!("Source entity '{}' not found", source_entity));
+                    return Command::None;
+                }
+
+                if !state.target_entities.contains(&target_entity) {
+                    state.create_form.validation_error = Some(format!("Target entity '{}' not found", target_entity));
+                    return Command::None;
+                }
+
+                let migration_name = state.migration_name.clone().unwrap_or_default();
+                state.show_create_modal = false;
+                state.create_form.validation_error = None;
+
+                Command::perform(
+                    async move {
+                        let config = crate::config();
+                        let comparison = SavedComparison {
+                            id: 0, // Will be assigned by database
+                            name,
+                            migration_name,
+                            source_entity,
+                            target_entity,
+                            entity_comparison: None,
+                            created_at: chrono::Utc::now(),
+                            last_used: chrono::Utc::now(),
+                        };
+                        config.add_comparison(comparison).await
+                            .map_err(|e| e.to_string())
+                    },
+                    Msg::ComparisonCreated
+                )
+            }
+            Msg::CreateFormCancel => {
+                state.show_create_modal = false;
+                state.create_form.validation_error = None;
+                Command::None
+            }
+            Msg::ComparisonCreated(result) => {
+                match result {
+                    Ok(id) => {
+                        log::info!("Created comparison with ID: {}", id);
+                        // Reload comparisons list
+                        let migration_name = state.migration_name.clone().unwrap_or_default();
+                        Command::perform(
+                            async move {
+                                let config = crate::config();
+                                config.get_comparisons(&migration_name).await
+                                    .map_err(|e| e.to_string())
+                            },
+                            Msg::ComparisonsLoaded
+                        )
+                    }
+                    Err(e) => {
+                        log::error!("Failed to create comparison: {}", e);
+                        Command::None
+                    }
+                }
             }
             Msg::Back => Command::navigate_to(AppId::MigrationEnvironment),
         }
     }
 
     fn view(state: &mut Self::State, theme: &Theme) -> Element<Self::Msg> {
+        use crate::tui::element::{Alignment, RowBuilder};
+
         log::trace!("MigrationComparisonSelectApp::view() - migration_name={:?}, comparisons={}",
             state.migration_name, state.comparisons.len());
         let list_content = if state.comparisons.is_empty() {
@@ -154,9 +354,135 @@ impl App for MigrationComparisonSelectApp {
             .build()
         };
 
-        Element::panel(list_content)
+        let main_ui = Element::panel(list_content)
             .title("Comparisons")
-            .build()
+            .build();
+
+        if state.show_create_modal {
+            // Name input (using TextInput directly without autocomplete for simple text)
+            let name_input = Element::panel(
+                Element::text_input(
+                    FocusId::new("create-name-input"),
+                    &state.create_form.name,
+                    &mut state.create_form.name_input_state,
+                )
+                .placeholder("Comparison name")
+                .on_change(Msg::CreateFormNameChanged)
+                .build()
+            )
+            .title("Name")
+            .build();
+
+            // Source entity autocomplete
+            let source_autocomplete = Element::panel(
+                Element::autocomplete(
+                    FocusId::new("create-source-autocomplete"),
+                    state.source_entities.clone(),
+                    state.create_form.source_entity.clone(),
+                    &mut state.create_form.source_autocomplete_state,
+                )
+                .placeholder("Type source entity name...")
+                .on_input(Msg::CreateFormSourceInputChanged)
+                .on_select(Msg::CreateFormSourceSelected)
+                .on_navigate(Msg::CreateFormSourceNavigate)
+                .build()
+            )
+            .title("Source Entity")
+            .build();
+
+            // Target entity autocomplete
+            let target_autocomplete = Element::panel(
+                Element::autocomplete(
+                    FocusId::new("create-target-autocomplete"),
+                    state.target_entities.clone(),
+                    state.create_form.target_entity.clone(),
+                    &mut state.create_form.target_autocomplete_state,
+                )
+                .placeholder("Type target entity name...")
+                .on_input(Msg::CreateFormTargetInputChanged)
+                .on_select(Msg::CreateFormTargetSelected)
+                .on_navigate(Msg::CreateFormTargetNavigate)
+                .build()
+            )
+            .title("Target Entity")
+            .build();
+
+            // Validation error display
+            let error_section = if let Some(ref error) = state.create_form.validation_error {
+                ColumnBuilder::new()
+                    .add(
+                        Element::styled_text(Line::from(vec![
+                            Span::styled(format!("⚠ {}", error), Style::default().fg(theme.red))
+                        ])).build(),
+                        LayoutConstraint::Length(1)
+                    )
+                    .add(Element::text(""), LayoutConstraint::Length(1))
+                    .spacing(0)
+                    .build()
+            } else {
+                Element::text("")
+            };
+
+            // Buttons
+            let buttons = RowBuilder::new()
+                .add(
+                    Element::button(FocusId::new("create-cancel"), "Cancel")
+                        .on_press(Msg::CreateFormCancel)
+                        .build(),
+                    LayoutConstraint::Fill(1),
+                )
+                .add(Element::text("  "), LayoutConstraint::Length(2))
+                .add(
+                    Element::button(FocusId::new("create-confirm"), "Create")
+                        .on_press(Msg::CreateFormSubmit)
+                        .build(),
+                    LayoutConstraint::Fill(1),
+                )
+                .spacing(0)
+                .build();
+
+            // Modal content
+            let mut modal_builder = ColumnBuilder::new()
+                .add(name_input, LayoutConstraint::Length(3))
+                .add(Element::text(""), LayoutConstraint::Length(1))
+                .add(source_autocomplete, LayoutConstraint::Length(3))
+                .add(Element::text(""), LayoutConstraint::Length(1))
+                .add(target_autocomplete, LayoutConstraint::Length(3))
+                .add(Element::text(""), LayoutConstraint::Length(1));
+
+            if state.create_form.validation_error.is_some() {
+                modal_builder = modal_builder.add(error_section, LayoutConstraint::Length(2));
+            }
+
+            modal_builder = modal_builder
+                .add(buttons, LayoutConstraint::Length(3))
+                .spacing(0);
+
+            let modal_content = Element::panel(
+                Element::container(modal_builder.build())
+                .padding(2)
+                .build()
+            )
+            .title("Create New Comparison")
+            .width(80)
+            .height(if state.create_form.validation_error.is_some() { 23 } else { 21 })
+            .build();
+
+            Element::stack(vec![
+                crate::tui::Layer {
+                    element: main_ui,
+                    alignment: Alignment::TopLeft,
+                    dim_below: false,
+                },
+                crate::tui::Layer {
+                    element: modal_content,
+                    alignment: Alignment::Center,
+                    dim_below: true,
+                },
+            ])
+        } else {
+            main_ui
+        }
     }
 
     fn subscriptions(state: &Self::State) -> Vec<Subscription<Self::Msg>> {
@@ -183,30 +509,32 @@ impl App for MigrationComparisonSelectApp {
                     .ok()
                     .map(Msg::EntitiesLoaded)
             }),
-            // Back navigation
-            Subscription::keyboard(KeyCode::Esc, "Back to migration list", Msg::Back),
-            Subscription::keyboard(KeyCode::Char('b'), "Back to migration list", Msg::Back),
-            Subscription::keyboard(KeyCode::Char('B'), "Back to migration list", Msg::Back),
         ];
 
-        if !state.comparisons.is_empty() {
+        if !state.show_create_modal {
+            subs.push(Subscription::keyboard(KeyCode::Esc, "Back to migration list", Msg::Back));
+            subs.push(Subscription::keyboard(KeyCode::Char('b'), "Back to migration list", Msg::Back));
+            subs.push(Subscription::keyboard(KeyCode::Char('B'), "Back to migration list", Msg::Back));
+
+            if !state.comparisons.is_empty() {
+                subs.push(Subscription::keyboard(
+                    KeyCode::Enter,
+                    "Select comparison",
+                    Msg::SelectComparison,
+                ));
+            }
+
             subs.push(Subscription::keyboard(
-                KeyCode::Enter,
-                "Select comparison",
-                Msg::SelectComparison,
+                KeyCode::Char('c'),
+                "Create comparison",
+                Msg::CreateComparison,
+            ));
+            subs.push(Subscription::keyboard(
+                KeyCode::Char('C'),
+                "Create comparison",
+                Msg::CreateComparison,
             ));
         }
-
-        subs.push(Subscription::keyboard(
-            KeyCode::Char('c'),
-            "Create comparison",
-            Msg::CreateComparison,
-        ));
-        subs.push(Subscription::keyboard(
-            KeyCode::Char('C'),
-            "Create comparison",
-            Msg::CreateComparison,
-        ));
 
         subs
     }
