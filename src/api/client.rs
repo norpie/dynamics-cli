@@ -38,7 +38,7 @@ impl DynamicsClient {
         let http_client = reqwest::Client::builder()
             .pool_max_idle_per_host(10)           // Max idle connections per host
             .pool_idle_timeout(Duration::from_secs(90))  // Keep connections alive for 90s
-            .timeout(Duration::from_secs(30))     // Request timeout
+            .timeout(Duration::from_secs(60))     // Request timeout (1 minute for large metadata)
             .connect_timeout(Duration::from_secs(10))    // Connection timeout
             .user_agent("dynamics-cli/1.0")       // Custom user agent
             .build()
