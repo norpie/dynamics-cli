@@ -15,6 +15,11 @@ impl<Msg> ColumnBuilder<Msg> {
         }
     }
 
+    /// Create a column builder from existing items (for macros)
+    pub fn from_items(items: Vec<(LayoutConstraint, Element<Msg>)>) -> Self {
+        Self { items, spacing: 1 }
+    }
+
     /// Add a child with an explicit layout constraint
     pub fn add(mut self, child: Element<Msg>, constraint: LayoutConstraint) -> Self {
         self.items.push((constraint, child));

@@ -16,6 +16,12 @@ impl FocusId {
     }
 }
 
+impl From<&'static str> for FocusId {
+    fn from(s: &'static str) -> Self {
+        FocusId(s)
+    }
+}
+
 /// Alignment options for positioned elements
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Alignment {
@@ -233,9 +239,9 @@ impl<Msg> Element<Msg> {
     }
 
     /// Create a button element
-    pub fn button(id: FocusId, label: impl Into<String>) -> ButtonBuilder<Msg> {
+    pub fn button(id: impl Into<FocusId>, label: impl Into<String>) -> ButtonBuilder<Msg> {
         ButtonBuilder {
-            id,
+            id: id.into(),
             label: label.into(),
             on_press: None,
             on_hover: None,
@@ -302,9 +308,9 @@ impl<Msg> Element<Msg> {
         background: Element<Msg>,
         title: impl Into<String>,
         message: impl Into<String>,
-        cancel_id: FocusId,
+        cancel_id: impl Into<FocusId>,
         on_cancel: Msg,
-        confirm_id: FocusId,
+        confirm_id: impl Into<FocusId>,
         on_confirm: Msg,
     ) -> Self {
         use crate::tui::element::RowBuilder;
@@ -400,12 +406,12 @@ impl<Msg> Element<Msg> {
 
     /// Create a text input element
     pub fn text_input(
-        id: FocusId,
+        id: impl Into<FocusId>,
         value: &str,
         state: &crate::tui::widgets::TextInputState,
     ) -> TextInputBuilder<Msg> {
         TextInputBuilder {
-            id,
+            id: id.into(),
             value: value.to_string(),
             cursor_pos: state.cursor_pos(),
             scroll_offset: state.scroll_offset(),
@@ -420,7 +426,7 @@ impl<Msg> Element<Msg> {
 
     /// Create a list element from items
     pub fn list<T>(
-        id: FocusId,
+        id: impl Into<FocusId>,
         items: &[T],
         state: &crate::tui::widgets::ListState,
         theme: &crate::tui::Theme,
@@ -438,7 +444,7 @@ impl<Msg> Element<Msg> {
             .collect();
 
         ListBuilder {
-            id,
+            id: id.into(),
             items: elements,
             selected: state.selected(),
             scroll_offset: state.scroll_offset(),
@@ -452,7 +458,7 @@ impl<Msg> Element<Msg> {
 
     /// Create a tree element from TreeItem-implementing items
     pub fn tree<T>(
-        id: FocusId,
+        id: impl Into<FocusId>,
         root_items: &[T],
         state: &mut crate::tui::widgets::TreeState,
         theme: &crate::tui::Theme,
@@ -470,7 +476,7 @@ impl<Msg> Element<Msg> {
             .unzip();
 
         TreeBuilder {
-            id,
+            id: id.into(),
             items: elements,
             node_ids,
             selected: state.selected().map(String::from),
@@ -486,12 +492,12 @@ impl<Msg> Element<Msg> {
 
     /// Create a scrollable wrapper around any element
     pub fn scrollable(
-        id: FocusId,
+        id: impl Into<FocusId>,
         child: Element<Msg>,
         state: &crate::tui::widgets::ScrollableState,
     ) -> ScrollableBuilder<Msg> {
         ScrollableBuilder {
-            id,
+            id: id.into(),
             child: Box::new(child),
             scroll_offset: state.scroll_offset(),
             content_height: None,
@@ -503,7 +509,7 @@ impl<Msg> Element<Msg> {
 
     /// Create a select/dropdown element
     pub fn select(
-        id: FocusId,
+        id: impl Into<FocusId>,
         options: Vec<String>,
         state: &mut crate::tui::widgets::SelectState,
     ) -> SelectBuilder<Msg> {
@@ -511,7 +517,7 @@ impl<Msg> Element<Msg> {
         state.update_option_count(options.len());
 
         SelectBuilder {
-            id,
+            id: id.into(),
             options,
             selected: state.selected(),
             is_open: state.is_open(),
@@ -527,13 +533,13 @@ impl<Msg> Element<Msg> {
 
     /// Create an autocomplete input with fuzzy-matched dropdown
     pub fn autocomplete(
-        id: FocusId,
+        id: impl Into<FocusId>,
         all_options: Vec<String>,
         current_input: String,
         state: &mut crate::tui::widgets::AutocompleteState,
     ) -> AutocompleteBuilder<Msg> {
         AutocompleteBuilder {
-            id,
+            id: id.into(),
             all_options,
             current_input,
             placeholder: None,

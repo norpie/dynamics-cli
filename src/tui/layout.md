@@ -28,8 +28,8 @@ macro_rules! col {
         builder.build()
     }};
 
-    // With constraints using @ syntax
-    [ $($child:expr @ $constraint:expr),* $(,)? ] => {{
+    // With constraints using => syntax
+    [ $($child:expr => $constraint:expr),* $(,)? ] => {{
         let mut builder = $crate::tui::element::ColumnBuilder::new();
         $(
             builder = builder.add($child, $constraint);
@@ -42,7 +42,7 @@ macro_rules! col {
 macro_rules! row {
     // Same pattern as col!
     [ $($child:expr),* $(,)? ] => {{ /* ... */ }};
-    [ $($child:expr @ $constraint:expr),* $(,)? ] => {{ /* ... */ }};
+    [ $($child:expr => $constraint:expr),* $(,)? ] => {{ /* ... */ }};
 }
 ```
 
@@ -65,13 +65,13 @@ ColumnBuilder::new()
 **After (9 lines, 47% reduction):**
 ```rust
 col![
-    name_input @ Length(3),
+    name_input => Length(3),
     spacer!(1),
-    source_select @ Length(10),
+    source_select => Length(10),
     spacer!(1),
-    target_select @ Length(10),
+    target_select => Length(10),
     spacer!(1),
-    buttons @ Length(3),
+    buttons => Length(3),
 ]
 ```
 
@@ -113,8 +113,8 @@ macro_rules! use_constraints {
 // In view functions
 use_constraints!();
 col![
-    thing @ Length(3),  // no need for LayoutConstraint::Length
-    thing @ Fill(1),
+    thing => Length(3),  // no need for LayoutConstraint::Length
+    thing => Fill(1),
 ]
 ```
 
@@ -249,8 +249,8 @@ macro_rules! error_display {
             col![
                 Element::styled_text(Line::from(vec![
                     Span::styled(format!("⚠ {}", err), Style::default().fg($theme.red))
-                ])).build() @ Length(1),
-                spacer!() @ Length(1),
+                ])).build() => Length(1),
+                spacer!() => Length(1),
             ]
         } else {
             Element::text("")
@@ -320,8 +320,8 @@ labeled_input!(
 use LayoutConstraint::{Length as Len, Fill, Min};
 
 col![
-    thing @ Len(3),  // vs Length(3)
-    thing @ Fill(1),
+    thing => Len(3),  // vs Length(3)
+    thing => Fill(1),
 ]
 ```
 
@@ -447,7 +447,7 @@ fn create_modal(state: &State, theme: &Theme) -> Element<Msg> {
 **Deliverable:** 5-10% code reduction
 
 ### Phase 2: Core Layout (3-4 hours)
-1. `col![]` macro with `@` constraint syntax
+1. `col![]` macro with `=>` constraint syntax
 2. `row![]` macro
 3. Test with migration apps
 4. Document edge cases
@@ -481,7 +481,7 @@ fn create_modal(state: &State, theme: &Theme) -> Element<Msg> {
 
 ### Medium Risk
 - **col!/row!** - Complex pattern matching, needs good tests
-- **Constraint @ syntax** - May confuse newcomers initially
+- **Constraint => syntax** - May confuse newcomers initially
 
 ### High Risk
 - **Proc macros** - Debugging pain, maintenance burden

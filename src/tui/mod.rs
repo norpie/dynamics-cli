@@ -10,6 +10,9 @@ pub mod state;
 pub mod widgets;
 pub mod resource;
 
+#[macro_use]
+pub mod macros;
+
 pub use command::{Command, AppId};
 pub use element::{Element, LayoutConstraint, Layer, Alignment, FocusId};
 pub use subscription::Subscription;
