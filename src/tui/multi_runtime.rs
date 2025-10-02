@@ -67,6 +67,7 @@ pub struct MultiAppRuntime {
     // Global UI state
     help_menu_open: bool,
     help_scroll_state: ScrollableState,
+    quit_confirm_open: bool,
 }
 
 impl MultiAppRuntime {
@@ -90,10 +91,28 @@ impl MultiAppRuntime {
             active_app: AppId::AppLauncher,
             help_menu_open: false,
             help_scroll_state: ScrollableState::new(),
+            quit_confirm_open: false,
         }
     }
 
+    pub fn request_quit(&mut self) {
+        self.quit_confirm_open = true;
+    }
+
     pub fn handle_key(&mut self, key_event: KeyEvent) -> Result<bool> {
+        // Handle quit confirmation modal (highest priority)
+        if self.quit_confirm_open {
+            match key_event.code {
+                KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
+                    return Ok(false);  // Quit
+                }
+                KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+                    self.quit_confirm_open = false;
+                    return Ok(true);  // Don't quit
+                }
+                _ => return Ok(true),  // Consume other keys
+            }
+        }
         // Global keys: F1 toggles help menu
         if key_event.code == KeyCode::F(1) {
             self.help_menu_open = !self.help_menu_open;
@@ -170,6 +189,11 @@ impl MultiAppRuntime {
     pub fn handle_mouse(&mut self, mouse_event: MouseEvent) -> Result<bool> {
         use crossterm::event::MouseEventKind;
 
+        // When quit confirmation is open, consume all mouse events
+        if self.quit_confirm_open {
+            return Ok(true);
+        }
+
         // When help menu is open, intercept scroll wheel events
         if self.help_menu_open {
             match mouse_event.kind {
@@ -232,6 +256,11 @@ impl MultiAppRuntime {
         // If help menu is open, overlay it on top
         if self.help_menu_open {
             self.render_help_menu(frame, full_area, &theme);
+        }
+
+        // If quit confirmation is open, overlay it on top (highest priority)
+        if self.quit_confirm_open {
+            self.render_quit_confirm(frame, full_area, &theme);
         }
     }
 
@@ -416,6 +445,73 @@ impl MultiAppRuntime {
     }
 
     /// Poll async commands for all apps
+    fn render_quit_confirm(&self, frame: &mut Frame, area: ratatui::layout::Rect, theme: &Theme) {
+        use ratatui::widgets::Block;
+        use ratatui::style::Style;
+
+        // Render dim overlay
+        let dim_block = Block::default()
+            .style(Style::default().bg(theme.surface0));
+        frame.render_widget(dim_block, area);
+
+        // Create simple confirmation modal
+        let modal_width = 50;
+        let modal_height = 8;
+        let modal_area = ratatui::layout::Rect {
+            x: area.x + (area.width.saturating_sub(modal_width)) / 2,
+            y: area.y + (area.height.saturating_sub(modal_height)) / 2,
+            width: modal_width,
+            height: modal_height,
+        };
+
+        let message_content = ColumnBuilder::<()>::new()
+            .add(
+                Element::styled_text(Line::from(vec![
+                    Span::styled("Quit Application", Style::default().fg(theme.red).bold())
+                ])).build(),
+                LayoutConstraint::Length(1),
+            )
+            .add(Element::text(""), LayoutConstraint::Length(1))
+            .add(
+                Element::text("Are you sure you want to quit?"),
+                LayoutConstraint::Length(1),
+            )
+            .add(Element::text(""), LayoutConstraint::Length(1))
+            .add(
+                Element::styled_text(Line::from(vec![
+                    Span::styled("[Y/Enter]", Style::default().fg(theme.green)),
+                    Span::raw(" Yes  "),
+                    Span::styled("[N/Esc]", Style::default().fg(theme.red)),
+                    Span::raw(" No"),
+                ])).build(),
+                LayoutConstraint::Length(1),
+            )
+            .spacing(0)
+            .build();
+
+        let quit_modal = Element::panel(
+            Element::container(message_content)
+                .padding(1)
+                .build()
+        )
+        .build();
+
+        // Render using element system
+        let mut registry = crate::tui::renderer::InteractionRegistry::new();
+        let mut focus_registry = crate::tui::renderer::FocusRegistry::new();
+        let mut dropdown_registry = crate::tui::renderer::DropdownRegistry::new();
+        crate::tui::Renderer::render(
+            frame,
+            theme,
+            &mut registry,
+            &mut focus_registry,
+            &mut dropdown_registry,
+            None,
+            &quit_modal,
+            modal_area,
+        );
+    }
+
     pub async fn poll_async(&mut self) -> Result<()> {
         // Poll all apps regardless of which is active
         for runtime in self.runtimes.values_mut() {

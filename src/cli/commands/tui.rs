@@ -77,8 +77,8 @@ async fn run_tui<B: Backend>(
                 if key.code == crossterm::event::KeyCode::Char('q')
                     && key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL)
                 {
-                    should_quit = true;
-                    break;
+                    runtime.request_quit();
+                    continue;  // Let runtime handle the confirmation
                 }
 
                 // Pass key event to runtime
