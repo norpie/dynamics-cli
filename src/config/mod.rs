@@ -238,6 +238,10 @@ impl Config {
         repository::migrations::delete_comparison(&self.pool, id).await
     }
 
+    pub async fn rename_comparison(&self, id: i64, new_name: &str) -> Result<()> {
+        repository::migrations::rename_comparison(&self.pool, id, new_name).await
+    }
+
     // Entity cache methods
     pub async fn get_entity_cache(&self, environment_name: &str, max_age_hours: i64) -> Result<Option<Vec<String>>> {
         if let Some((entities, cached_at)) = repository::entity_cache::get(&self.pool, environment_name).await? {

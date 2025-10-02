@@ -173,3 +173,22 @@ pub async fn delete_comparison(pool: &SqlitePool, id: i64) -> Result<()> {
     log::info!("Deleted comparison: {}", id);
     Ok(())
 }
+
+/// Rename comparison by id
+pub async fn rename_comparison(pool: &SqlitePool, id: i64, new_name: &str) -> Result<()> {
+    let result = sqlx::query(
+        "UPDATE comparisons SET name = ?, last_used = CURRENT_TIMESTAMP WHERE id = ?"
+    )
+    .bind(new_name)
+    .bind(id)
+    .execute(pool)
+    .await
+    .with_context(|| format!("Failed to rename comparison with id {}", id))?;
+
+    if result.rows_affected() == 0 {
+        anyhow::bail!("Comparison with id {} not found", id);
+    }
+
+    log::info!("Renamed comparison {} to: {}", id, new_name);
+    Ok(())
+}

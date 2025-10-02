@@ -30,6 +30,12 @@ pub struct CreateComparisonForm {
 }
 
 #[derive(Clone, Default)]
+pub struct RenameComparisonForm {
+    new_name: String,
+    name_input_state: crate::tui::widgets::TextInputState,
+}
+
+#[derive(Clone, Default)]
 pub struct State {
     migration_name: Option<String>,
     source_env: Option<String>,
@@ -40,6 +46,12 @@ pub struct State {
     target_entities: Vec<String>,
     show_create_modal: bool,
     create_form: CreateComparisonForm,
+    show_delete_confirm: bool,
+    delete_comparison_id: Option<i64>,
+    delete_comparison_name: Option<String>,
+    show_rename_modal: bool,
+    rename_comparison_id: Option<i64>,
+    rename_form: RenameComparisonForm,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -66,6 +78,15 @@ pub enum Msg {
     CreateFormSubmit,
     CreateFormCancel,
     ComparisonCreated(Result<i64, String>),
+    RequestDelete,
+    ConfirmDelete,
+    CancelDelete,
+    ComparisonDeleted(Result<(), String>),
+    RequestRename,
+    RenameFormNameChanged(KeyCode),
+    RenameFormSubmit,
+    RenameFormCancel,
+    ComparisonRenamed(Result<(), String>),
     Back,
 }
 
@@ -332,6 +353,128 @@ impl App for MigrationComparisonSelectApp {
                     }
                 }
             }
+            Msg::RequestDelete => {
+                // Get selected comparison
+                if let Some(selected_idx) = state.list_state.selected() {
+                    if let Some(comparison) = state.comparisons.get(selected_idx) {
+                        state.delete_comparison_id = Some(comparison.id);
+                        state.delete_comparison_name = Some(comparison.name.clone());
+                        state.show_delete_confirm = true;
+                    }
+                }
+                Command::None
+            }
+            Msg::ConfirmDelete => {
+                if let Some(id) = state.delete_comparison_id {
+                    state.show_delete_confirm = false;
+                    // Async delete from database
+                    Command::perform(
+                        async move {
+                            let config = crate::config();
+                            config.delete_comparison(id).await.map_err(|e| e.to_string())
+                        },
+                        Msg::ComparisonDeleted
+                    )
+                } else {
+                    Command::None
+                }
+            }
+            Msg::CancelDelete => {
+                state.show_delete_confirm = false;
+                state.delete_comparison_id = None;
+                state.delete_comparison_name = None;
+                Command::None
+            }
+            Msg::ComparisonDeleted(result) => {
+                match result {
+                    Ok(_) => {
+                        state.delete_comparison_id = None;
+                        state.delete_comparison_name = None;
+                        // Reload comparisons list
+                        let migration_name = state.migration_name.clone().unwrap_or_default();
+                        Command::perform(
+                            async move {
+                                let config = crate::config();
+                                config.get_comparisons(&migration_name).await
+                                    .map_err(|e| e.to_string())
+                            },
+                            Msg::ComparisonsLoaded
+                        )
+                    }
+                    Err(e) => {
+                        log::error!("Failed to delete comparison: {}", e);
+                        Command::None
+                    }
+                }
+            }
+            Msg::RequestRename => {
+                if let Some(selected_idx) = state.list_state.selected() {
+                    if let Some(comparison) = state.comparisons.get(selected_idx) {
+                        state.rename_comparison_id = Some(comparison.id);
+                        state.rename_form.new_name = comparison.name.clone();
+                        state.show_rename_modal = true;
+                    }
+                }
+                Command::None
+            }
+            Msg::RenameFormNameChanged(key) => {
+                if let Some(new_value) = state.rename_form.name_input_state.handle_key(
+                    key,
+                    &state.rename_form.new_name,
+                    Some(50)
+                ) {
+                    state.rename_form.new_name = new_value;
+                }
+                Command::None
+            }
+            Msg::RenameFormSubmit => {
+                let id = state.rename_comparison_id;
+                let new_name = state.rename_form.new_name.trim().to_string();
+
+                if new_name.is_empty() || id.is_none() {
+                    return Command::None;
+                }
+
+                state.show_rename_modal = false;
+                let id = id.unwrap();
+
+                Command::perform(
+                    async move {
+                        let config = crate::config();
+                        config.rename_comparison(id, &new_name).await
+                            .map_err(|e| e.to_string())
+                    },
+                    Msg::ComparisonRenamed
+                )
+            }
+            Msg::RenameFormCancel => {
+                state.show_rename_modal = false;
+                state.rename_comparison_id = None;
+                state.rename_form = RenameComparisonForm::default();
+                Command::None
+            }
+            Msg::ComparisonRenamed(result) => {
+                match result {
+                    Ok(_) => {
+                        state.rename_comparison_id = None;
+                        state.rename_form = RenameComparisonForm::default();
+                        // Reload list
+                        let migration_name = state.migration_name.clone().unwrap_or_default();
+                        Command::perform(
+                            async move {
+                                let config = crate::config();
+                                config.get_comparisons(&migration_name).await
+                                    .map_err(|e| e.to_string())
+                            },
+                            Msg::ComparisonsLoaded
+                        )
+                    }
+                    Err(e) => {
+                        log::error!("Failed to rename comparison: {}", e);
+                        Command::None
+                    }
+                }
+            }
             Msg::Back => Command::navigate_to(AppId::MigrationEnvironment),
         }
     }
@@ -358,7 +501,85 @@ impl App for MigrationComparisonSelectApp {
             .title("Comparisons")
             .build();
 
-        if state.show_create_modal {
+        if state.show_delete_confirm {
+            // Render delete confirmation modal
+            let comparison_name = state.delete_comparison_name.as_deref().unwrap_or("Unknown");
+
+            Element::modal_confirm(
+                main_ui,
+                "Delete Comparison",
+                format!("Delete comparison '{}'?", comparison_name),
+                FocusId::new("delete-cancel"),
+                Msg::CancelDelete,
+                FocusId::new("delete-confirm"),
+                Msg::ConfirmDelete,
+            )
+        } else if state.show_rename_modal {
+            use crate::tui::element::{RowBuilder};
+
+            // Name input
+            let name_input = Element::panel(
+                Element::text_input(
+                    FocusId::new("rename-name-input"),
+                    &state.rename_form.new_name,
+                    &mut state.rename_form.name_input_state
+                )
+                .placeholder("Comparison name")
+                .on_change(Msg::RenameFormNameChanged)
+                .build()
+            )
+            .title("New Name")
+            .build();
+
+            // Buttons
+            let buttons = RowBuilder::new()
+                .add(
+                    Element::button(FocusId::new("rename-cancel"), "Cancel")
+                        .on_press(Msg::RenameFormCancel)
+                        .build(),
+                    LayoutConstraint::Fill(1),
+                )
+                .add(Element::text("  "), LayoutConstraint::Length(2))
+                .add(
+                    Element::button(FocusId::new("rename-confirm"), "Rename")
+                        .on_press(Msg::RenameFormSubmit)
+                        .build(),
+                    LayoutConstraint::Fill(1),
+                )
+                .spacing(0)
+                .build();
+
+            // Modal content
+            let modal_content = Element::panel(
+                Element::container(
+                    ColumnBuilder::new()
+                        .add(name_input, LayoutConstraint::Length(3))
+                        .add(Element::text(""), LayoutConstraint::Length(1))
+                        .add(buttons, LayoutConstraint::Length(3))
+                        .spacing(0)
+                        .build()
+                )
+                .padding(2)
+                .build()
+            )
+            .title("Rename Comparison")
+            .width(60)
+            .height(13)
+            .build();
+
+            Element::stack(vec![
+                crate::tui::Layer {
+                    element: main_ui,
+                    alignment: Alignment::TopLeft,
+                    dim_below: false,
+                },
+                crate::tui::Layer {
+                    element: modal_content,
+                    alignment: Alignment::Center,
+                    dim_below: true,
+                },
+            ])
+        } else if state.show_create_modal {
             // Name input (using TextInput directly without autocomplete for simple text)
             let name_input = Element::panel(
                 Element::text_input(
@@ -373,38 +594,38 @@ impl App for MigrationComparisonSelectApp {
             .title("Name")
             .build();
 
-            // Source entity autocomplete
-            let source_autocomplete = Element::panel(
-                Element::autocomplete(
-                    FocusId::new("create-source-autocomplete"),
-                    state.source_entities.clone(),
-                    state.create_form.source_entity.clone(),
-                    &mut state.create_form.source_autocomplete_state,
-                )
-                .placeholder("Type source entity name...")
-                .on_input(Msg::CreateFormSourceInputChanged)
-                .on_select(Msg::CreateFormSourceSelected)
-                .on_navigate(Msg::CreateFormSourceNavigate)
-                .build()
+            // Source entity label and autocomplete
+            let source_label = Element::styled_text(Line::from(vec![
+                Span::styled("Source Entity", Style::default().fg(theme.text)),
+            ])).build();
+
+            let source_autocomplete = Element::autocomplete(
+                FocusId::new("create-source-autocomplete"),
+                state.source_entities.clone(),
+                state.create_form.source_entity.clone(),
+                &mut state.create_form.source_autocomplete_state,
             )
-            .title("Source Entity")
+            .placeholder("Type source entity name...")
+            .on_input(Msg::CreateFormSourceInputChanged)
+            .on_select(Msg::CreateFormSourceSelected)
+            .on_navigate(Msg::CreateFormSourceNavigate)
             .build();
 
-            // Target entity autocomplete
-            let target_autocomplete = Element::panel(
-                Element::autocomplete(
-                    FocusId::new("create-target-autocomplete"),
-                    state.target_entities.clone(),
-                    state.create_form.target_entity.clone(),
-                    &mut state.create_form.target_autocomplete_state,
-                )
-                .placeholder("Type target entity name...")
-                .on_input(Msg::CreateFormTargetInputChanged)
-                .on_select(Msg::CreateFormTargetSelected)
-                .on_navigate(Msg::CreateFormTargetNavigate)
-                .build()
+            // Target entity label and autocomplete
+            let target_label = Element::styled_text(Line::from(vec![
+                Span::styled("Target Entity", Style::default().fg(theme.text)),
+            ])).build();
+
+            let target_autocomplete = Element::autocomplete(
+                FocusId::new("create-target-autocomplete"),
+                state.target_entities.clone(),
+                state.create_form.target_entity.clone(),
+                &mut state.create_form.target_autocomplete_state,
             )
-            .title("Target Entity")
+            .placeholder("Type target entity name...")
+            .on_input(Msg::CreateFormTargetInputChanged)
+            .on_select(Msg::CreateFormTargetSelected)
+            .on_navigate(Msg::CreateFormTargetNavigate)
             .build();
 
             // Validation error display
@@ -445,8 +666,10 @@ impl App for MigrationComparisonSelectApp {
             let mut modal_builder = ColumnBuilder::new()
                 .add(name_input, LayoutConstraint::Length(3))
                 .add(Element::text(""), LayoutConstraint::Length(1))
+                .add(source_label, LayoutConstraint::Length(1))
                 .add(source_autocomplete, LayoutConstraint::Length(3))
                 .add(Element::text(""), LayoutConstraint::Length(1))
+                .add(target_label, LayoutConstraint::Length(1))
                 .add(target_autocomplete, LayoutConstraint::Length(3))
                 .add(Element::text(""), LayoutConstraint::Length(1));
 
@@ -465,7 +688,7 @@ impl App for MigrationComparisonSelectApp {
             )
             .title("Create New Comparison")
             .width(80)
-            .height(if state.create_form.validation_error.is_some() { 23 } else { 21 })
+            .height(if state.create_form.validation_error.is_some() { 25 } else { 23 })
             .build();
 
             Element::stack(vec![
@@ -511,7 +734,7 @@ impl App for MigrationComparisonSelectApp {
             }),
         ];
 
-        if !state.show_create_modal {
+        if !state.show_create_modal && !state.show_delete_confirm && !state.show_rename_modal {
             subs.push(Subscription::keyboard(KeyCode::Esc, "Back to migration list", Msg::Back));
             subs.push(Subscription::keyboard(KeyCode::Char('b'), "Back to migration list", Msg::Back));
             subs.push(Subscription::keyboard(KeyCode::Char('B'), "Back to migration list", Msg::Back));
@@ -525,14 +748,34 @@ impl App for MigrationComparisonSelectApp {
             }
 
             subs.push(Subscription::keyboard(
-                KeyCode::Char('c'),
+                KeyCode::Char('n'),
                 "Create comparison",
                 Msg::CreateComparison,
             ));
             subs.push(Subscription::keyboard(
-                KeyCode::Char('C'),
+                KeyCode::Char('N'),
                 "Create comparison",
                 Msg::CreateComparison,
+            ));
+            subs.push(Subscription::keyboard(
+                KeyCode::Char('d'),
+                "Delete comparison",
+                Msg::RequestDelete,
+            ));
+            subs.push(Subscription::keyboard(
+                KeyCode::Char('D'),
+                "Delete comparison",
+                Msg::RequestDelete,
+            ));
+            subs.push(Subscription::keyboard(
+                KeyCode::Char('r'),
+                "Rename comparison",
+                Msg::RequestRename,
+            ));
+            subs.push(Subscription::keyboard(
+                KeyCode::Char('R'),
+                "Rename comparison",
+                Msg::RequestRename,
             ));
         }
 
