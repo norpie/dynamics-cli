@@ -2,7 +2,7 @@ use crossterm::event::KeyCode;
 use ratatui::text::{Line, Span};
 use ratatui::style::Style;
 use ratatui::prelude::Stylize;
-use crate::tui::{App, AppId, Command, Element, Subscription, Theme, LayoutConstraint};
+use crate::tui::{App, AppId, Command, Element, Subscription, Theme, LayoutConstraint, Resource};
 use crate::tui::element::FocusId;
 
 pub struct Example1;
@@ -11,13 +11,12 @@ pub struct Example1;
 pub enum Msg {
     NavigateToExample2,
     LoadData,
-    DataLoaded(String),
+    DataLoaded(Result<String, String>),
 }
 
 #[derive(Default)]
 pub struct State {
-    loading: bool,
-    data: Option<String>,
+    data: Resource<String>,
 }
 
 impl App for Example1 {
@@ -28,31 +27,29 @@ impl App for Example1 {
         match msg {
             Msg::NavigateToExample2 => Command::navigate_to(AppId::Example2),
             Msg::LoadData => {
-                state.loading = true;
+                state.data = Resource::Loading;
                 // Simulate an async API call
                 Command::perform(
                     async {
                         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-                        "Data loaded from async operation!".to_string()
+                        Ok("Data loaded from async operation!".to_string())
                     },
                     Msg::DataLoaded,
                 )
             }
-            Msg::DataLoaded(data) => {
-                state.loading = false;
-                state.data = Some(data);
+            Msg::DataLoaded(result) => {
+                state.data = Resource::from_result(result);
                 Command::None
             }
         }
     }
 
     fn view(state: &mut State, theme: &Theme) -> Element<Msg> {
-        let data_display = if state.loading {
-            "Loading..."
-        } else if let Some(ref data) = state.data {
-            data.as_str()
-        } else {
-            "No data loaded yet"
+        let data_display = match state.data.as_ref() {
+            Resource::NotAsked => "No data loaded yet",
+            Resource::Loading => "Loading...",
+            Resource::Success(data) => data,
+            Resource::Failure(err) => err.as_str(),
         };
 
         // Demonstrate new constraint-based layout system
@@ -119,7 +116,7 @@ impl App for Example1 {
     }
 
     fn status(state: &State, theme: &Theme) -> Option<Line<'static>> {
-        if state.loading {
+        if state.data.is_loading() {
             Some(Line::from(Span::styled("[Loading...]", Style::default().fg(theme.yellow))))
         } else {
             None

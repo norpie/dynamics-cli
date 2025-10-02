@@ -8,6 +8,7 @@ pub mod multi_runtime;
 pub mod apps;
 pub mod state;
 pub mod widgets;
+pub mod resource;
 
 pub use command::{Command, AppId};
 pub use element::{Element, LayoutConstraint, Layer, Alignment, FocusId};
@@ -18,3 +19,4 @@ pub use runtime::{Runtime, AppRuntime};
 pub use multi_runtime::MultiAppRuntime;
 pub use state::{Theme, ThemeVariant, FocusMode, RuntimeConfig};
 pub use widgets::{ListItem, ListState, TextInputState};
+pub use resource::Resource;

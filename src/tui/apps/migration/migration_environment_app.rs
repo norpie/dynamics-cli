@@ -1,5 +1,5 @@
 use crossterm::event::KeyCode;
-use crate::tui::{App, AppId, Command, Element, Subscription, Theme, FocusId};
+use crate::tui::{App, AppId, Command, Element, Subscription, Theme, FocusId, Resource};
 use crate::tui::widgets::list::{ListItem, ListState};
 use crate::tui::widgets::{TextInputState, SelectState};
 use crate::config::SavedMigration;
@@ -52,12 +52,17 @@ pub struct State {
     show_rename_modal: bool,
     rename_migration_name: Option<String>,
     rename_form: RenameMigrationForm,
-    // Partial loading state for parallel entity fetches
-    loading_migration_name: Option<String>,
-    loading_source_env: Option<String>,
-    loading_target_env: Option<String>,
-    source_entities_partial: Option<Result<Vec<String>, String>>,
-    target_entities_partial: Option<Result<Vec<String>, String>>,
+    // Parallel entity loading with Resource pattern
+    loading_context: Option<LoadingContext>,
+    source_entities: Resource<Vec<String>>,
+    target_entities: Resource<Vec<String>>,
+}
+
+#[derive(Clone)]
+struct LoadingContext {
+    migration_name: String,
+    source_env: String,
+    target_env: String,
 }
 
 #[derive(Clone, Default)]
@@ -175,12 +180,14 @@ impl App for MigrationEnvironmentApp {
                     let source_env = migration.source.clone();
                     let target_env = migration.target.clone();
 
-                    // Store loading context in state
-                    state.loading_migration_name = Some(migration_name.clone());
-                    state.loading_source_env = Some(source_env.clone());
-                    state.loading_target_env = Some(target_env.clone());
-                    state.source_entities_partial = None;
-                    state.target_entities_partial = None;
+                    // Store loading context and reset resources
+                    state.loading_context = Some(LoadingContext {
+                        migration_name: migration_name.clone(),
+                        source_env: source_env.clone(),
+                        target_env: target_env.clone(),
+                    });
+                    state.source_entities = Resource::Loading;
+                    state.target_entities = Resource::Loading;
 
                     let source_task = format!("Loading source entities ({})", source_env);
                     let target_task = format!("Loading target entities ({})", target_env);
@@ -279,15 +286,14 @@ impl App for MigrationEnvironmentApp {
             }
             Msg::SourceEntitiesLoaded(result) => {
                 log::info!("✓ Msg::SourceEntitiesLoaded received in update()");
-                // Store source result and publish progress
-                state.source_entities_partial = Some(result.clone());
+                state.source_entities = Resource::from_result(result.clone());
 
-                let source_env = state.loading_source_env.as_ref().unwrap();
-                let source_task = format!("Loading source entities ({})", source_env);
+                let ctx = state.loading_context.as_ref().unwrap();
+                let source_task = format!("Loading source entities ({})", ctx.source_env);
 
                 let mut commands = vec![];
 
-                // Publish progress for this task
+                // Publish progress
                 match result {
                     Ok(_) => {
                         commands.push(Command::publish("loading:progress", serde_json::json!({
@@ -305,74 +311,59 @@ impl App for MigrationEnvironmentApp {
                 }
 
                 // Check if both tasks are done
-                if state.source_entities_partial.is_some() && state.target_entities_partial.is_some() {
+                if let (Resource::Success(source), Resource::Success(target)) =
+                    (&state.source_entities, &state.target_entities)
+                {
                     log::info!("Both entity loading tasks complete, preparing final data");
-                    let migration_name = state.loading_migration_name.as_ref().unwrap().clone();
-                    let source_env_clone = state.loading_source_env.as_ref().unwrap().clone();
-                    let target_env_clone = state.loading_target_env.as_ref().unwrap().clone();
+                    let ctx = state.loading_context.take().unwrap();
+                    let source_entities = source.clone();
+                    let target_entities = target.clone();
 
-                    // Both done - check results
-                    let source_result = state.source_entities_partial.as_ref().unwrap().clone();
-                    let target_result = state.target_entities_partial.as_ref().unwrap().clone();
+                    commands.push(Command::perform(
+                        async move {
+                            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
-                    // Clear loading state
-                    state.loading_migration_name = None;
-                    state.loading_source_env = None;
-                    state.loading_target_env = None;
-                    state.source_entities_partial = None;
-                    state.target_entities_partial = None;
-
-                    // If either failed, navigate to error screen
-                    if source_result.is_err() || target_result.is_err() {
-                        let error = if let Err(e) = source_result {
-                            e
-                        } else {
-                            target_result.unwrap_err()
-                        };
-                        commands.push(Command::publish("error:init", serde_json::json!({
-                            "message": format!("Failed to load entities: {}", error),
-                            "target": "MigrationEnvironment",
-                        })));
-                        commands.push(Command::navigate_to(AppId::ErrorScreen));
-                    } else {
-                        // Both succeeded - wait a moment for UI to show both complete, then load comparisons and navigate
-                        let source_entities = source_result.unwrap();
-                        let target_entities = target_result.unwrap();
-
-                        commands.push(Command::perform(
-                            async move {
-                                // Give UI time to render both tasks as complete
-                                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-                                let config = crate::config();
-                                let comparisons = config.get_comparisons(&migration_name).await.map_err(|e| e.to_string())?;
-                                Ok::<_, String>(ComparisonData {
-                                    migration_name,
-                                    source_env: source_env_clone,
-                                    target_env: target_env_clone,
-                                    comparisons,
-                                    source_entities,
-                                    target_entities,
-                                })
-                            },
-                            Msg::AllDataLoaded,
-                        ));
-                    }
+                            let config = crate::config();
+                            let comparisons = config.get_comparisons(&ctx.migration_name).await.map_err(|e| e.to_string())?;
+                            Ok::<_, String>(ComparisonData {
+                                migration_name: ctx.migration_name,
+                                source_env: ctx.source_env,
+                                target_env: ctx.target_env,
+                                comparisons,
+                                source_entities,
+                                target_entities,
+                            })
+                        },
+                        Msg::AllDataLoaded,
+                    ));
+                } else if state.source_entities.is_failure() || state.target_entities.is_failure() {
+                    let error = match &state.source_entities {
+                        Resource::Failure(e) => e.clone(),
+                        _ => match &state.target_entities {
+                            Resource::Failure(e) => e.clone(),
+                            _ => "Unknown error".to_string(),
+                        }
+                    };
+                    state.loading_context = None;
+                    commands.push(Command::publish("error:init", serde_json::json!({
+                        "message": format!("Failed to load entities: {}", error),
+                        "target": "MigrationEnvironment",
+                    })));
+                    commands.push(Command::navigate_to(AppId::ErrorScreen));
                 }
 
                 Command::batch(commands)
             }
             Msg::TargetEntitiesLoaded(result) => {
                 log::info!("✓ Msg::TargetEntitiesLoaded received in update()");
-                // Store target result and publish progress
-                state.target_entities_partial = Some(result.clone());
+                state.target_entities = Resource::from_result(result.clone());
 
-                let target_env = state.loading_target_env.as_ref().unwrap();
-                let target_task = format!("Loading target entities ({})", target_env);
+                let ctx = state.loading_context.as_ref().unwrap();
+                let target_task = format!("Loading target entities ({})", ctx.target_env);
 
                 let mut commands = vec![];
 
-                // Publish progress for this task
+                // Publish progress
                 match result {
                     Ok(_) => {
                         commands.push(Command::publish("loading:progress", serde_json::json!({
@@ -389,59 +380,46 @@ impl App for MigrationEnvironmentApp {
                     }
                 }
 
-                // Check if both tasks are done
-                if state.source_entities_partial.is_some() && state.target_entities_partial.is_some() {
-                    let migration_name = state.loading_migration_name.as_ref().unwrap().clone();
-                    let source_env = state.loading_source_env.as_ref().unwrap().clone();
-                    let target_env = state.loading_target_env.as_ref().unwrap().clone();
+                // Check if both tasks are done (same logic as SourceEntitiesLoaded)
+                if let (Resource::Success(source), Resource::Success(target)) =
+                    (&state.source_entities, &state.target_entities)
+                {
+                    log::info!("Both entity loading tasks complete, preparing final data");
+                    let ctx = state.loading_context.take().unwrap();
+                    let source_entities = source.clone();
+                    let target_entities = target.clone();
 
-                    // Both done - check results
-                    let source_result = state.source_entities_partial.as_ref().unwrap().clone();
-                    let target_result = state.target_entities_partial.as_ref().unwrap().clone();
+                    commands.push(Command::perform(
+                        async move {
+                            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
-                    // Clear loading state
-                    state.loading_migration_name = None;
-                    state.loading_source_env = None;
-                    state.loading_target_env = None;
-                    state.source_entities_partial = None;
-                    state.target_entities_partial = None;
-
-                    // If either failed, navigate to error screen
-                    if source_result.is_err() || target_result.is_err() {
-                        let error = if let Err(e) = source_result {
-                            e
-                        } else {
-                            target_result.unwrap_err()
-                        };
-                        commands.push(Command::publish("error:init", serde_json::json!({
-                            "message": format!("Failed to load entities: {}", error),
-                            "target": "MigrationEnvironment",
-                        })));
-                        commands.push(Command::navigate_to(AppId::ErrorScreen));
-                    } else {
-                        // Both succeeded - wait a moment for UI to show both complete, then load comparisons and navigate
-                        let source_entities = source_result.unwrap();
-                        let target_entities = target_result.unwrap();
-
-                        commands.push(Command::perform(
-                            async move {
-                                // Give UI time to render both tasks as complete
-                                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-                                let config = crate::config();
-                                let comparisons = config.get_comparisons(&migration_name).await.map_err(|e| e.to_string())?;
-                                Ok::<_, String>(ComparisonData {
-                                    migration_name,
-                                    source_env,
-                                    target_env,
-                                    comparisons,
-                                    source_entities,
-                                    target_entities,
-                                })
-                            },
-                            Msg::AllDataLoaded,
-                        ));
-                    }
+                            let config = crate::config();
+                            let comparisons = config.get_comparisons(&ctx.migration_name).await.map_err(|e| e.to_string())?;
+                            Ok::<_, String>(ComparisonData {
+                                migration_name: ctx.migration_name,
+                                source_env: ctx.source_env,
+                                target_env: ctx.target_env,
+                                comparisons,
+                                source_entities,
+                                target_entities,
+                            })
+                        },
+                        Msg::AllDataLoaded,
+                    ));
+                } else if state.source_entities.is_failure() || state.target_entities.is_failure() {
+                    let error = match &state.source_entities {
+                        Resource::Failure(e) => e.clone(),
+                        _ => match &state.target_entities {
+                            Resource::Failure(e) => e.clone(),
+                            _ => "Unknown error".to_string(),
+                        }
+                    };
+                    state.loading_context = None;
+                    commands.push(Command::publish("error:init", serde_json::json!({
+                        "message": format!("Failed to load entities: {}", error),
+                        "target": "MigrationEnvironment",
+                    })));
+                    commands.push(Command::navigate_to(AppId::ErrorScreen));
                 }
 
                 Command::batch(commands)
@@ -1098,11 +1076,9 @@ impl State {
             show_rename_modal: false,
             rename_migration_name: None,
             rename_form: RenameMigrationForm::default(),
-            loading_migration_name: None,
-            loading_source_env: None,
-            loading_target_env: None,
-            source_entities_partial: None,
-            target_entities_partial: None,
+            loading_context: None,
+            source_entities: Resource::NotAsked,
+            target_entities: Resource::NotAsked,
         }
     }
 }
