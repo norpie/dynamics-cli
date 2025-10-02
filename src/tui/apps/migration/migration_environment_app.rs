@@ -82,6 +82,7 @@ pub enum Msg {
     Initialize,
     MigrationsLoaded(Result<Vec<SavedMigration>, String>),
     SelectEnvironment(usize),
+    ComparisonDataLoaded(Result<ComparisonData, String>),
     ListNavigate(KeyCode),
     OpenCreateModal,
     EnvironmentsLoaded(Result<Vec<String>, String>),
@@ -106,6 +107,16 @@ pub enum Msg {
     RenameFormSubmit,
     RenameFormCancel,
     MigrationRenamed(Result<(), String>),
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+pub struct ComparisonData {
+    pub migration_name: String,
+    pub source_env: String,
+    pub target_env: String,
+    pub comparisons: Vec<crate::config::repository::migrations::SavedComparison>,
+    pub source_entities: Vec<String>,
+    pub target_entities: Vec<String>,
 }
 
 impl App for MigrationEnvironmentApp {
@@ -151,22 +162,122 @@ impl App for MigrationEnvironmentApp {
             }
             Msg::SelectEnvironment(idx) => {
                 if let Some(migration) = state.environments.get(idx) {
-                    // Publish migration selected event and navigate
-                    use crate::tui::apps::migration::migration_comparison_select_app::MigrationSelectedData;
-                    use crate::tui::command::AppId;
+                    let migration_name = migration.name.clone();
+                    let source_env = migration.source.clone();
+                    let target_env = migration.target.clone();
+
+                    // Navigate to loading screen and start async work
+                    let loading_init = serde_json::json!({
+                        "tasks": ["Loading entity metadata and comparisons"],
+                        "target": "MigrationComparisonSelect",
+                        "caller": "MigrationEnvironment",
+                        "cancellable": false,
+                        "auto_complete": false,
+                    });
+
                     Command::batch(vec![
-                        Command::publish(
-                            "migration_selected",
-                            MigrationSelectedData {
-                                name: migration.name.clone(),
-                                source_env: migration.source.clone(),
-                                target_env: migration.target.clone(),
+                        Command::publish("loading:init", loading_init),
+                        Command::navigate_to(AppId::LoadingScreen),
+                        Command::publish("loading:progress", serde_json::json!({
+                            "task": "Loading entity metadata and comparisons",
+                            "status": "InProgress",
+                        })),
+                        Command::perform(
+                            async move {
+                                use crate::api::metadata::parse_entity_list;
+
+                                let config = crate::config();
+                                let manager = crate::client_manager();
+
+                                // Load source entities
+                                let source_entities = match config.get_entity_cache(&source_env, 24).await {
+                                    Ok(Some(cached)) => {
+                                        log::debug!("Using cached entities for source: {}", source_env);
+                                        cached
+                                    }
+                                    _ => {
+                                        log::debug!("Fetching fresh metadata for source: {}", source_env);
+                                        let client = manager.get_client(&source_env).await.map_err(|e| e.to_string())?;
+                                        let metadata_xml = client.fetch_metadata().await.map_err(|e| e.to_string())?;
+                                        let entities = parse_entity_list(&metadata_xml).map_err(|e| e.to_string())?;
+                                        let _ = config.set_entity_cache(&source_env, entities.clone()).await;
+                                        entities
+                                    }
+                                };
+
+                                // Load target entities
+                                let target_entities = match config.get_entity_cache(&target_env, 24).await {
+                                    Ok(Some(cached)) => {
+                                        log::debug!("Using cached entities for target: {}", target_env);
+                                        cached
+                                    }
+                                    _ => {
+                                        log::debug!("Fetching fresh metadata for target: {}", target_env);
+                                        let client = manager.get_client(&target_env).await.map_err(|e| e.to_string())?;
+                                        let metadata_xml = client.fetch_metadata().await.map_err(|e| e.to_string())?;
+                                        let entities = parse_entity_list(&metadata_xml).map_err(|e| e.to_string())?;
+                                        let _ = config.set_entity_cache(&target_env, entities.clone()).await;
+                                        entities
+                                    }
+                                };
+
+                                // Load comparisons
+                                log::info!("Loading comparisons for migration: {}", migration_name);
+                                let comparisons = config.get_comparisons(&migration_name).await.map_err(|e| e.to_string())?;
+
+                                log::info!("Successfully loaded all data: {} comparisons, {} source entities, {} target entities",
+                                    comparisons.len(), source_entities.len(), target_entities.len());
+
+                                Ok::<_, String>(ComparisonData {
+                                    migration_name,
+                                    source_env,
+                                    target_env,
+                                    comparisons,
+                                    source_entities,
+                                    target_entities,
+                                })
                             },
+                            Msg::ComparisonDataLoaded,
                         ),
-                        Command::navigate_to(AppId::MigrationComparisonSelect),
                     ])
                 } else {
                     Command::None
+                }
+            }
+            Msg::ComparisonDataLoaded(result) => {
+                match result {
+                    Ok(data) => {
+                        log::debug!("Comparison data loaded successfully");
+                        Command::batch(vec![
+                            // Mark task as completed
+                            Command::publish("loading:progress", serde_json::json!({
+                                "task": "Loading entity metadata and comparisons",
+                                "status": "Completed",
+                            })),
+                            // Publish data to comparison select app
+                            Command::publish("comparison_data", serde_json::to_value(&data).unwrap()),
+                            // Navigate to comparison select
+                            Command::navigate_to(AppId::MigrationComparisonSelect),
+                        ])
+                    }
+                    Err(e) => {
+                        log::error!("Failed to load comparison data: {}", e);
+                        Command::batch(vec![
+                            // Mark task as failed
+                            Command::publish("loading:progress", serde_json::json!({
+                                "task": "Loading entity metadata and comparisons",
+                                "status": "Failed",
+                                "error": e.clone(),
+                            })),
+                            // Publish error:init so ErrorScreen receives it
+                            Command::publish("error:init", serde_json::json!({
+                                "message": format!("Failed to load migration data: {}", e),
+                                "target": "MigrationEnvironment",
+                            })),
+                            // Navigate to ErrorScreen
+                            Command::navigate_to(AppId::ErrorScreen),
+                        ])
+                    }
                 }
             }
             Msg::ListNavigate(key) => {

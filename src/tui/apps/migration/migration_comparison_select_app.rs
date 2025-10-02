@@ -29,13 +29,6 @@ pub struct State {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct MigrationSelectedData {
-    pub name: String,
-    pub source_env: String,
-    pub target_env: String,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EntitiesLoadedData {
     pub source_entities: Vec<String>,
     pub target_entities: Vec<String>,
@@ -43,9 +36,7 @@ pub struct EntitiesLoadedData {
 
 #[derive(Clone)]
 pub enum Msg {
-    MigrationSelected(MigrationSelectedData),
-    StartLoading(MigrationSelectedData),
-    DataLoaded(Result<(Vec<SavedComparison>, Vec<String>, Vec<String>), String>),
+    ComparisonDataReceived(crate::tui::apps::migration::migration_environment_app::ComparisonData),
     ComparisonsLoaded(Result<Vec<SavedComparison>, String>),
     EntitiesLoaded(EntitiesLoadedData),
     ListNavigate(KeyCode),
@@ -85,108 +76,21 @@ impl App for MigrationComparisonSelectApp {
 
     fn update(state: &mut Self::State, msg: Self::Msg) -> Command<Self::Msg> {
         match msg {
-            Msg::MigrationSelected(data) => {
-                log::info!("Migration selected: {} ({} -> {})", data.name, data.source_env, data.target_env);
-                state.migration_name = Some(data.name.clone());
-                state.source_env = Some(data.source_env.clone());
-                state.target_env = Some(data.target_env.clone());
-
-                // Navigate to loading screen, then trigger loading via event
-                let loading_init = serde_json::json!({
-                    "tasks": ["Loading entity metadata and comparisons"],
-                    "target": "MigrationComparisonSelect",
-                    "caller": "MigrationComparisonSelect",
-                    "cancellable": false,
-                });
-
-                Command::batch(vec![
-                    Command::publish("loading:init", loading_init),
-                    Command::navigate_to(AppId::LoadingScreen),
-                    // Publish event to trigger loading AFTER navigation completes
-                    Command::publish("comparison:start_loading", serde_json::to_value(&data).unwrap()),
-                ])
-            }
-            Msg::StartLoading(data) => {
-                log::info!("Starting entity and comparison loading for migration: {}", data.name);
-                // Now that we're on the loading screen, start the async work
-                Command::perform(
-                    async move {
-                        use crate::api::metadata::parse_entity_list;
-
-                            let config = crate::config();
-                            let manager = crate::client_manager();
-
-                            // Load source entities
-                            let source_entities = match config.get_entity_cache(&data.source_env, 24).await {
-                                Ok(Some(cached)) => {
-                                    log::debug!("Using cached entities for source: {}", data.source_env);
-                                    cached
-                                }
-                                _ => {
-                                    log::debug!("Fetching fresh metadata for source: {}", data.source_env);
-                                    let client = manager.get_client(&data.source_env).await.map_err(|e| e.to_string())?;
-                                    let metadata_xml = client.fetch_metadata().await.map_err(|e| e.to_string())?;
-                                    let entities = parse_entity_list(&metadata_xml).map_err(|e| e.to_string())?;
-                                    let _ = config.set_entity_cache(&data.source_env, entities.clone()).await;
-                                    entities
-                                }
-                            };
-
-                            // Load target entities
-                            let target_entities = match config.get_entity_cache(&data.target_env, 24).await {
-                                Ok(Some(cached)) => {
-                                    log::debug!("Using cached entities for target: {}", data.target_env);
-                                    cached
-                                }
-                                _ => {
-                                    log::debug!("Fetching fresh metadata for target: {}", data.target_env);
-                                    let client = manager.get_client(&data.target_env).await.map_err(|e| e.to_string())?;
-                                    let metadata_xml = client.fetch_metadata().await.map_err(|e| e.to_string())?;
-                                    let entities = parse_entity_list(&metadata_xml).map_err(|e| e.to_string())?;
-                                    let _ = config.set_entity_cache(&data.target_env, entities.clone()).await;
-                                    entities
-                                }
-                            };
-
-                            // Load comparisons
-                            log::info!("Loading comparisons for migration: {}", data.name);
-                            let comparisons = config.get_comparisons(&data.name).await.map_err(|e| e.to_string())?;
-
-                            log::info!("Successfully loaded all data: {} comparisons, {} source entities, {} target entities",
-                                comparisons.len(), source_entities.len(), target_entities.len());
-
-                            Ok::<_, String>((comparisons, source_entities, target_entities))
-                        },
-                        |result| {
-                            Msg::DataLoaded(result)
-                        },
-                    )
-            }
-            Msg::DataLoaded(result) => {
-                match result {
-                    Ok((comparisons, source_entities, target_entities)) => {
-                        state.comparisons = comparisons;
-                        state.source_entities = source_entities;
-                        state.target_entities = target_entities;
-                        state.list_state = ListState::new();
-                        if !state.comparisons.is_empty() {
-                            state.list_state.select(Some(0));
-                        }
-                        log::debug!("Loaded {} comparisons, {} source entities, {} target entities",
-                            state.comparisons.len(), state.source_entities.len(), state.target_entities.len());
-                        Command::None
-                    }
-                    Err(e) => {
-                        log::error!("Failed to load data: {}", e);
-                        Command::batch(vec![
-                            Command::publish("error:init", serde_json::json!({
-                                "message": format!("Failed to load migration data: {}", e),
-                                "target": "MigrationEnvironment",
-                            })),
-                            Command::navigate_to(AppId::ErrorScreen),
-                        ])
-                    }
+            Msg::ComparisonDataReceived(data) => {
+                log::info!("Comparison data received: {} ({} -> {})", data.migration_name, data.source_env, data.target_env);
+                state.migration_name = Some(data.migration_name);
+                state.source_env = Some(data.source_env);
+                state.target_env = Some(data.target_env);
+                state.comparisons = data.comparisons;
+                state.source_entities = data.source_entities;
+                state.target_entities = data.target_entities;
+                state.list_state = ListState::new();
+                if !state.comparisons.is_empty() {
+                    state.list_state.select(Some(0));
                 }
+                log::debug!("Loaded {} comparisons, {} source entities, {} target entities",
+                    state.comparisons.len(), state.source_entities.len(), state.target_entities.len());
+                Command::None
             }
             Msg::ComparisonsLoaded(result) => {
                 match result {
@@ -252,17 +156,11 @@ impl App for MigrationComparisonSelectApp {
 
     fn subscriptions(state: &Self::State) -> Vec<Subscription<Self::Msg>> {
         let mut subs = vec![
-            // Listen for migration selection events
-            Subscription::subscribe("migration_selected", |data| {
-                serde_json::from_value::<MigrationSelectedData>(data)
+            // Listen for comparison data from MigrationEnvironmentApp
+            Subscription::subscribe("comparison_data", |data| {
+                serde_json::from_value::<crate::tui::apps::migration::migration_environment_app::ComparisonData>(data)
                     .ok()
-                    .map(Msg::MigrationSelected)
-            }),
-            // Listen for start loading event (fired after navigation to loading screen)
-            Subscription::subscribe("comparison:start_loading", |data| {
-                serde_json::from_value::<MigrationSelectedData>(data)
-                    .ok()
-                    .map(Msg::StartLoading)
+                    .map(Msg::ComparisonDataReceived)
             }),
             // Listen for entities loaded events
             Subscription::subscribe("entities_loaded", |data| {

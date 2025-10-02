@@ -82,6 +82,8 @@ impl App for LoadingScreen {
                         "Example1" => Some(AppId::Example1),
                         "Example2" => Some(AppId::Example2),
                         "ErrorScreen" => Some(AppId::ErrorScreen),
+                        "MigrationEnvironment" => Some(AppId::MigrationEnvironment),
+                        "MigrationComparisonSelect" => Some(AppId::MigrationComparisonSelect),
                         _ => None,
                     });
 
@@ -92,6 +94,8 @@ impl App for LoadingScreen {
                         "Example1" => Some(AppId::Example1),
                         "Example2" => Some(AppId::Example2),
                         "ErrorScreen" => Some(AppId::ErrorScreen),
+                        "MigrationEnvironment" => Some(AppId::MigrationEnvironment),
+                        "MigrationComparisonSelect" => Some(AppId::MigrationComparisonSelect),
                         _ => None,
                     });
 

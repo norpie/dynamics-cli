@@ -15,7 +15,7 @@ pub struct SavedMigration {
 }
 
 /// Represents a comparison within a migration
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SavedComparison {
     pub id: i64,
     pub migration_name: String,
