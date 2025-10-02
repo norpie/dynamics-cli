@@ -539,6 +539,9 @@ impl<A: App> Runtime<A> {
         self.focus_registry.clear();
         self.dropdown_registry.clear();
 
+        // Set current hover position for auto-hover tracking
+        self.registry.set_hover_pos(self.last_hover_pos);
+
         // Get the view from the app
         let view = A::view(&mut self.state, &self.config.theme);
 

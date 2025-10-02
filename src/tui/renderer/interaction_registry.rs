@@ -6,6 +6,8 @@ pub struct InteractionRegistry<Msg> {
     click_handlers: Vec<(Rect, Msg)>,
     hover_handlers: Vec<(Rect, Msg)>,
     hover_exit_handlers: Vec<(Rect, Msg)>,
+    /// Current hover position (set by runtime before each render)
+    current_hover_pos: Option<(u16, u16)>,
 }
 
 impl<Msg: Clone> InteractionRegistry<Msg> {
@@ -14,6 +16,21 @@ impl<Msg: Clone> InteractionRegistry<Msg> {
             click_handlers: Vec::new(),
             hover_handlers: Vec::new(),
             hover_exit_handlers: Vec::new(),
+            current_hover_pos: None,
+        }
+    }
+
+    /// Set the current hover position (called by runtime before render)
+    pub fn set_hover_pos(&mut self, pos: Option<(u16, u16)>) {
+        self.current_hover_pos = pos;
+    }
+
+    /// Check if a rect is currently hovered
+    pub fn is_hovered(&self, rect: Rect) -> bool {
+        if let Some((x, y)) = self.current_hover_pos {
+            self.point_in_rect(x, y, rect)
+        } else {
+            false
         }
     }
 
@@ -63,6 +80,7 @@ impl<Msg: Clone> InteractionRegistry<Msg> {
         self.click_handlers.clear();
         self.hover_handlers.clear();
         self.hover_exit_handlers.clear();
+        self.current_hover_pos = None;
     }
 
     fn point_in_rect(&self, x: u16, y: u16, rect: Rect) -> bool {

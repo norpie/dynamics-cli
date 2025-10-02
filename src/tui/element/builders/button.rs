@@ -12,6 +12,7 @@ pub struct ButtonBuilder<Msg> {
     pub(crate) on_focus: Option<Msg>,
     pub(crate) on_blur: Option<Msg>,
     pub(crate) style: Option<Style>,
+    pub(crate) hover_style: Option<Style>,
 }
 
 impl<Msg> ButtonBuilder<Msg> {
@@ -45,6 +46,11 @@ impl<Msg> ButtonBuilder<Msg> {
         self
     }
 
+    pub fn hover_style(mut self, style: Style) -> Self {
+        self.hover_style = Some(style);
+        self
+    }
+
     pub fn build(self) -> Element<Msg> {
         Element::Button {
             id: self.id,
@@ -55,6 +61,7 @@ impl<Msg> ButtonBuilder<Msg> {
             on_focus: self.on_focus,
             on_blur: self.on_blur,
             style: self.style,
+            hover_style: self.hover_style,
         }
     }
 }

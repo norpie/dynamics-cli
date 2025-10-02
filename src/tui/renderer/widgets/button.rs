@@ -27,6 +27,7 @@ pub fn render_button<Msg: Clone + Send + 'static>(
     on_focus: &Option<Msg>,
     on_blur: &Option<Msg>,
     style: &Option<Style>,
+    hover_style: &Option<Style>,
     area: Rect,
     inside_panel: bool,
 ) {
@@ -54,8 +55,19 @@ pub fn render_button<Msg: Clone + Send + 'static>(
     // Check if this button is focused
     let is_focused = focused_id == Some(id);
 
+    // Check if this button is hovered (auto-hover tracking)
+    let is_hovered = registry.is_hovered(area);
+
     // Render button widget
     let default_style = Style::default().fg(theme.text);
+
+    // Determine text style: hover_style > style > default
+    let text_style = if is_hovered && hover_style.is_some() {
+        hover_style.unwrap()
+    } else {
+        style.unwrap_or(default_style)
+    };
+
     // Always show focus border on button (unlike other widgets, buttons need clear visual focus)
     let border_style = if is_focused {
         Style::default().fg(theme.lavender)
@@ -68,6 +80,6 @@ pub fn render_button<Msg: Clone + Send + 'static>(
     let widget = Paragraph::new(label)
         .block(block)
         .alignment(Alignment::Center)
-        .style(style.unwrap_or(default_style));
+        .style(text_style);
     frame.render_widget(widget, area);
 }

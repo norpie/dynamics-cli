@@ -95,6 +95,7 @@ pub enum Element<Msg> {
         on_focus: Option<Msg>,
         on_blur: Option<Msg>,
         style: Option<Style>,
+        hover_style: Option<Style>,
     },
 
     /// Vertical layout container
@@ -240,6 +241,7 @@ impl<Msg> Element<Msg> {
             on_focus: None,
             on_blur: None,
             style: None,
+            hover_style: None,
         }
     }
 
