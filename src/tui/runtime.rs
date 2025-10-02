@@ -3,11 +3,14 @@ use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, MouseEvent, MouseEventKi
 use anyhow::Result;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
+use std::sync::{Arc, Mutex};
 use serde_json::Value;
 use std::pin::Pin;
 use std::future::Future;
+use std::any::Any;
 
 use crate::tui::{App, AppId, Command, Renderer, InteractionRegistry, Subscription};
+use crate::tui::command::{ParallelConfig};
 use crate::tui::renderer::{FocusRegistry, FocusableInfo, DropdownRegistry};
 use crate::tui::element::FocusId;
 use crate::tui::state::{RuntimeConfig, FocusMode};
@@ -27,6 +30,14 @@ pub trait AppRuntime {
     fn handle_publish(&mut self, topic: &str, data: Value) -> Result<()>;
     fn focus_next(&mut self) -> Result<()>;
     fn focus_previous(&mut self) -> Result<()>;
+}
+
+/// Tracks the state of a parallel task execution
+struct ParallelTaskCoordinator<Msg> {
+    total_tasks: usize,
+    results: Arc<Mutex<Vec<Option<Box<dyn Any + Send>>>>>,
+    msg_mapper: Arc<dyn Fn(usize, Box<dyn Any + Send>) -> Msg + Send>,
+    config: ParallelConfig,
 }
 
 /// The runtime manages app lifecycle, event routing, and command execution
@@ -67,8 +78,14 @@ pub struct Runtime<A: App> {
     /// Pending async commands
     pending_async: Vec<std::pin::Pin<Box<dyn std::future::Future<Output = A::Msg> + Send>>>,
 
+    /// Pending parallel coordination tasks (task_index, task_name)
+    pending_parallel: Vec<std::pin::Pin<Box<dyn std::future::Future<Output = (usize, String)> + Send>>>,
+
     /// Pending publish events to broadcast globally
     pending_publishes: Vec<(String, serde_json::Value)>,
+
+    /// Active parallel task coordinator
+    parallel_coordinator: Option<ParallelTaskCoordinator<A::Msg>>,
 }
 
 impl<A: App> Runtime<A> {
@@ -89,7 +106,9 @@ impl<A: App> Runtime<A> {
             last_hover_pos: None,
             navigation_target: None,
             pending_async: Vec::new(),
+            pending_parallel: Vec::new(),
             pending_publishes: Vec::new(),
+            parallel_coordinator: None,
         };
 
         // Initialize subscriptions
@@ -232,8 +251,8 @@ impl<A: App> Runtime<A> {
         let waker = futures::task::noop_waker();
         let mut cx = Context::from_waker(&waker);
 
+        // Poll regular async commands
         let mut completed = Vec::new();
-
         for (i, future) in self.pending_async.iter_mut().enumerate() {
             if let Poll::Ready(msg) = future.as_mut().poll(&mut cx) {
                 completed.push((i, msg));
@@ -246,6 +265,81 @@ impl<A: App> Runtime<A> {
             self.pending_async.remove(i);
             let command = A::update(&mut self.state, msg);
             self.execute_command(command)?;
+        }
+
+        // Poll parallel coordination tasks
+        let mut parallel_completed = Vec::new();
+        for (i, future) in self.pending_parallel.iter_mut().enumerate() {
+            if let Poll::Ready((task_idx, task_name)) = future.as_mut().poll(&mut cx) {
+                parallel_completed.push((i, task_idx, task_name));
+            }
+        }
+
+        // Process completed parallel tasks
+        parallel_completed.sort_by(|a, b| b.0.cmp(&a.0));
+        for (i, task_idx, task_name) in parallel_completed {
+            self.pending_parallel.remove(i);
+
+            // Publish task completion to LoadingScreen
+            self.pending_publishes.push((
+                "loading:progress".to_string(),
+                serde_json::json!({
+                    "task": task_name,
+                    "status": "Completed",
+                }),
+            ));
+
+            // Check if all tasks are complete
+            if let Some(coordinator) = &self.parallel_coordinator {
+                let results = coordinator.results.lock().unwrap();
+                let all_complete = results.iter().all(|r| r.is_some());
+
+                if all_complete {
+                    // Get all results and apply them via msg_mapper
+                    let total = coordinator.total_tasks;
+                    let mapper = coordinator.msg_mapper.clone();
+                    let config = coordinator.config.clone();
+
+                    // Clone results out of the lock
+                    let results_vec: Vec<_> = results.iter()
+                        .enumerate()
+                        .filter_map(|(idx, r)| {
+                            if let Some(result) = r {
+                                // We need to clone the Box<dyn Any + Send>
+                                // This is tricky - we can't clone Any, so we pass ownership
+                                // Actually, we can't take ownership here either
+                                // Let's restructure to take results outside the lock
+                                Some(idx)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+
+                    drop(results); // Release lock
+
+                    // Take ownership of coordinator to get results
+                    if let Some(coordinator) = self.parallel_coordinator.take() {
+                        let mut results = coordinator.results.lock().unwrap();
+
+                        // Apply each result via msg_mapper
+                        for idx in 0..total {
+                            if let Some(result) = results[idx].take() {
+                                let msg = (coordinator.msg_mapper)(idx, result);
+                                let command = A::update(&mut self.state, msg);
+                                self.execute_command(command)?;
+                            }
+                        }
+
+                        // Navigate to target if specified
+                        if let Some(target) = config.on_complete {
+                            self.navigation_target = Some(target);
+                        }
+                    }
+
+                    break; // Exit loop since we took the coordinator
+                }
+            }
         }
 
         Ok(())
@@ -468,6 +562,70 @@ impl<A: App> Runtime<A> {
             Command::Perform(future) => {
                 // Add to pending async commands
                 self.pending_async.push(future);
+                Ok(true)
+            }
+
+            Command::PerformParallel { tasks, config, msg_mapper } => {
+                // Navigate to LoadingScreen immediately
+                let task_names: Vec<String> = tasks.iter().map(|t| t.description.clone()).collect();
+                let total_tasks = tasks.len();
+
+                let loading_data = serde_json::json!({
+                    "tasks": task_names,
+                    "title": config.title.clone().unwrap_or_else(|| "Loading".to_string()),
+                    "target": format!("{:?}", config.on_complete.unwrap_or(AppId::AppLauncher)),
+                    "auto_complete": false, // We control completion manually
+                });
+
+                // Navigate to loading screen
+                self.navigation_target = Some(AppId::LoadingScreen);
+                self.pending_publishes.push(("loading:init".to_string(), loading_data));
+
+                // Initialize shared state for task results
+                let results = Arc::new(Mutex::new((0..total_tasks).map(|_| None).collect::<Vec<_>>()));
+                let msg_mapper = Arc::new(msg_mapper);
+
+                // Set up coordinator
+                self.parallel_coordinator = Some(ParallelTaskCoordinator {
+                    total_tasks,
+                    results: results.clone(),
+                    msg_mapper: msg_mapper.clone(),
+                    config: config.clone(),
+                });
+
+                // Spawn all tasks as separate futures
+                for (idx, task) in tasks.into_iter().enumerate() {
+                    let results_ref = results.clone();
+                    let task_name = task.description.clone();
+                    let future = task.future;
+
+                    // Immediately publish InProgress status
+                    self.pending_publishes.push((
+                        "loading:progress".to_string(),
+                        serde_json::json!({
+                            "task": task_name,
+                            "status": "InProgress",
+                        }),
+                    ));
+
+                    // Create wrapper future that stores result and signals completion
+                    let wrapper_future = Box::pin(async move {
+                        // Execute the actual task
+                        let result = future.await;
+
+                        // Store in shared results
+                        {
+                            let mut lock = results_ref.lock().unwrap();
+                            lock[idx] = Some(result);
+                        }
+
+                        // Return task index and name for coordination
+                        (idx, task_name)
+                    });
+
+                    self.pending_parallel.push(wrapper_future);
+                }
+
                 Ok(true)
             }
 

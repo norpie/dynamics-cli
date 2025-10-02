@@ -1,5 +1,6 @@
 use std::future::Future;
 use std::pin::Pin;
+use std::any::Any;
 use serde_json::Value;
 use crate::tui::element::FocusId;
 
@@ -18,6 +19,13 @@ pub enum Command<Msg> {
     /// Perform an async operation and send the result as a message
     Perform(Pin<Box<dyn Future<Output = Msg> + Send>>),
 
+    /// Perform multiple async operations in parallel with automatic LoadingScreen management
+    PerformParallel {
+        tasks: Vec<ParallelTask>,
+        config: ParallelConfig,
+        msg_mapper: Box<dyn Fn(usize, Box<dyn Any + Send>) -> Msg + Send>,
+    },
+
     /// Publish an event to the event bus
     Publish { topic: String, data: Value },
 
@@ -29,6 +37,28 @@ pub enum Command<Msg> {
 
     /// Quit the application
     Quit,
+}
+
+/// A single task in a parallel operation
+pub struct ParallelTask {
+    pub description: String,
+    pub future: Pin<Box<dyn Future<Output = Box<dyn Any + Send>> + Send>>,
+}
+
+/// Configuration for parallel task execution
+#[derive(Clone)]
+pub struct ParallelConfig {
+    pub title: Option<String>,
+    pub on_complete: Option<AppId>,
+}
+
+impl Default for ParallelConfig {
+    fn default() -> Self {
+        Self {
+            title: None,
+            on_complete: None,
+        }
+    }
 }
 
 /// Unique identifier for each app
@@ -87,6 +117,70 @@ impl<Msg> Command<Msg> {
     /// Helper to clear focus from all elements
     pub fn clear_focus() -> Self {
         Command::ClearFocus
+    }
+
+    /// Start building a parallel task execution command
+    pub fn perform_parallel() -> ParallelBuilder<Msg>
+    where
+        Msg: Send + 'static,
+    {
+        ParallelBuilder::new()
+    }
+}
+
+/// Builder for parallel task execution
+pub struct ParallelBuilder<Msg> {
+    tasks: Vec<ParallelTask>,
+    config: ParallelConfig,
+    _phantom: std::marker::PhantomData<Msg>,
+}
+
+impl<Msg: Send + 'static> ParallelBuilder<Msg> {
+    fn new() -> Self {
+        Self {
+            tasks: Vec::new(),
+            config: ParallelConfig::default(),
+            _phantom: std::marker::PhantomData,
+        }
+    }
+
+    /// Add a task to execute in parallel
+    pub fn add_task<F, T>(mut self, description: impl Into<String>, future: F) -> Self
+    where
+        F: Future<Output = T> + Send + 'static,
+        T: Send + 'static,
+    {
+        let task = ParallelTask {
+            description: description.into(),
+            future: Box::pin(async move {
+                let result = future.await;
+                Box::new(result) as Box<dyn Any + Send>
+            }),
+        };
+        self.tasks.push(task);
+        self
+    }
+
+    /// Set the title shown on the loading screen
+    pub fn with_title(mut self, title: impl Into<String>) -> Self {
+        self.config.title = Some(title.into());
+        self
+    }
+
+    /// Set the app to navigate to when all tasks complete
+    pub fn on_complete(mut self, app_id: AppId) -> Self {
+        self.config.on_complete = Some(app_id);
+        self
+    }
+
+    /// Build the command with a message mapper that converts task results to messages
+    /// The mapper receives (task_index, result) and should downcast the result to the expected type
+    pub fn build(self, msg_mapper: impl Fn(usize, Box<dyn Any + Send>) -> Msg + Send + 'static) -> Command<Msg> {
+        Command::PerformParallel {
+            tasks: self.tasks,
+            config: self.config,
+            msg_mapper: Box::new(msg_mapper),
+        }
     }
 }
 
