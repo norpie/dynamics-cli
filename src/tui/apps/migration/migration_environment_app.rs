@@ -75,9 +75,11 @@ pub enum Msg {
     CreateFormSourceSelected(usize),
     CreateFormSourceToggled,
     CreateFormSourceNavigate(KeyCode),
+    CreateFormSourceBlurred,
     CreateFormTargetSelected(usize),
     CreateFormTargetToggled,
     CreateFormTargetNavigate(KeyCode),
+    CreateFormTargetBlurred,
     CreateFormSubmit,
     CreateFormCancel,
     MigrationCreated(Result<(), String>),
@@ -170,6 +172,7 @@ impl App for MigrationEnvironmentApp {
                         state.create_form.source_env = Some(env.clone());
                     }
                 }
+                state.create_form.source_select_state.close();
                 Command::None
             }
             Msg::CreateFormSourceToggled => {
@@ -180,8 +183,26 @@ impl App for MigrationEnvironmentApp {
                 match key {
                     KeyCode::Up => state.create_form.source_select_state.navigate_prev(),
                     KeyCode::Down => state.create_form.source_select_state.navigate_next(),
+                    KeyCode::Enter => {
+                        state.create_form.source_select_state.select_highlighted();
+                        // Update the source_env based on the selected index
+                        let selected_idx = state.create_form.source_select_state.selected();
+                        if selected_idx == 0 {
+                            state.create_form.source_env = None;
+                        } else {
+                            let filtered_envs = get_filtered_source_envs(&state.available_environments, &state.create_form.target_env);
+                            if let Some(env) = filtered_envs.get(selected_idx - 1) {
+                                state.create_form.source_env = Some(env.clone());
+                            }
+                        }
+                    }
+                    KeyCode::Esc => state.create_form.source_select_state.close(),
                     _ => {}
                 }
+                Command::None
+            }
+            Msg::CreateFormSourceBlurred => {
+                state.create_form.source_select_state.close();
                 Command::None
             }
             Msg::CreateFormTargetSelected(idx) => {
@@ -194,6 +215,7 @@ impl App for MigrationEnvironmentApp {
                         state.create_form.target_env = Some(env.clone());
                     }
                 }
+                state.create_form.target_select_state.close();
                 Command::None
             }
             Msg::CreateFormTargetToggled => {
@@ -204,8 +226,26 @@ impl App for MigrationEnvironmentApp {
                 match key {
                     KeyCode::Up => state.create_form.target_select_state.navigate_prev(),
                     KeyCode::Down => state.create_form.target_select_state.navigate_next(),
+                    KeyCode::Enter => {
+                        state.create_form.target_select_state.select_highlighted();
+                        // Update the target_env based on the selected index
+                        let selected_idx = state.create_form.target_select_state.selected();
+                        if selected_idx == 0 {
+                            state.create_form.target_env = None;
+                        } else {
+                            let filtered_envs = get_filtered_target_envs(&state.available_environments, &state.create_form.source_env);
+                            if let Some(env) = filtered_envs.get(selected_idx - 1) {
+                                state.create_form.target_env = Some(env.clone());
+                            }
+                        }
+                    }
+                    KeyCode::Esc => state.create_form.target_select_state.close(),
                     _ => {}
                 }
+                Command::None
+            }
+            Msg::CreateFormTargetBlurred => {
+                state.create_form.target_select_state.close();
                 Command::None
             }
             Msg::CreateFormSubmit => {
@@ -340,6 +380,7 @@ impl App for MigrationEnvironmentApp {
                 .on_select(Msg::CreateFormSourceSelected)
                 .on_toggle(Msg::CreateFormSourceToggled)
                 .on_navigate(Msg::CreateFormSourceNavigate)
+                .on_blur(Msg::CreateFormSourceBlurred)
                 .build()
             )
             .title("Source Environment")
@@ -355,6 +396,7 @@ impl App for MigrationEnvironmentApp {
                 .on_select(Msg::CreateFormTargetSelected)
                 .on_toggle(Msg::CreateFormTargetToggled)
                 .on_navigate(Msg::CreateFormTargetNavigate)
+                .on_blur(Msg::CreateFormTargetBlurred)
                 .build()
             )
             .title("Target Environment")
