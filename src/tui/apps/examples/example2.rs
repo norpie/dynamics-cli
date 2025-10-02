@@ -12,14 +12,8 @@ pub enum Msg {
     RequestNavigate,
     ConfirmNavigate,
     CancelNavigate,
-    ButtonHovered,
-    ButtonUnhovered,
     StartLoading,
-    LoadButtonHovered,
-    LoadButtonUnhovered,
     StartFailingLoad,
-    FailLoadButtonHovered,
-    FailLoadButtonUnhovered,
     Task1Complete,
     Task2Failed,
     CancelLoading,
@@ -27,10 +21,7 @@ pub enum Msg {
 
 #[derive(Default)]
 pub struct State {
-    button_hovered: bool,
     show_confirm: bool,
-    load_button_hovered: bool,
-    fail_load_button_hovered: bool,
 }
 
 impl App for Example2 {
@@ -41,8 +32,6 @@ impl App for Example2 {
         match msg {
             Msg::RequestNavigate => {
                 state.show_confirm = true;
-                // Clear hover state when modal opens
-                state.button_hovered = false;
                 Command::None
             }
             Msg::ConfirmNavigate => {
@@ -51,22 +40,6 @@ impl App for Example2 {
             }
             Msg::CancelNavigate => {
                 state.show_confirm = false;
-                Command::None
-            }
-            Msg::ButtonHovered => {
-                state.button_hovered = true;
-                Command::None
-            }
-            Msg::ButtonUnhovered => {
-                state.button_hovered = false;
-                Command::None
-            }
-            Msg::LoadButtonHovered => {
-                state.load_button_hovered = true;
-                Command::None
-            }
-            Msg::LoadButtonUnhovered => {
-                state.load_button_hovered = false;
                 Command::None
             }
             Msg::StartLoading => {
@@ -171,14 +144,6 @@ impl App for Example2 {
                     },
                 ])
             }
-            Msg::FailLoadButtonHovered => {
-                state.fail_load_button_hovered = true;
-                Command::None
-            }
-            Msg::FailLoadButtonUnhovered => {
-                state.fail_load_button_hovered = false;
-                Command::None
-            }
             Msg::CancelLoading => {
                 // Handle cancellation - just a no-op for now
                 Command::None
@@ -187,46 +152,19 @@ impl App for Example2 {
     }
 
     fn view(state: &mut State, theme: &Theme) -> Element<Msg> {
-        let button_style = if state.button_hovered {
-            ratatui::style::Style::default().fg(theme.lavender)
-        } else {
-            ratatui::style::Style::default().fg(theme.text)
-        };
-
-        let load_button_style = if state.load_button_hovered {
-            ratatui::style::Style::default().fg(theme.lavender)
-        } else {
-            ratatui::style::Style::default().fg(theme.text)
-        };
-
-        let fail_load_button_style = if state.fail_load_button_hovered {
-            ratatui::style::Style::default().fg(theme.lavender)
-        } else {
-            ratatui::style::Style::default().fg(theme.text)
-        };
-
         let main_ui = Element::column(vec![
             Element::text("Example 2 - Modal Confirmation Demo!"),
             Element::text(""),
             Element::button(FocusId::new("nav-button"), "[ Press 1 or click to go to Example 1 ]")
                 .on_press(Msg::RequestNavigate)
-                .on_hover(Msg::ButtonHovered)
-                .on_hover_exit(Msg::ButtonUnhovered)
-                .style(button_style)
                 .build(),
             Element::text(""),
             Element::button(FocusId::new("load-button"), "[ Press L to load data (cancellable) ]")
                 .on_press(Msg::StartLoading)
-                .on_hover(Msg::LoadButtonHovered)
-                .on_hover_exit(Msg::LoadButtonUnhovered)
-                .style(load_button_style)
                 .build(),
             Element::text(""),
             Element::button(FocusId::new("fail-button"), "[ Press F to fail loading (uncancellable) ]")
                 .on_press(Msg::StartFailingLoad)
-                .on_hover(Msg::FailLoadButtonHovered)
-                .on_hover_exit(Msg::FailLoadButtonUnhovered)
-                .style(fail_load_button_style)
                 .build(),
             Element::text(""),
             Element::text("Now with confirmation modal!"),

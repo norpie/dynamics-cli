@@ -75,6 +75,13 @@ impl<Msg: Clone> FocusRegistry<Msg> {
         self.layers.last()
     }
 
+    pub fn iter_active_layer(&self) -> impl Iterator<Item = &FocusableInfo<Msg>> {
+        self.active_layer()
+            .map(|layer| layer.focusables.iter())
+            .into_iter()
+            .flatten()
+    }
+
     pub fn find_in_active_layer(&self, id: &FocusId) -> Option<&FocusableInfo<Msg>> {
         self.active_layer()?.focusables.iter().find(|f| &f.id == id)
     }

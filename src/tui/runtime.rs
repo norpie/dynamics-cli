@@ -371,22 +371,6 @@ impl<A: App> Runtime<A> {
                     }
                 }
 
-                // Handle hover exit if we moved to a different element
-                if let Some(last_pos) = self.last_hover_pos {
-                    if last_pos != pos {
-                        if let Some(msg) = self.registry.find_hover_exit(last_pos.0, last_pos.1) {
-                            let command = A::update(&mut self.state, msg);
-                            self.execute_command(command)?;
-                        }
-                    }
-                }
-
-                // Handle hover enter
-                if let Some(msg) = self.registry.find_hover(pos.0, pos.1) {
-                    let command = A::update(&mut self.state, msg);
-                    self.execute_command(command)?;
-                }
-
                 self.last_hover_pos = Some(pos);
             }
             MouseEventKind::ScrollUp => {

@@ -10,15 +10,12 @@ pub struct Example1;
 #[derive(Clone)]
 pub enum Msg {
     NavigateToExample2,
-    ButtonHovered,
-    ButtonUnhovered,
     LoadData,
     DataLoaded(String),
 }
 
 #[derive(Default)]
 pub struct State {
-    button_hovered: bool,
     loading: bool,
     data: Option<String>,
 }
@@ -30,14 +27,6 @@ impl App for Example1 {
     fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         match msg {
             Msg::NavigateToExample2 => Command::navigate_to(AppId::Example2),
-            Msg::ButtonHovered => {
-                state.button_hovered = true;
-                Command::None
-            }
-            Msg::ButtonUnhovered => {
-                state.button_hovered = false;
-                Command::None
-            }
             Msg::LoadData => {
                 state.loading = true;
                 // Simulate an async API call
@@ -58,12 +47,6 @@ impl App for Example1 {
     }
 
     fn view(state: &mut State, theme: &Theme) -> Element<Msg> {
-        let button_style = if state.button_hovered {
-            ratatui::style::Style::default().fg(theme.lavender)
-        } else {
-            ratatui::style::Style::default().fg(theme.text)
-        };
-
         let data_display = if state.loading {
             "Loading..."
         } else if let Some(ref data) = state.data {
@@ -85,9 +68,6 @@ impl App for Example1 {
             .add(
                 Element::button(FocusId::new("nav-button"), "[ Press 2 or click to go to Example 2 ]")
                     .on_press(Msg::NavigateToExample2)
-                    .on_hover(Msg::ButtonHovered)
-                    .on_hover_exit(Msg::ButtonUnhovered)
-                    .style(button_style)
                     .build(),
                 LayoutConstraint::Length(3),
             )

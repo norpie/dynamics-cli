@@ -67,9 +67,8 @@ impl Renderer {
                 on_focus,
                 on_blur,
                 style,
-                hover_style,
             } => {
-                render_button(frame, theme, registry, focus_registry, focused_id, id, label, on_press, on_hover, on_hover_exit, on_focus, on_blur, style, hover_style, area, inside_panel);
+                render_button(frame, theme, registry, focus_registry, focused_id, id, label, on_press, on_hover, on_hover_exit, on_focus, on_blur, style, area, inside_panel);
             }
 
             Element::Column { items, spacing } => {

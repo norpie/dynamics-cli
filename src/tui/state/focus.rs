@@ -20,6 +20,6 @@ pub enum FocusMode {
 
 impl Default for FocusMode {
     fn default() -> Self {
-        FocusMode::Click
+        FocusMode::Hover
     }
 }
