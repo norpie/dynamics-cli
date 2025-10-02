@@ -206,4 +206,18 @@ impl ListState {
             self.scroll_offset = self.scroll_offset.min(max_offset);
         }
     }
+
+    /// Handle list event (unified event pattern)
+    /// Returns Some(selected_index) on Select event, None otherwise
+    pub fn handle_event(&mut self, event: crate::tui::widgets::events::ListEvent, item_count: usize, visible_height: usize) -> Option<usize> {
+        use crate::tui::widgets::events::ListEvent;
+
+        match event {
+            ListEvent::Navigate(key) => {
+                self.handle_key(key, item_count, visible_height);
+                None
+            }
+            ListEvent::Select => self.selected,
+        }
+    }
 }

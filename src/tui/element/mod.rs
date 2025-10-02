@@ -165,6 +165,7 @@ pub enum Element<Msg> {
         on_select: Option<fn(String) -> Msg>,     // ID-based callbacks
         on_toggle: Option<fn(String) -> Msg>,     // Expand/collapse callback
         on_navigate: Option<fn(crossterm::event::KeyCode) -> Msg>,
+        on_event: Option<fn(crate::tui::widgets::TreeEvent) -> Msg>,  // Unified event pattern
         on_focus: Option<Msg>,
         on_blur: Option<Msg>,
     },
@@ -190,6 +191,7 @@ pub enum Element<Msg> {
         on_select: Option<fn(usize) -> Msg>,  // Called when option selected
         on_toggle: Option<Msg>,             // Called when dropdown toggled
         on_navigate: Option<fn(crossterm::event::KeyCode) -> Msg>,  // Called for keyboard navigation when open
+        on_event: Option<fn(crate::tui::widgets::SelectEvent) -> Msg>,  // Unified event handler
         on_focus: Option<Msg>,
         on_blur: Option<Msg>,
     },
@@ -206,6 +208,7 @@ pub enum Element<Msg> {
         on_input: Option<fn(crossterm::event::KeyCode) -> Msg>,  // Text input changes
         on_select: Option<fn(String) -> Msg>,  // Option selected from dropdown
         on_navigate: Option<fn(crossterm::event::KeyCode) -> Msg>,  // Dropdown navigation
+        on_event: Option<fn(crate::tui::widgets::AutocompleteEvent) -> Msg>,  // Unified event handler
         on_focus: Option<Msg>,
         on_blur: Option<Msg>,
     },
@@ -475,6 +478,7 @@ impl<Msg> Element<Msg> {
             on_select: None,
             on_toggle: None,
             on_navigate: None,
+            on_event: None,
             on_focus: None,
             on_blur: None,
         }
@@ -515,6 +519,7 @@ impl<Msg> Element<Msg> {
             on_select: None,
             on_toggle: None,
             on_navigate: None,
+            on_event: None,
             on_focus: None,
             on_blur: None,
         }
@@ -538,6 +543,7 @@ impl<Msg> Element<Msg> {
             on_input: None,
             on_select: None,
             on_navigate: None,
+            on_event: None,
             on_focus: None,
             on_blur: None,
         }

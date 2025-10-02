@@ -1,7 +1,7 @@
 use crossterm::event::KeyCode;
 use crate::tui::{App, AppId, Command, Element, Subscription, Theme, FocusId, Resource};
 use crate::tui::widgets::list::{ListItem, ListState};
-use crate::tui::widgets::{TextInputState, SelectState};
+use crate::tui::widgets::{TextInputState, SelectState, SelectEvent};
 use crate::config::SavedMigration;
 use ratatui::text::{Line, Span};
 use ratatui::style::Style;
@@ -86,14 +86,8 @@ pub enum Msg {
     OpenCreateModal,
     EnvironmentsLoaded(Result<Vec<String>, String>),
     CreateFormNameChanged(KeyCode),
-    CreateFormSourceSelected(usize),
-    CreateFormSourceToggled,
-    CreateFormSourceNavigate(KeyCode),
-    CreateFormSourceBlurred,
-    CreateFormTargetSelected(usize),
-    CreateFormTargetToggled,
-    CreateFormTargetNavigate(KeyCode),
-    CreateFormTargetBlurred,
+    CreateFormSourceEvent(SelectEvent),
+    CreateFormTargetEvent(SelectEvent),
     CreateFormSubmit,
     CreateFormCancel,
     MigrationCreated(Result<(), String>),
@@ -201,90 +195,46 @@ impl App for MigrationEnvironmentApp {
                 }
                 Command::None
             }
-            Msg::CreateFormSourceSelected(idx) => {
-                // Index 0 is the placeholder, actual environments start at index 1
-                if idx == 0 {
-                    state.create_form.source_env = None;
-                } else {
-                    let filtered_envs = get_filtered_source_envs(&state.available_environments, &state.create_form.target_env);
-                    if let Some(env) = filtered_envs.get(idx - 1) {
-                        state.create_form.source_env = Some(env.clone());
+            Msg::CreateFormSourceEvent(event) => {
+                use SelectEvent::*;
+                match event {
+                    Navigate(key) => {
+                        state.create_form.source_select_state.handle_event(event);
                     }
-                }
-                state.create_form.source_select_state.close();
-                Command::None
-            }
-            Msg::CreateFormSourceToggled => {
-                state.create_form.source_select_state.toggle();
-                Command::None
-            }
-            Msg::CreateFormSourceNavigate(key) => {
-                match key {
-                    KeyCode::Up => state.create_form.source_select_state.navigate_prev(),
-                    KeyCode::Down => state.create_form.source_select_state.navigate_next(),
-                    KeyCode::Enter => {
-                        state.create_form.source_select_state.select_highlighted();
-                        // Update the source_env based on the selected index
-                        let selected_idx = state.create_form.source_select_state.selected();
-                        if selected_idx == 0 {
+                    Select(idx) => {
+                        state.create_form.source_select_state.handle_event(event);
+                        // Index 0 is the placeholder, actual environments start at index 1
+                        if idx == 0 {
                             state.create_form.source_env = None;
                         } else {
                             let filtered_envs = get_filtered_source_envs(&state.available_environments, &state.create_form.target_env);
-                            if let Some(env) = filtered_envs.get(selected_idx - 1) {
+                            if let Some(env) = filtered_envs.get(idx - 1) {
                                 state.create_form.source_env = Some(env.clone());
                             }
                         }
                     }
-                    KeyCode::Esc => state.create_form.source_select_state.close(),
-                    _ => {}
                 }
                 Command::None
             }
-            Msg::CreateFormSourceBlurred => {
-                state.create_form.source_select_state.close();
-                Command::None
-            }
-            Msg::CreateFormTargetSelected(idx) => {
-                // Index 0 is the placeholder, actual environments start at index 1
-                if idx == 0 {
-                    state.create_form.target_env = None;
-                } else {
-                    let filtered_envs = get_filtered_target_envs(&state.available_environments, &state.create_form.source_env);
-                    if let Some(env) = filtered_envs.get(idx - 1) {
-                        state.create_form.target_env = Some(env.clone());
+            Msg::CreateFormTargetEvent(event) => {
+                use SelectEvent::*;
+                match event {
+                    Navigate(key) => {
+                        state.create_form.target_select_state.handle_event(event);
                     }
-                }
-                state.create_form.target_select_state.close();
-                Command::None
-            }
-            Msg::CreateFormTargetToggled => {
-                state.create_form.target_select_state.toggle();
-                Command::None
-            }
-            Msg::CreateFormTargetNavigate(key) => {
-                match key {
-                    KeyCode::Up => state.create_form.target_select_state.navigate_prev(),
-                    KeyCode::Down => state.create_form.target_select_state.navigate_next(),
-                    KeyCode::Enter => {
-                        state.create_form.target_select_state.select_highlighted();
-                        // Update the target_env based on the selected index
-                        let selected_idx = state.create_form.target_select_state.selected();
-                        if selected_idx == 0 {
+                    Select(idx) => {
+                        state.create_form.target_select_state.handle_event(event);
+                        // Index 0 is the placeholder, actual environments start at index 1
+                        if idx == 0 {
                             state.create_form.target_env = None;
                         } else {
                             let filtered_envs = get_filtered_target_envs(&state.available_environments, &state.create_form.source_env);
-                            if let Some(env) = filtered_envs.get(selected_idx - 1) {
+                            if let Some(env) = filtered_envs.get(idx - 1) {
                                 state.create_form.target_env = Some(env.clone());
                             }
                         }
                     }
-                    KeyCode::Esc => state.create_form.target_select_state.close(),
-                    _ => {}
                 }
-                Command::None
-            }
-            Msg::CreateFormTargetBlurred => {
-                state.create_form.target_select_state.close();
                 Command::None
             }
             Msg::CreateFormSubmit => {
@@ -637,10 +587,7 @@ impl App for MigrationEnvironmentApp {
                     source_options,
                     &mut state.create_form.source_select_state
                 )
-                .on_select(Msg::CreateFormSourceSelected)
-                .on_toggle(Msg::CreateFormSourceToggled)
-                .on_navigate(Msg::CreateFormSourceNavigate)
-                .on_blur(Msg::CreateFormSourceBlurred)
+                .on_event(Msg::CreateFormSourceEvent)
                 .build()
             )
             .title("Source Environment")
@@ -653,10 +600,7 @@ impl App for MigrationEnvironmentApp {
                     target_options,
                     &mut state.create_form.target_select_state
                 )
-                .on_select(Msg::CreateFormTargetSelected)
-                .on_toggle(Msg::CreateFormTargetToggled)
-                .on_navigate(Msg::CreateFormTargetNavigate)
-                .on_blur(Msg::CreateFormTargetBlurred)
+                .on_event(Msg::CreateFormTargetEvent)
                 .build()
             )
             .title("Target Environment")

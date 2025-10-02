@@ -191,4 +191,19 @@ impl AutocompleteState {
             _ => false,
         }
     }
+
+    /// Handle navigation key when dropdown is open
+    /// This is the unified handler for the new event pattern
+    pub fn handle_navigate_key(&mut self, key: KeyCode) {
+        match key {
+            KeyCode::Up => self.navigate_prev(),
+            KeyCode::Down => self.navigate_next(),
+            KeyCode::Enter => {
+                // Selection is handled by the field, not the state
+                // This method just handles navigation
+            }
+            KeyCode::Esc => self.close(),
+            _ => {}
+        }
+    }
 }

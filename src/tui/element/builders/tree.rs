@@ -1,5 +1,6 @@
 use crate::tui::Element;
 use crate::tui::element::FocusId;
+use crate::tui::widgets::TreeEvent;
 
 /// Builder for tree elements
 pub struct TreeBuilder<Msg> {
@@ -11,6 +12,7 @@ pub struct TreeBuilder<Msg> {
     pub(crate) on_select: Option<fn(String) -> Msg>,
     pub(crate) on_toggle: Option<fn(String) -> Msg>,
     pub(crate) on_navigate: Option<fn(crossterm::event::KeyCode) -> Msg>,
+    pub(crate) on_event: Option<fn(TreeEvent) -> Msg>,
     pub(crate) on_focus: Option<Msg>,
     pub(crate) on_blur: Option<Msg>,
 }
@@ -28,6 +30,11 @@ impl<Msg> TreeBuilder<Msg> {
 
     pub fn on_navigate(mut self, msg: fn(crossterm::event::KeyCode) -> Msg) -> Self {
         self.on_navigate = Some(msg);
+        self
+    }
+
+    pub fn on_event(mut self, msg: fn(TreeEvent) -> Msg) -> Self {
+        self.on_event = Some(msg);
         self
     }
 
@@ -51,6 +58,7 @@ impl<Msg> TreeBuilder<Msg> {
             on_select: self.on_select,
             on_toggle: self.on_toggle,
             on_navigate: self.on_navigate,
+            on_event: self.on_event,
             on_focus: self.on_focus,
             on_blur: self.on_blur,
         }

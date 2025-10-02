@@ -3,18 +3,14 @@ use ratatui::text::{Line, Span};
 use ratatui::style::Style;
 use ratatui::prelude::Stylize;
 use crate::tui::{App, Command, Element, Subscription, Theme, LayoutConstraint, FocusId};
-use crate::tui::widgets::{TreeItem, TreeState};
+use crate::tui::widgets::{TreeItem, TreeState, TreeEvent};
 
 pub struct Example5;
 
 #[derive(Clone)]
 pub enum Msg {
-    LeftNodeSelected(String),
-    LeftNodeToggled(String),
-    LeftNavigate(KeyCode),
-    RightNodeSelected(String),
-    RightNodeToggled(String),
-    RightNavigate(KeyCode),
+    LeftTreeEvent(TreeEvent),
+    RightTreeEvent(TreeEvent),
 }
 
 pub struct State {
@@ -241,28 +237,12 @@ impl App for Example5 {
 
     fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         match msg {
-            Msg::LeftNavigate(key) => {
-                state.left_tree.handle_key(key);
+            Msg::LeftTreeEvent(event) => {
+                state.left_tree.handle_event(event);
                 Command::None
             }
-            Msg::LeftNodeToggled(id) => {
-                state.left_tree.toggle(&id);
-                Command::None
-            }
-            Msg::LeftNodeSelected(id) => {
-                state.left_tree.select(Some(id));
-                Command::None
-            }
-            Msg::RightNavigate(key) => {
-                state.right_tree.handle_key(key);
-                Command::None
-            }
-            Msg::RightNodeToggled(id) => {
-                state.right_tree.toggle(&id);
-                Command::None
-            }
-            Msg::RightNodeSelected(id) => {
-                state.right_tree.select(Some(id));
+            Msg::RightTreeEvent(event) => {
+                state.right_tree.handle_event(event);
                 Command::None
             }
         }
@@ -276,9 +256,7 @@ impl App for Example5 {
             &mut state.left_tree,
             theme,
         )
-        .on_select(Msg::LeftNodeSelected)
-        .on_toggle(Msg::LeftNodeToggled)
-        .on_navigate(Msg::LeftNavigate)
+        .on_event(Msg::LeftTreeEvent)
         .build();
 
         // Build right tree
@@ -288,9 +266,7 @@ impl App for Example5 {
             &mut state.right_tree,
             theme,
         )
-        .on_select(Msg::RightNodeSelected)
-        .on_toggle(Msg::RightNodeToggled)
-        .on_navigate(Msg::RightNavigate)
+        .on_event(Msg::RightTreeEvent)
         .build();
 
         // Wrap in panels

@@ -3,26 +3,15 @@ use ratatui::text::{Line, Span};
 use ratatui::style::Style;
 use ratatui::prelude::Stylize;
 use crate::tui::{App, Command, Element, Subscription, Theme, LayoutConstraint, FocusId};
-use crate::tui::widgets::SelectState;
+use crate::tui::widgets::{SelectState, SelectEvent};
 
 pub struct Example6;
 
 #[derive(Clone)]
 pub enum Msg {
-    // Sort select
-    SortModeSelected(usize),
-    ToggleSortDropdown,
-    SortNavigate(KeyCode),
-
-    // Export format select
-    ExportFormatSelected(usize),
-    ToggleExportDropdown,
-    ExportNavigate(KeyCode),
-
-    // Filter select
-    FilterSelected(usize),
-    ToggleFilterDropdown,
-    FilterNavigate(KeyCode),
+    SortEvent(SelectEvent),
+    ExportEvent(SelectEvent),
+    FilterEvent(SelectEvent),
 }
 
 pub struct State {
@@ -47,63 +36,16 @@ impl App for Example6 {
 
     fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         match msg {
-            // Sort select handlers
-            Msg::ToggleSortDropdown => {
-                state.sort_select.toggle();
+            Msg::SortEvent(event) => {
+                state.sort_select.handle_event(event);
                 Command::None
             }
-            Msg::SortNavigate(key) => {
-                match key {
-                    KeyCode::Up => state.sort_select.navigate_prev(),
-                    KeyCode::Down => state.sort_select.navigate_next(),
-                    KeyCode::Enter => state.sort_select.select_highlighted(),
-                    KeyCode::Esc => state.sort_select.close(),
-                    _ => {}
-                }
+            Msg::ExportEvent(event) => {
+                state.export_select.handle_event(event);
                 Command::None
             }
-            Msg::SortModeSelected(idx) => {
-                state.sort_select.select(idx);
-                Command::None
-            }
-
-            // Export format handlers
-            Msg::ToggleExportDropdown => {
-                state.export_select.toggle();
-                Command::None
-            }
-            Msg::ExportNavigate(key) => {
-                match key {
-                    KeyCode::Up => state.export_select.navigate_prev(),
-                    KeyCode::Down => state.export_select.navigate_next(),
-                    KeyCode::Enter => state.export_select.select_highlighted(),
-                    KeyCode::Esc => state.export_select.close(),
-                    _ => {}
-                }
-                Command::None
-            }
-            Msg::ExportFormatSelected(idx) => {
-                state.export_select.select(idx);
-                Command::None
-            }
-
-            // Filter handlers
-            Msg::ToggleFilterDropdown => {
-                state.filter_select.toggle();
-                Command::None
-            }
-            Msg::FilterNavigate(key) => {
-                match key {
-                    KeyCode::Up => state.filter_select.navigate_prev(),
-                    KeyCode::Down => state.filter_select.navigate_next(),
-                    KeyCode::Enter => state.filter_select.select_highlighted(),
-                    KeyCode::Esc => state.filter_select.close(),
-                    _ => {}
-                }
-                Command::None
-            }
-            Msg::FilterSelected(idx) => {
-                state.filter_select.select(idx);
+            Msg::FilterEvent(event) => {
+                state.filter_select.handle_event(event);
                 Command::None
             }
         }
@@ -141,9 +83,7 @@ impl App for Example6 {
             sort_options,
             &mut state.sort_select,
         )
-        .on_select(Msg::SortModeSelected)
-        .on_toggle(Msg::ToggleSortDropdown)
-        .on_navigate(Msg::SortNavigate)
+        .on_event(Msg::SortEvent)
         .build();
 
         let export_select = Element::select(
@@ -151,9 +91,7 @@ impl App for Example6 {
             export_options,
             &mut state.export_select,
         )
-        .on_select(Msg::ExportFormatSelected)
-        .on_toggle(Msg::ToggleExportDropdown)
-        .on_navigate(Msg::ExportNavigate)
+        .on_event(Msg::ExportEvent)
         .build();
 
         let filter_select = Element::select(
@@ -161,9 +99,7 @@ impl App for Example6 {
             filter_options,
             &mut state.filter_select,
         )
-        .on_select(Msg::FilterSelected)
-        .on_toggle(Msg::ToggleFilterDropdown)
-        .on_navigate(Msg::FilterNavigate)
+        .on_event(Msg::FilterEvent)
         .build();
 
         // Wrap in panels with labels

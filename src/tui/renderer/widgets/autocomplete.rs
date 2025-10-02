@@ -2,9 +2,10 @@ use ratatui::{Frame, style::{Style, Stylize}, widgets::{Block, Borders, Paragrap
 use crossterm::event::KeyCode;
 use crate::tui::{Element, Theme};
 use crate::tui::element::FocusId;
+use crate::tui::widgets::AutocompleteEvent;
 use crate::tui::renderer::{InteractionRegistry, FocusRegistry, DropdownRegistry, DropdownInfo, DropdownCallback, FocusableInfo};
 
-/// Create on_key handler for autocomplete elements
+/// Create on_key handler for autocomplete elements (old pattern)
 pub fn autocomplete_on_key<Msg: Clone + Send + 'static>(
     is_open: bool,
     on_input: Option<fn(KeyCode) -> Msg>,
@@ -29,6 +30,30 @@ pub fn autocomplete_on_key<Msg: Clone + Send + 'static>(
     })
 }
 
+/// Create on_key handler for autocomplete elements (new event pattern)
+pub fn autocomplete_on_key_event<Msg: Clone + Send + 'static>(
+    is_open: bool,
+    on_event: fn(AutocompleteEvent) -> Msg,
+) -> Box<dyn Fn(KeyCode) -> Option<Msg> + Send> {
+    Box::new(move |key| {
+        if is_open {
+            // Dropdown open: Up/Down/Enter/Esc go to navigate, others to input
+            match key {
+                KeyCode::Up | KeyCode::Down | KeyCode::Enter | KeyCode::Esc => {
+                    Some(on_event(AutocompleteEvent::Navigate(key)))
+                }
+                _ => {
+                    // All other keys go to input for typing
+                    Some(on_event(AutocompleteEvent::Input(key)))
+                }
+            }
+        } else {
+            // Dropdown closed: all keys go to input
+            Some(on_event(AutocompleteEvent::Input(key)))
+        }
+    })
+}
+
 /// Render Autocomplete element
 pub fn render_autocomplete<Msg: Clone + Send + 'static>(
     frame: &mut Frame,
@@ -47,16 +72,23 @@ pub fn render_autocomplete<Msg: Clone + Send + 'static>(
     on_input: &Option<fn(KeyCode) -> Msg>,
     on_select: &Option<fn(String) -> Msg>,
     on_navigate: &Option<fn(KeyCode) -> Msg>,
+    on_event: &Option<fn(AutocompleteEvent) -> Msg>,
     on_focus: &Option<Msg>,
     on_blur: &Option<Msg>,
     area: Rect,
     inside_panel: bool,
 ) {
-    // Register in focus registry
+    // Register in focus registry - prefer on_event if available
+    let on_key_handler = if let Some(event_fn) = on_event {
+        autocomplete_on_key_event(is_open, *event_fn)
+    } else {
+        autocomplete_on_key(is_open, *on_input, *on_navigate)
+    };
+
     focus_registry.register_focusable(FocusableInfo {
         id: id.clone(),
         rect: area,
-        on_key: autocomplete_on_key(is_open, *on_input, *on_navigate),
+        on_key: on_key_handler,
         on_focus: on_focus.clone(),
         on_blur: on_blur.clone(),
         inside_panel,
@@ -124,12 +156,18 @@ pub fn render_autocomplete<Msg: Clone + Send + 'static>(
 
     // If open, register dropdown for overlay rendering
     if is_open && !filtered_options.is_empty() {
+        let callback = if let Some(event_fn) = on_event {
+            DropdownCallback::AutocompleteEvent(Some(*event_fn))
+        } else {
+            DropdownCallback::Autocomplete(*on_select)
+        };
+
         dropdown_registry.register(DropdownInfo {
             select_area: input_area,
             options: filtered_options.to_vec(),
             selected: None,  // No checkmark for autocomplete
             highlight,
-            on_select: DropdownCallback::Autocomplete(*on_select),
+            on_select: callback,
         });
     }
 }

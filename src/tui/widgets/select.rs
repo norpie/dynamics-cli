@@ -133,4 +133,28 @@ impl SelectState {
             self.highlight_index = self.selected_index;
         }
     }
+
+    /// Handle select event (unified event pattern)
+    /// Returns Some(selected_index) on Select event, None otherwise
+    pub fn handle_event(&mut self, event: crate::tui::widgets::events::SelectEvent) -> Option<usize> {
+        use crate::tui::widgets::events::SelectEvent;
+        use crossterm::event::KeyCode;
+
+        match event {
+            SelectEvent::Navigate(key) => {
+                if self.is_open {
+                    match key {
+                        KeyCode::Up => self.navigate_prev(),
+                        KeyCode::Down => self.navigate_next(),
+                        _ => {}
+                    }
+                }
+                None
+            }
+            SelectEvent::Select(index) => {
+                self.select(index);
+                Some(self.selected_index)
+            }
+        }
+    }
 }

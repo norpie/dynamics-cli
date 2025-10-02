@@ -3,23 +3,20 @@ use ratatui::text::{Line, Span};
 use ratatui::style::Style;
 use ratatui::prelude::Stylize;
 use crate::tui::{App, Command, Element, Subscription, Theme, LayoutConstraint, FocusId};
-use crate::tui::widgets::AutocompleteState;
+use crate::tui::widgets::{AutocompleteField, AutocompleteEvent};
 use crate::tui::element::ColumnBuilder;
 
 pub struct Example7;
 
 #[derive(Clone)]
 pub enum Msg {
-    InputChanged(KeyCode),
-    DropdownNavigate(KeyCode),
-    EntitySelected(String),
+    AutocompleteEvent(AutocompleteEvent),
     Back,
 }
 
 pub struct State {
-    autocomplete_state: AutocompleteState,
+    entity_field: AutocompleteField,
     all_entities: Vec<String>,
-    current_input: String,
     selected_entity: Option<String>,
 }
 
@@ -69,9 +66,8 @@ impl Default for State {
         ];
 
         Self {
-            autocomplete_state: AutocompleteState::new(),
+            entity_field: AutocompleteField::new(),
             all_entities,
-            current_input: String::new(),
             selected_entity: None,
         }
     }
@@ -83,55 +79,15 @@ impl App for Example7 {
 
     fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         match msg {
-            Msg::InputChanged(key) => {
-                // Handle text input changes
-                if let Some(new_value) = state.autocomplete_state.handle_input_key(
-                    key,
-                    &state.current_input,
-                    None,  // No max length
-                ) {
-                    state.current_input = new_value;
-                    // Update filtered options based on new input
-                    state.autocomplete_state.update_filtered_options(
-                        &state.current_input,
-                        &state.all_entities,
-                    );
+            Msg::AutocompleteEvent(event) => {
+                // All autocomplete logic handled by the field
+                state.entity_field.handle_event::<Msg>(event, &state.all_entities);
+
+                // Update selected_entity when value changes (on selection)
+                if !state.entity_field.value().is_empty() && !state.entity_field.is_open() {
+                    state.selected_entity = Some(state.entity_field.value().to_string());
                 }
-                Command::None
-            }
-            Msg::DropdownNavigate(key) => {
-                // Handle dropdown navigation
-                match key {
-                    KeyCode::Up => {
-                        state.autocomplete_state.navigate_prev();
-                    }
-                    KeyCode::Down => {
-                        state.autocomplete_state.navigate_next();
-                    }
-                    KeyCode::Enter => {
-                        // Select highlighted option
-                        if let Some(selected) = state.autocomplete_state.get_highlighted_option() {
-                            state.current_input = selected.clone();
-                            state.selected_entity = Some(selected);
-                            state.autocomplete_state.close();
-                            // Move cursor to end after setting value
-                            state.autocomplete_state.set_cursor_to_end(&state.current_input);
-                        }
-                    }
-                    KeyCode::Esc => {
-                        state.autocomplete_state.close();
-                    }
-                    _ => {}
-                }
-                Command::None
-            }
-            Msg::EntitySelected(entity) => {
-                // Direct selection from click
-                state.current_input = entity.clone();
-                state.selected_entity = Some(entity);
-                state.autocomplete_state.close();
-                // Move cursor to end after setting value
-                state.autocomplete_state.set_cursor_to_end(&state.current_input);
+
                 Command::None
             }
             Msg::Back => Command::navigate_to(crate::tui::AppId::AppLauncher),
@@ -150,13 +106,11 @@ impl App for Example7 {
         let autocomplete = Element::autocomplete(
             FocusId::new("entity_autocomplete"),
             state.all_entities.clone(),
-            state.current_input.clone(),
-            &mut state.autocomplete_state,
+            state.entity_field.value().to_string(),
+            &mut state.entity_field.state,
         )
         .placeholder("Type entity name...")
-        .on_input(Msg::InputChanged)
-        .on_select(Msg::EntitySelected)
-        .on_navigate(Msg::DropdownNavigate)
+        .on_event(Msg::AutocompleteEvent)
         .build();
 
         let selected_display = if let Some(ref entity) = state.selected_entity {

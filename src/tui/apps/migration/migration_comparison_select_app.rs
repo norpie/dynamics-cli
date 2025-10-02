@@ -5,7 +5,7 @@ use crate::tui::{
     subscription::Subscription,
     state::theme::Theme,
     widgets::list::{ListItem, ListState},
-    widgets::AutocompleteState,
+    widgets::{AutocompleteField, AutocompleteEvent},
     Resource,
 };
 use crate::config::repository::migrations::SavedComparison;
@@ -23,10 +23,8 @@ pub struct MigrationComparisonSelectApp;
 pub struct CreateComparisonForm {
     name: String,
     name_input_state: crate::tui::widgets::TextInputState,
-    source_entity: String,
-    source_autocomplete_state: AutocompleteState,
-    target_entity: String,
-    target_autocomplete_state: AutocompleteState,
+    source_entity_field: AutocompleteField,
+    target_entity_field: AutocompleteField,
     validation_error: Option<String>,
 }
 
@@ -77,12 +75,8 @@ pub enum Msg {
     SelectComparison,
     CreateComparison,
     CreateFormNameChanged(KeyCode),
-    CreateFormSourceInputChanged(KeyCode),
-    CreateFormSourceNavigate(KeyCode),
-    CreateFormSourceSelected(String),
-    CreateFormTargetInputChanged(KeyCode),
-    CreateFormTargetNavigate(KeyCode),
-    CreateFormTargetSelected(String),
+    CreateFormSourceEvent(AutocompleteEvent),
+    CreateFormTargetEvent(AutocompleteEvent),
     CreateFormSubmit,
     CreateFormCancel,
     ComparisonCreated(Result<i64, String>),
@@ -271,98 +265,20 @@ impl App for MigrationComparisonSelectApp {
                 }
                 Command::None
             }
-            Msg::CreateFormSourceInputChanged(key) => {
-                if let Some(new_value) = state.create_form.source_autocomplete_state.handle_input_key(
-                    key,
-                    &state.create_form.source_entity,
-                    None,
-                ) {
-                    state.create_form.source_entity = new_value;
-                    if let Resource::Success(entities) = &state.source_entities {
-                        state.create_form.source_autocomplete_state.update_filtered_options(
-                            &state.create_form.source_entity,
-                            entities,
-                        );
-                    }
-                }
+            Msg::CreateFormSourceEvent(event) => {
+                let options = state.source_entities.as_ref().ok().cloned().unwrap_or_default();
+                state.create_form.source_entity_field.handle_event::<Msg>(event, &options);
                 Command::None
             }
-            Msg::CreateFormSourceNavigate(key) => {
-                match key {
-                    KeyCode::Up => {
-                        state.create_form.source_autocomplete_state.navigate_prev();
-                    }
-                    KeyCode::Down => {
-                        state.create_form.source_autocomplete_state.navigate_next();
-                    }
-                    KeyCode::Enter => {
-                        if let Some(selected) = state.create_form.source_autocomplete_state.get_highlighted_option() {
-                            state.create_form.source_entity = selected.clone();
-                            state.create_form.source_autocomplete_state.close();
-                            state.create_form.source_autocomplete_state.set_cursor_to_end(&state.create_form.source_entity);
-                        }
-                    }
-                    KeyCode::Esc => {
-                        state.create_form.source_autocomplete_state.close();
-                    }
-                    _ => {}
-                }
-                Command::None
-            }
-            Msg::CreateFormSourceSelected(entity) => {
-                state.create_form.source_entity = entity.clone();
-                state.create_form.source_autocomplete_state.close();
-                state.create_form.source_autocomplete_state.set_cursor_to_end(&state.create_form.source_entity);
-                Command::None
-            }
-            Msg::CreateFormTargetInputChanged(key) => {
-                if let Some(new_value) = state.create_form.target_autocomplete_state.handle_input_key(
-                    key,
-                    &state.create_form.target_entity,
-                    None,
-                ) {
-                    state.create_form.target_entity = new_value;
-                    if let Resource::Success(entities) = &state.target_entities {
-                        state.create_form.target_autocomplete_state.update_filtered_options(
-                            &state.create_form.target_entity,
-                            entities,
-                        );
-                    }
-                }
-                Command::None
-            }
-            Msg::CreateFormTargetNavigate(key) => {
-                match key {
-                    KeyCode::Up => {
-                        state.create_form.target_autocomplete_state.navigate_prev();
-                    }
-                    KeyCode::Down => {
-                        state.create_form.target_autocomplete_state.navigate_next();
-                    }
-                    KeyCode::Enter => {
-                        if let Some(selected) = state.create_form.target_autocomplete_state.get_highlighted_option() {
-                            state.create_form.target_entity = selected.clone();
-                            state.create_form.target_autocomplete_state.close();
-                            state.create_form.target_autocomplete_state.set_cursor_to_end(&state.create_form.target_entity);
-                        }
-                    }
-                    KeyCode::Esc => {
-                        state.create_form.target_autocomplete_state.close();
-                    }
-                    _ => {}
-                }
-                Command::None
-            }
-            Msg::CreateFormTargetSelected(entity) => {
-                state.create_form.target_entity = entity.clone();
-                state.create_form.target_autocomplete_state.close();
-                state.create_form.target_autocomplete_state.set_cursor_to_end(&state.create_form.target_entity);
+            Msg::CreateFormTargetEvent(event) => {
+                let options = state.target_entities.as_ref().ok().cloned().unwrap_or_default();
+                state.create_form.target_entity_field.handle_event::<Msg>(event, &options);
                 Command::None
             }
             Msg::CreateFormSubmit => {
                 let name = state.create_form.name.trim().to_string();
-                let source_entity = state.create_form.source_entity.trim().to_string();
-                let target_entity = state.create_form.target_entity.trim().to_string();
+                let source_entity = state.create_form.source_entity_field.value().trim().to_string();
+                let target_entity = state.create_form.target_entity_field.value().trim().to_string();
 
                 if name.is_empty() {
                     state.create_form.validation_error = Some("Comparison name is required".to_string());
@@ -692,13 +608,11 @@ impl App for MigrationComparisonSelectApp {
             let source_autocomplete = Element::autocomplete(
                 FocusId::new("create-source-autocomplete"),
                 state.source_entities.as_ref().ok().cloned().unwrap_or_default(),
-                state.create_form.source_entity.clone(),
-                &mut state.create_form.source_autocomplete_state,
+                state.create_form.source_entity_field.value().to_string(),
+                &mut state.create_form.source_entity_field.state,
             )
             .placeholder("Type source entity name...")
-            .on_input(Msg::CreateFormSourceInputChanged)
-            .on_select(Msg::CreateFormSourceSelected)
-            .on_navigate(Msg::CreateFormSourceNavigate)
+            .on_event(Msg::CreateFormSourceEvent)
             .build();
 
             // Target entity label and autocomplete
@@ -709,13 +623,11 @@ impl App for MigrationComparisonSelectApp {
             let target_autocomplete = Element::autocomplete(
                 FocusId::new("create-target-autocomplete"),
                 state.target_entities.as_ref().ok().cloned().unwrap_or_default(),
-                state.create_form.target_entity.clone(),
-                &mut state.create_form.target_autocomplete_state,
+                state.create_form.target_entity_field.value().to_string(),
+                &mut state.create_form.target_entity_field.state,
             )
             .placeholder("Type target entity name...")
-            .on_input(Msg::CreateFormTargetInputChanged)
-            .on_select(Msg::CreateFormTargetSelected)
-            .on_navigate(Msg::CreateFormTargetNavigate)
+            .on_event(Msg::CreateFormTargetEvent)
             .build();
 
             // Validation error display

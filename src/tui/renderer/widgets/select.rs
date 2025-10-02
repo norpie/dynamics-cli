@@ -2,9 +2,10 @@ use ratatui::{Frame, style::Style, widgets::{Block, Borders, Paragraph}, layout:
 use crossterm::event::KeyCode;
 use crate::tui::{Element, Theme};
 use crate::tui::element::FocusId;
+use crate::tui::widgets::SelectEvent;
 use crate::tui::renderer::{InteractionRegistry, FocusRegistry, DropdownRegistry, DropdownInfo, DropdownCallback, FocusableInfo};
 
-/// Create on_key handler for select elements (dropdown navigation)
+/// Create on_key handler for select elements (dropdown navigation) - old pattern
 pub fn select_on_key<Msg: Clone + Send + 'static>(
     is_open: bool,
     on_toggle: Option<Msg>,
@@ -29,6 +30,33 @@ pub fn select_on_key<Msg: Clone + Send + 'static>(
     })
 }
 
+/// Create on_key handler for select elements (new event pattern)
+pub fn select_on_key_event<Msg: Clone + Send + 'static>(
+    is_open: bool,
+    on_event: fn(SelectEvent) -> Msg,
+) -> Box<dyn Fn(KeyCode) -> Option<Msg> + Send> {
+    Box::new(move |key| {
+        if !is_open {
+            // Closed: Enter/Space toggles dropdown (but we don't have toggle in SelectEvent)
+            // We'll handle this via Navigate event
+            match key {
+                KeyCode::Enter | KeyCode::Char(' ') => {
+                    Some(on_event(SelectEvent::Navigate(key)))
+                }
+                _ => None,
+            }
+        } else {
+            // Open: Up/Down/Enter/Esc handled via Navigate event
+            match key {
+                KeyCode::Up | KeyCode::Down | KeyCode::Enter | KeyCode::Esc => {
+                    Some(on_event(SelectEvent::Navigate(key)))
+                }
+                _ => None,
+            }
+        }
+    })
+}
+
 /// Render Select element
 pub fn render_select<Msg: Clone + Send + 'static>(
     frame: &mut Frame,
@@ -45,16 +73,23 @@ pub fn render_select<Msg: Clone + Send + 'static>(
     on_select: &Option<fn(usize) -> Msg>,
     on_toggle: &Option<Msg>,
     on_navigate: &Option<fn(KeyCode) -> Msg>,
+    on_event: &Option<fn(SelectEvent) -> Msg>,
     on_focus: &Option<Msg>,
     on_blur: &Option<Msg>,
     area: Rect,
     inside_panel: bool,
 ) {
-    // Register in focus registry
+    // Register in focus registry - prefer on_event if available
+    let on_key_handler = if let Some(event_fn) = on_event {
+        select_on_key_event(is_open, *event_fn)
+    } else {
+        select_on_key(is_open, on_toggle.clone(), on_navigate.clone())
+    };
+
     focus_registry.register_focusable(FocusableInfo {
         id: id.clone(),
         rect: area,
-        on_key: select_on_key(is_open, on_toggle.clone(), on_navigate.clone()),
+        on_key: on_key_handler,
         on_focus: on_focus.clone(),
         on_blur: on_blur.clone(),
         inside_panel,
@@ -109,12 +144,18 @@ pub fn render_select<Msg: Clone + Send + 'static>(
 
     // If open, register dropdown for overlay rendering (rendered after main UI)
     if is_open && !options.is_empty() {
+        let callback = if let Some(event_fn) = on_event {
+            DropdownCallback::SelectEvent(Some(*event_fn))
+        } else {
+            DropdownCallback::Select(*on_select)
+        };
+
         dropdown_registry.register(DropdownInfo {
             select_area,
             options: options.to_vec(),
             selected: Some(selected),
             highlight,
-            on_select: DropdownCallback::Select(*on_select),
+            on_select: callback,
         });
     }
 }

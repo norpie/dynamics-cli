@@ -125,10 +125,11 @@ impl Renderer {
                 on_select,
                 on_toggle,
                 on_navigate,
+                on_event,
                 on_focus,
                 on_blur,
             } => {
-                render_tree(frame, theme, registry, focus_registry, dropdown_registry, focused_id, id, items, node_ids, selected, *scroll_offset, on_select, on_toggle, on_navigate, on_focus, on_blur, area, inside_panel, Self::render_element);
+                render_tree(frame, theme, registry, focus_registry, dropdown_registry, focused_id, id, items, node_ids, selected, *scroll_offset, on_select, on_toggle, on_navigate, on_event, on_focus, on_blur, area, inside_panel, Self::render_element);
             }
 
             Element::Scrollable {
@@ -152,10 +153,11 @@ impl Renderer {
                 on_select,
                 on_toggle,
                 on_navigate,
+                on_event,
                 on_focus,
                 on_blur,
             } => {
-                render_select(frame, theme, registry, focus_registry, dropdown_registry, focused_id, id, options, *selected, *is_open, *highlight, on_select, on_toggle, on_navigate, on_focus, on_blur, area, inside_panel);
+                render_select(frame, theme, registry, focus_registry, dropdown_registry, focused_id, id, options, *selected, *is_open, *highlight, on_select, on_toggle, on_navigate, on_event, on_focus, on_blur, area, inside_panel);
             }
 
             Element::Autocomplete {
@@ -169,10 +171,11 @@ impl Renderer {
                 on_input,
                 on_select,
                 on_navigate,
+                on_event,
                 on_focus,
                 on_blur,
             } => {
-                render_autocomplete(frame, theme, registry, focus_registry, dropdown_registry, focused_id, id, &[], current_input, placeholder, *is_open, filtered_options, *highlight, on_input, on_select, on_navigate, on_focus, on_blur, area, inside_panel);
+                render_autocomplete(frame, theme, registry, focus_registry, dropdown_registry, focused_id, id, &[], current_input, placeholder, *is_open, filtered_options, *highlight, on_input, on_select, on_navigate, on_event, on_focus, on_blur, area, inside_panel);
             }
 
             Element::Stack { layers } => {
@@ -421,8 +424,16 @@ impl Renderer {
                     DropdownCallback::Select(Some(select_fn)) => {
                         registry.register_click(line_area, select_fn(idx));
                     }
+                    DropdownCallback::SelectEvent(Some(event_fn)) => {
+                        use crate::tui::widgets::SelectEvent;
+                        registry.register_click(line_area, event_fn(SelectEvent::Select(idx)));
+                    }
                     DropdownCallback::Autocomplete(Some(select_fn)) => {
                         registry.register_click(line_area, select_fn(option_text.clone()));
+                    }
+                    DropdownCallback::AutocompleteEvent(Some(event_fn)) => {
+                        use crate::tui::widgets::AutocompleteEvent;
+                        registry.register_click(line_area, event_fn(AutocompleteEvent::Select(option_text.clone())));
                     }
                     _ => {}
                 }

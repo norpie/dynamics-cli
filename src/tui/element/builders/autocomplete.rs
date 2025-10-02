@@ -1,5 +1,6 @@
 use crate::tui::Element;
 use crate::tui::element::FocusId;
+use crate::tui::widgets::AutocompleteEvent;
 
 /// Builder for autocomplete elements
 pub struct AutocompleteBuilder<Msg> {
@@ -13,6 +14,7 @@ pub struct AutocompleteBuilder<Msg> {
     pub(crate) on_input: Option<fn(crossterm::event::KeyCode) -> Msg>,
     pub(crate) on_select: Option<fn(String) -> Msg>,
     pub(crate) on_navigate: Option<fn(crossterm::event::KeyCode) -> Msg>,
+    pub(crate) on_event: Option<fn(AutocompleteEvent) -> Msg>,
     pub(crate) on_focus: Option<Msg>,
     pub(crate) on_blur: Option<Msg>,
 }
@@ -42,6 +44,13 @@ impl<Msg> AutocompleteBuilder<Msg> {
         self
     }
 
+    /// Set unified event callback (new event pattern)
+    /// This replaces on_input, on_select, and on_navigate
+    pub fn on_event(mut self, msg: fn(AutocompleteEvent) -> Msg) -> Self {
+        self.on_event = Some(msg);
+        self
+    }
+
     pub fn on_focus(mut self, msg: Msg) -> Self {
         self.on_focus = Some(msg);
         self
@@ -64,6 +73,7 @@ impl<Msg> AutocompleteBuilder<Msg> {
             on_input: self.on_input,
             on_select: self.on_select,
             on_navigate: self.on_navigate,
+            on_event: self.on_event,
             on_focus: self.on_focus,
             on_blur: self.on_blur,
         }

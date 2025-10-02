@@ -226,6 +226,26 @@ impl TreeState {
         }
     }
 
+    /// Handle tree event (unified event pattern)
+    /// Returns Some(selected_id) on Toggle event, None otherwise
+    pub fn handle_event(&mut self, event: crate::tui::widgets::events::TreeEvent) -> Option<String> {
+        use crate::tui::widgets::events::TreeEvent;
+
+        match event {
+            TreeEvent::Navigate(key) => {
+                self.handle_key(key);
+                None
+            }
+            TreeEvent::Toggle => {
+                // Toggle current selection
+                if let Some(id) = self.selected.clone() {
+                    self.toggle(&id);
+                }
+                None
+            }
+        }
+    }
+
     /// Rebuild metadata cache from tree structure
     /// This is called internally when cache is invalid
     pub(crate) fn rebuild_metadata<T: TreeItem>(

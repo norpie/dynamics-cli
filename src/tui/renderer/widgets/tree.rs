@@ -2,9 +2,10 @@ use ratatui::{Frame, style::Style, widgets::{Block, Borders}, layout::{Rect, Con
 use crossterm::event::KeyCode;
 use crate::tui::{Element, Theme, LayoutConstraint};
 use crate::tui::element::FocusId;
+use crate::tui::widgets::TreeEvent;
 use crate::tui::renderer::{InteractionRegistry, FocusRegistry, DropdownRegistry, FocusableInfo};
 
-/// Create on_key handler for trees (navigation and toggle)
+/// Create on_key handler for trees (navigation and toggle) - old pattern
 pub fn tree_on_key<Msg: Clone + Send + 'static>(
     selected: Option<String>,
     on_navigate: Option<fn(KeyCode) -> Msg>,
@@ -32,6 +33,24 @@ pub fn tree_on_key<Msg: Clone + Send + 'static>(
     })
 }
 
+/// Create on_key handler for trees (new event pattern)
+pub fn tree_on_key_event<Msg: Clone + Send + 'static>(
+    on_event: fn(TreeEvent) -> Msg,
+) -> Box<dyn Fn(KeyCode) -> Option<Msg> + Send> {
+    Box::new(move |key| match key {
+        // Navigation keys
+        KeyCode::Up | KeyCode::Down | KeyCode::PageUp | KeyCode::PageDown
+        | KeyCode::Home | KeyCode::End | KeyCode::Left | KeyCode::Right => {
+            Some(on_event(TreeEvent::Navigate(key)))
+        }
+        // Enter toggles expansion
+        KeyCode::Enter => {
+            Some(on_event(TreeEvent::Toggle))
+        }
+        _ => None,
+    })
+}
+
 /// Render Tree element
 pub fn render_tree<Msg: Clone + Send + 'static>(
     frame: &mut Frame,
@@ -48,17 +67,24 @@ pub fn render_tree<Msg: Clone + Send + 'static>(
     on_select: &Option<fn(String) -> Msg>,
     on_toggle: &Option<fn(String) -> Msg>,
     on_navigate: &Option<fn(KeyCode) -> Msg>,
+    on_event: &Option<fn(TreeEvent) -> Msg>,
     on_focus: &Option<Msg>,
     on_blur: &Option<Msg>,
     area: Rect,
     inside_panel: bool,
     render_fn: impl Fn(&mut Frame, &Theme, &mut InteractionRegistry<Msg>, &mut FocusRegistry<Msg>, &mut DropdownRegistry<Msg>, Option<&FocusId>, &Element<Msg>, Rect, bool),
 ) {
-    // Register in focus registry
+    // Register in focus registry - prefer on_event if available
+    let on_key_handler = if let Some(event_fn) = on_event {
+        tree_on_key_event(*event_fn)
+    } else {
+        tree_on_key(selected.clone(), on_navigate.clone(), on_toggle.clone())
+    };
+
     focus_registry.register_focusable(FocusableInfo {
         id: id.clone(),
         rect: area,
-        on_key: tree_on_key(selected.clone(), on_navigate.clone(), on_toggle.clone()),
+        on_key: on_key_handler,
         on_focus: on_focus.clone(),
         on_blur: on_blur.clone(),
         inside_panel,
