@@ -1076,6 +1076,7 @@ impl Renderer {
 
                 // Clear all interactions and focus, then re-render topmost layer to register only its interactions/focus
                 registry.clear();
+                focus_registry.clear();
                 if let Some(last_layer) = layers.last() {
                     let layer_idx = layers.len() - 1;
                     let layer_area = Self::calculate_layer_position(&last_layer.element, last_layer.alignment, area);
@@ -1083,7 +1084,7 @@ impl Renderer {
                     // Re-push the topmost layer context
                     focus_registry.push_layer(layer_idx);
                     Self::render_element(frame, theme, registry, focus_registry, dropdown_registry, focused_id, &last_layer.element, layer_area, inside_panel);
-                    focus_registry.pop_layer();
+                    // Keep the layer pushed so focusables remain in active layer
                 }
             }
         }
