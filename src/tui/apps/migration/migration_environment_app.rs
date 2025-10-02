@@ -1,8 +1,10 @@
 use crossterm::event::KeyCode;
-use crate::tui::{App, Command, Element, Subscription, Theme, FocusId};
+use crate::tui::{App, AppId, Command, Element, Subscription, Theme, FocusId};
 use crate::tui::widgets::list::{ListItem, ListState};
 use crate::tui::widgets::{TextInputState, SelectState};
 use crate::config::SavedMigration;
+use ratatui::text::{Line, Span};
+use ratatui::style::Style;
 
 pub struct MigrationEnvironmentApp;
 
@@ -66,6 +68,7 @@ pub struct CreateMigrationForm {
     source_select_state: SelectState,
     target_env: Option<String>,
     target_select_state: SelectState,
+    validation_error: Option<String>,
 }
 
 impl Default for State {
@@ -136,10 +139,15 @@ impl App for MigrationEnvironmentApp {
                 Command::set_focus(FocusId::new("migration-list"))
             }
             Msg::MigrationsLoaded(Err(err)) => {
-                // TODO: Show error screen
                 log::error!("Failed to load migrations: {}", err);
                 state.initialized = true;
-                Command::None
+                Command::batch(vec![
+                    Command::publish("error:init", serde_json::json!({
+                        "message": format!("Failed to load migrations: {}", err),
+                        "target": "MigrationEnvironment",
+                    })),
+                    Command::navigate_to(AppId::ErrorScreen),
+                ])
             }
             Msg::SelectEnvironment(idx) => {
                 if let Some(migration) = state.environments.get(idx) {
@@ -289,8 +297,18 @@ impl App for MigrationEnvironmentApp {
                 let source = state.create_form.source_env.clone();
                 let target = state.create_form.target_env.clone();
 
-                if name.is_empty() || source.is_none() || target.is_none() {
-                    // TODO: Show validation error
+                if name.is_empty() {
+                    state.create_form.validation_error = Some("Migration name is required".to_string());
+                    return Command::None;
+                }
+
+                if source.is_none() {
+                    state.create_form.validation_error = Some("Source environment is required".to_string());
+                    return Command::None;
+                }
+
+                if target.is_none() {
+                    state.create_form.validation_error = Some("Target environment is required".to_string());
                     return Command::None;
                 }
 
@@ -298,11 +316,12 @@ impl App for MigrationEnvironmentApp {
                 let target = target.unwrap();
 
                 if source == target {
-                    // TODO: Show error that source and target can't be the same
+                    state.create_form.validation_error = Some("Source and target environments must be different".to_string());
                     return Command::None;
                 }
 
                 state.show_create_modal = false;
+                state.create_form.validation_error = None;
 
                 Command::perform(
                     async move {
@@ -322,6 +341,7 @@ impl App for MigrationEnvironmentApp {
             }
             Msg::CreateFormCancel => {
                 state.show_create_modal = false;
+                state.create_form.validation_error = None;
                 Command::None
             }
             Msg::RequestDelete => {
@@ -469,8 +489,14 @@ impl App for MigrationEnvironmentApp {
             }
             Msg::MigrationCreated(Err(err)) => {
                 log::error!("Failed to create migration: {}", err);
-                // TODO: Show error screen
-                Command::None
+                state.show_create_modal = false;
+                Command::batch(vec![
+                    Command::publish("error:init", serde_json::json!({
+                        "message": format!("Failed to create migration: {}", err),
+                        "target": "MigrationEnvironment",
+                    })),
+                    Command::navigate_to(AppId::ErrorScreen),
+                ])
             }
         }
     }
@@ -641,6 +667,22 @@ impl App for MigrationEnvironmentApp {
             .title("Target Environment")
             .build();
 
+            // Validation error display
+            let error_section = if let Some(ref error) = state.create_form.validation_error {
+                ColumnBuilder::new()
+                    .add(
+                        Element::styled_text(Line::from(vec![
+                            Span::styled(format!("⚠ {}", error), Style::default().fg(theme.red))
+                        ])).build(),
+                        LayoutConstraint::Length(1)
+                    )
+                    .add(Element::text(""), LayoutConstraint::Length(1))
+                    .spacing(0)
+                    .build()
+            } else {
+                Element::text("")
+            };
+
             // Buttons
             let buttons = RowBuilder::new()
                 .add(
@@ -660,25 +702,30 @@ impl App for MigrationEnvironmentApp {
                 .build();
 
             // Modal content - use explicit sizing for proper display
+            let mut modal_builder = ColumnBuilder::new()
+                .add(name_input, LayoutConstraint::Length(3))
+                .add(Element::text(""), LayoutConstraint::Length(1))
+                .add(source_select, LayoutConstraint::Length(10))
+                .add(Element::text(""), LayoutConstraint::Length(1))
+                .add(target_select, LayoutConstraint::Length(10))
+                .add(Element::text(""), LayoutConstraint::Length(1));
+
+            if state.create_form.validation_error.is_some() {
+                modal_builder = modal_builder.add(error_section, LayoutConstraint::Length(2));
+            }
+
+            modal_builder = modal_builder
+                .add(buttons, LayoutConstraint::Length(3))
+                .spacing(0);
+
             let modal_content = Element::panel(
-                Element::container(
-                    ColumnBuilder::new()
-                        .add(name_input, LayoutConstraint::Length(3))
-                        .add(Element::text(""), LayoutConstraint::Length(1))
-                        .add(source_select, LayoutConstraint::Length(10))
-                        .add(Element::text(""), LayoutConstraint::Length(1))
-                        .add(target_select, LayoutConstraint::Length(10))
-                        .add(Element::text(""), LayoutConstraint::Length(1))
-                        .add(buttons, LayoutConstraint::Length(3))
-                        .spacing(0)
-                        .build()
-                )
+                Element::container(modal_builder.build())
                 .padding(2)
                 .build()
             )
             .title("Create New Migration")
             .width(80)
-            .height(35)
+            .height(if state.create_form.validation_error.is_some() { 37 } else { 35 })
             .build();
 
             Element::stack(vec![

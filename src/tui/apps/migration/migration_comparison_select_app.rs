@@ -170,12 +170,19 @@ impl App for MigrationComparisonSelectApp {
                         }
                         log::debug!("Loaded {} comparisons, {} source entities, {} target entities",
                             state.comparisons.len(), state.source_entities.len(), state.target_entities.len());
+                        Command::None
                     }
                     Err(e) => {
                         log::error!("Failed to load data: {}", e);
+                        Command::batch(vec![
+                            Command::publish("error:init", serde_json::json!({
+                                "message": format!("Failed to load migration data: {}", e),
+                                "target": "MigrationEnvironment",
+                            })),
+                            Command::navigate_to(AppId::ErrorScreen),
+                        ])
                     }
                 }
-                Command::None
             }
             Msg::ComparisonsLoaded(result) => {
                 match result {
