@@ -13,6 +13,7 @@ use crate::tui::widgets::ScrollableState;
 /// Format a KeyCode for display (e.g., Char('i') → "i", F(1) → "F1")
 fn format_key(key: &KeyCode) -> String {
     match key {
+        KeyCode::Char(' ') => "Space".to_string(),
         KeyCode::Char(c) => c.to_string(),
         KeyCode::F(n) => format!("F{}", n),
         KeyCode::Enter => "Enter".to_string(),
@@ -121,6 +122,16 @@ impl MultiAppRuntime {
             if self.help_menu_open {
                 self.help_scroll_state.scroll_to_top(); // Reset scroll when opening
             }
+            return Ok(true);
+        }
+
+        // Global keys: Ctrl+Space navigates to app launcher
+        if key_event.code == KeyCode::Char(' ') && key_event.modifiers.contains(KeyModifiers::CONTROL) {
+            // Clear any stale navigation from app launcher before switching to it
+            self.runtimes.get_mut(&AppId::AppLauncher)
+                .expect("AppLauncher not found in runtimes")
+                .take_navigation();
+            self.active_app = AppId::AppLauncher;
             return Ok(true);
         }
 
@@ -314,6 +325,7 @@ impl MultiAppRuntime {
         // Build global key bindings
         let global_bindings = vec![
             (KeyCode::F(1), "Toggle help menu".to_string()),
+            (KeyCode::Char(' '), "Go to app launcher (hold Ctrl)".to_string()),
             (KeyCode::Esc, "Close help menu".to_string()),
         ];
 
