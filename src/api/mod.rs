@@ -9,6 +9,7 @@ pub mod auth;
 pub mod client;
 pub mod constants;
 pub mod manager;
+pub mod metadata;
 pub mod models;
 pub mod operations;
 pub mod pluralization;

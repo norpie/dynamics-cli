@@ -474,4 +474,31 @@ impl DynamicsClient {
             Ok(QueryResult::error(error_text, Some(status_code), headers))
         }
     }
+
+    /// Fetch entity metadata from Dynamics 365 $metadata endpoint
+    pub async fn fetch_metadata(&self) -> anyhow::Result<String> {
+        let metadata_url = format!("{}$metadata", self.base_url);
+
+        // Apply rate limiting before making the request
+        self.apply_rate_limiting().await?;
+
+        let response = self.retry_policy.execute(|| async {
+            self.http_client
+                .get(&metadata_url)
+                .bearer_auth(&self.access_token)
+                .header("Accept", "application/xml")
+                .header("OData-Version", headers::ODATA_VERSION)
+                .send()
+                .await
+        }).await?;
+
+        let status = response.status();
+        if status.is_success() {
+            let metadata_xml = response.text().await?;
+            Ok(metadata_xml)
+        } else {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            anyhow::bail!("Metadata fetch failed with status {}: {}", status, error_text)
+        }
+    }
 }

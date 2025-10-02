@@ -78,6 +78,30 @@ pub struct FormField {
     pub column: i32,
 }
 
+/// Parse Dynamics 365 metadata XML and extract all entity names
+pub fn parse_entity_list(metadata_xml: &str) -> Result<Vec<String>> {
+    let doc = Document::parse(metadata_xml)
+        .map_err(|e| anyhow::anyhow!("Failed to parse metadata XML: {}", e))?;
+
+    debug!("Parsing entity list from metadata");
+
+    let mut entities = Vec::new();
+
+    // Find all EntityType elements
+    // In EDMX, entities are defined as <EntityType Name="account">
+    for entity_type in doc.descendants().filter(|node| node.has_tag_name("EntityType")) {
+        if let Some(name) = entity_type.attribute("Name") {
+            entities.push(name.to_string());
+        }
+    }
+
+    // Sort alphabetically
+    entities.sort();
+
+    debug!("Parsed {} entities from metadata", entities.len());
+    Ok(entities)
+}
+
 /// Parse Dynamics 365 metadata XML and extract field information for a specific entity
 pub fn parse_entity_fields(metadata_xml: &str, entity_name: &str) -> Result<Vec<FieldInfo>> {
     let doc = Document::parse(metadata_xml)

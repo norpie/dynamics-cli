@@ -237,4 +237,23 @@ impl Config {
     pub async fn delete_comparison(&self, id: i64) -> Result<()> {
         repository::migrations::delete_comparison(&self.pool, id).await
     }
+
+    // Entity cache methods
+    pub async fn get_entity_cache(&self, environment_name: &str, max_age_hours: i64) -> Result<Option<Vec<String>>> {
+        if let Some((entities, cached_at)) = repository::entity_cache::get(&self.pool, environment_name).await? {
+            let age = chrono::Utc::now().signed_duration_since(cached_at);
+            if age.num_hours() < max_age_hours {
+                return Ok(Some(entities));
+            }
+        }
+        Ok(None)
+    }
+
+    pub async fn set_entity_cache(&self, environment_name: &str, entities: Vec<String>) -> Result<()> {
+        repository::entity_cache::set(&self.pool, environment_name, entities).await
+    }
+
+    pub async fn delete_entity_cache(&self, environment_name: &str) -> Result<()> {
+        repository::entity_cache::delete(&self.pool, environment_name).await
+    }
 }
