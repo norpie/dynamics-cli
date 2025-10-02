@@ -27,7 +27,7 @@ impl ListItem for MigrationEnvironment {
         };
 
         let mut builder = Element::styled_text(Line::from(vec![
-            Span::styled(format!("  {} -> {}", self.source, self.target), Style::default().fg(fg_color)),
+            Span::styled(format!("  {}", self.name), Style::default().fg(fg_color)),
         ]));
 
         if let Some(bg) = bg_style {
@@ -47,6 +47,15 @@ pub struct State {
     available_environments: Vec<String>,
     show_delete_confirm: bool,
     delete_migration_name: Option<String>,
+    show_rename_modal: bool,
+    rename_migration_name: Option<String>,
+    rename_form: RenameMigrationForm,
+}
+
+#[derive(Clone, Default)]
+pub struct RenameMigrationForm {
+    new_name: String,
+    name_input_state: TextInputState,
 }
 
 #[derive(Clone, Default)]
@@ -89,6 +98,11 @@ pub enum Msg {
     ConfirmDelete,
     CancelDelete,
     MigrationDeleted(Result<(), String>),
+    RequestRename,
+    RenameFormNameChanged(KeyCode),
+    RenameFormSubmit,
+    RenameFormCancel,
+    MigrationRenamed(Result<(), String>),
 }
 
 impl App for MigrationEnvironmentApp {
@@ -343,6 +357,89 @@ impl App for MigrationEnvironmentApp {
                     }
                 }
             }
+            Msg::RequestRename => {
+                if let Some(selected_idx) = state.list_state.selected() {
+                    if let Some(migration) = state.environments.get(selected_idx) {
+                        state.rename_migration_name = Some(migration.name.clone());
+                        state.rename_form.new_name = migration.name.clone();  // Pre-fill with current name
+                        state.show_rename_modal = true;
+                    }
+                }
+                Command::None
+            }
+            Msg::RenameFormNameChanged(key) => {
+                if let Some(new_value) = state.rename_form.name_input_state.handle_key(
+                    key,
+                    &state.rename_form.new_name,
+                    Some(50)
+                ) {
+                    state.rename_form.new_name = new_value;
+                }
+                Command::None
+            }
+            Msg::RenameFormSubmit => {
+                let old_name = state.rename_migration_name.clone();
+                let new_name = state.rename_form.new_name.trim().to_string();
+
+                if new_name.is_empty() || old_name.is_none() {
+                    return Command::None;
+                }
+
+                state.show_rename_modal = false;
+                let old_name = old_name.unwrap();
+
+                Command::perform(
+                    async move {
+                        let config = crate::config();
+                        // Get existing migration
+                        let migration = config.get_migration(&old_name).await
+                            .map_err(|e| e.to_string())?
+                            .ok_or_else(|| "Migration not found".to_string())?;
+
+                        // Delete old
+                        config.delete_migration(&old_name).await
+                            .map_err(|e| e.to_string())?;
+
+                        // Insert with new name
+                        let renamed = SavedMigration {
+                            name: new_name,
+                            source_env: migration.source_env,
+                            target_env: migration.target_env,
+                            created_at: migration.created_at,
+                            last_used: chrono::Utc::now(),
+                        };
+                        config.add_migration(renamed).await
+                            .map_err(|e| e.to_string())
+                    },
+                    Msg::MigrationRenamed
+                )
+            }
+            Msg::RenameFormCancel => {
+                state.show_rename_modal = false;
+                state.rename_migration_name = None;
+                state.rename_form = RenameMigrationForm::default();
+                Command::None
+            }
+            Msg::MigrationRenamed(result) => {
+                match result {
+                    Ok(_) => {
+                        state.rename_migration_name = None;
+                        state.rename_form = RenameMigrationForm::default();
+                        // Reload list
+                        Command::perform(
+                            async {
+                                let config = crate::config();
+                                config.list_migrations().await.map_err(|e| e.to_string())
+                            },
+                            Msg::MigrationsLoaded
+                        )
+                    }
+                    Err(e) => {
+                        log::error!("Failed to rename migration: {}", e);
+                        Command::None
+                    }
+                }
+            }
             Msg::MigrationCreated(Ok(())) => {
                 // Reload migrations list
                 Command::perform(
@@ -385,6 +482,64 @@ impl App for MigrationEnvironmentApp {
                 FocusId::new("delete-confirm"),
                 Msg::ConfirmDelete,
             )
+        } else if state.show_rename_modal {
+            use crate::tui::element::{ColumnBuilder, RowBuilder};
+            use crate::tui::{LayoutConstraint, Layer};
+
+            // Name input
+            let name_input = Element::panel(
+                Element::text_input(
+                    FocusId::new("rename-name-input"),
+                    &state.rename_form.new_name,
+                    &state.rename_form.name_input_state
+                )
+                .placeholder("Migration name")
+                .on_change(Msg::RenameFormNameChanged)
+                .build()
+            )
+            .title("New Name")
+            .build();
+
+            // Buttons
+            let buttons = RowBuilder::new()
+                .add(
+                    Element::button(FocusId::new("rename-cancel"), "Cancel")
+                        .on_press(Msg::RenameFormCancel)
+                        .build(),
+                    LayoutConstraint::Fill(1),
+                )
+                .add(Element::text("  "), LayoutConstraint::Length(2))
+                .add(
+                    Element::button(FocusId::new("rename-confirm"), "Rename")
+                        .on_press(Msg::RenameFormSubmit)
+                        .build(),
+                    LayoutConstraint::Fill(1),
+                )
+                .spacing(0)
+                .build();
+
+            // Modal content
+            let modal_content = Element::panel(
+                Element::container(
+                    ColumnBuilder::new()
+                        .add(name_input, LayoutConstraint::Length(3))
+                        .add(Element::text(""), LayoutConstraint::Length(1))
+                        .add(buttons, LayoutConstraint::Length(3))
+                        .spacing(0)
+                        .build()
+                )
+                .padding(2)
+                .build()
+            )
+            .title("Rename Migration")
+            .width(60)
+            .height(13)
+            .build();
+
+            Element::stack(vec![
+                Layer::new(main_ui).dim(true),
+                Layer::new(modal_content).center(),
+            ])
         } else if state.show_create_modal {
             use crate::tui::element::{ColumnBuilder, RowBuilder, Alignment};
             use crate::tui::LayoutConstraint;
@@ -534,11 +689,13 @@ impl App for MigrationEnvironmentApp {
             subs.push(Subscription::timer(std::time::Duration::from_millis(1), Msg::Initialize));
         }
 
-        if !state.show_create_modal && !state.show_delete_confirm {
+        if !state.show_create_modal && !state.show_delete_confirm && !state.show_rename_modal {
             subs.push(Subscription::keyboard(KeyCode::Char('n'), "Create new migration", Msg::OpenCreateModal));
             subs.push(Subscription::keyboard(KeyCode::Char('N'), "Create new migration", Msg::OpenCreateModal));
             subs.push(Subscription::keyboard(KeyCode::Char('d'), "Delete migration", Msg::RequestDelete));
             subs.push(Subscription::keyboard(KeyCode::Char('D'), "Delete migration", Msg::RequestDelete));
+            subs.push(Subscription::keyboard(KeyCode::Char('r'), "Rename migration", Msg::RequestRename));
+            subs.push(Subscription::keyboard(KeyCode::Char('R'), "Rename migration", Msg::RequestRename));
         }
 
         subs
@@ -560,6 +717,9 @@ impl State {
             available_environments: vec![],
             show_delete_confirm: false,
             delete_migration_name: None,
+            show_rename_modal: false,
+            rename_migration_name: None,
+            rename_form: RenameMigrationForm::default(),
         }
     }
 }
