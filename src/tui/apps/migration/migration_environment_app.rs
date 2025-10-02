@@ -166,9 +166,12 @@ impl App for MigrationEnvironmentApp {
                     let source_env = migration.source.clone();
                     let target_env = migration.target.clone();
 
+                    let source_task = format!("Loading source entities ({})", source_env);
+                    let target_task = format!("Loading target entities ({})", target_env);
+
                     // Navigate to loading screen and start async work
                     let loading_init = serde_json::json!({
-                        "tasks": ["Loading entity metadata and comparisons"],
+                        "tasks": [&source_task, &target_task],
                         "target": "MigrationComparisonSelect",
                         "caller": "MigrationEnvironment",
                         "cancellable": false,
@@ -179,7 +182,11 @@ impl App for MigrationEnvironmentApp {
                         Command::publish("loading:init", loading_init),
                         Command::navigate_to(AppId::LoadingScreen),
                         Command::publish("loading:progress", serde_json::json!({
-                            "task": "Loading entity metadata and comparisons",
+                            "task": &source_task,
+                            "status": "InProgress",
+                        })),
+                        Command::publish("loading:progress", serde_json::json!({
+                            "task": &target_task,
                             "status": "InProgress",
                         })),
                         Command::perform(
@@ -189,37 +196,45 @@ impl App for MigrationEnvironmentApp {
                                 let config = crate::config();
                                 let manager = crate::client_manager();
 
-                                // Load source entities
-                                let source_entities = match config.get_entity_cache(&source_env, 24).await {
-                                    Ok(Some(cached)) => {
-                                        log::debug!("Using cached entities for source: {}", source_env);
-                                        cached
-                                    }
-                                    _ => {
-                                        log::debug!("Fetching fresh metadata for source: {}", source_env);
-                                        let client = manager.get_client(&source_env).await.map_err(|e| e.to_string())?;
-                                        let metadata_xml = client.fetch_metadata().await.map_err(|e| e.to_string())?;
-                                        let entities = parse_entity_list(&metadata_xml).map_err(|e| e.to_string())?;
-                                        let _ = config.set_entity_cache(&source_env, entities.clone()).await;
-                                        entities
+                                // Load both environments in parallel
+                                let source_future = async {
+                                    match config.get_entity_cache(&source_env, 24).await {
+                                        Ok(Some(cached)) => {
+                                            log::debug!("Using cached entities for source: {}", source_env);
+                                            Ok(cached)
+                                        }
+                                        _ => {
+                                            log::debug!("Fetching fresh metadata for source: {}", source_env);
+                                            let client = manager.get_client(&source_env).await.map_err(|e| e.to_string())?;
+                                            let metadata_xml = client.fetch_metadata().await.map_err(|e| e.to_string())?;
+                                            let entities = parse_entity_list(&metadata_xml).map_err(|e| e.to_string())?;
+                                            let _ = config.set_entity_cache(&source_env, entities.clone()).await;
+                                            Ok::<_, String>(entities)
+                                        }
                                     }
                                 };
 
-                                // Load target entities
-                                let target_entities = match config.get_entity_cache(&target_env, 24).await {
-                                    Ok(Some(cached)) => {
-                                        log::debug!("Using cached entities for target: {}", target_env);
-                                        cached
-                                    }
-                                    _ => {
-                                        log::debug!("Fetching fresh metadata for target: {}", target_env);
-                                        let client = manager.get_client(&target_env).await.map_err(|e| e.to_string())?;
-                                        let metadata_xml = client.fetch_metadata().await.map_err(|e| e.to_string())?;
-                                        let entities = parse_entity_list(&metadata_xml).map_err(|e| e.to_string())?;
-                                        let _ = config.set_entity_cache(&target_env, entities.clone()).await;
-                                        entities
+                                let target_future = async {
+                                    match config.get_entity_cache(&target_env, 24).await {
+                                        Ok(Some(cached)) => {
+                                            log::debug!("Using cached entities for target: {}", target_env);
+                                            Ok(cached)
+                                        }
+                                        _ => {
+                                            log::debug!("Fetching fresh metadata for target: {}", target_env);
+                                            let client = manager.get_client(&target_env).await.map_err(|e| e.to_string())?;
+                                            let metadata_xml = client.fetch_metadata().await.map_err(|e| e.to_string())?;
+                                            let entities = parse_entity_list(&metadata_xml).map_err(|e| e.to_string())?;
+                                            let _ = config.set_entity_cache(&target_env, entities.clone()).await;
+                                            Ok::<_, String>(entities)
+                                        }
                                     }
                                 };
+
+                                // Run both fetches in parallel
+                                let (source_result, target_result) = tokio::join!(source_future, target_future);
+                                let source_entities = source_result?;
+                                let target_entities = target_result?;
 
                                 // Load comparisons
                                 log::info!("Loading comparisons for migration: {}", migration_name);
@@ -248,10 +263,18 @@ impl App for MigrationEnvironmentApp {
                 match result {
                     Ok(data) => {
                         log::debug!("Comparison data loaded successfully");
+
+                        let source_task = format!("Loading source entities ({})", data.source_env);
+                        let target_task = format!("Loading target entities ({})", data.target_env);
+
                         Command::batch(vec![
-                            // Mark task as completed
+                            // Mark both tasks as completed
                             Command::publish("loading:progress", serde_json::json!({
-                                "task": "Loading entity metadata and comparisons",
+                                "task": source_task,
+                                "status": "Completed",
+                            })),
+                            Command::publish("loading:progress", serde_json::json!({
+                                "task": target_task,
                                 "status": "Completed",
                             })),
                             // Publish data to comparison select app
@@ -263,12 +286,6 @@ impl App for MigrationEnvironmentApp {
                     Err(e) => {
                         log::error!("Failed to load comparison data: {}", e);
                         Command::batch(vec![
-                            // Mark task as failed
-                            Command::publish("loading:progress", serde_json::json!({
-                                "task": "Loading entity metadata and comparisons",
-                                "status": "Failed",
-                                "error": e.clone(),
-                            })),
                             // Publish error:init so ErrorScreen receives it
                             Command::publish("error:init", serde_json::json!({
                                 "message": format!("Failed to load migration data: {}", e),
