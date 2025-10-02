@@ -335,6 +335,9 @@ impl<A: App> Runtime<A> {
                         if let Some(target) = config.on_complete {
                             self.navigation_target = Some(target);
                         }
+
+                        // Clear all pending parallel futures to prevent re-polling
+                        self.pending_parallel.clear();
                     }
 
                     break; // Exit loop since we took the coordinator

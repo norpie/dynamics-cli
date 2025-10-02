@@ -52,10 +52,6 @@ pub struct State {
     show_rename_modal: bool,
     rename_migration_name: Option<String>,
     rename_form: RenameMigrationForm,
-    // Parallel entity loading with Resource pattern
-    selected_migration_context: Option<(String, String, String)>, // (migration_name, source_env, target_env)
-    source_entities: Resource<Vec<String>>,
-    target_entities: Resource<Vec<String>>,
 }
 
 #[derive(Clone, Default)]
@@ -86,9 +82,6 @@ pub enum Msg {
     Initialize,
     MigrationsLoaded(Result<Vec<SavedMigration>, String>),
     SelectEnvironment(usize),
-    ParallelEntityLoaded(usize, Result<Vec<String>, String>),
-    AllDataLoaded(Result<ComparisonData, String>),
-    PublishComparisonData(ComparisonData),
     ListNavigate(KeyCode),
     OpenCreateModal,
     EnvironmentsLoaded(Result<Vec<String>, String>),
@@ -113,16 +106,6 @@ pub enum Msg {
     RenameFormSubmit,
     RenameFormCancel,
     MigrationRenamed(Result<(), String>),
-}
-
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
-pub struct ComparisonData {
-    pub migration_name: String,
-    pub source_env: String,
-    pub target_env: String,
-    pub comparisons: Vec<crate::config::repository::migrations::SavedComparison>,
-    pub source_entities: Vec<String>,
-    pub target_entities: Vec<String>,
 }
 
 impl App for MigrationEnvironmentApp {
@@ -168,180 +151,18 @@ impl App for MigrationEnvironmentApp {
             }
             Msg::SelectEnvironment(idx) => {
                 if let Some(migration) = state.environments.get(idx) {
-                    let migration_name = migration.name.clone();
-                    let source_env = migration.source.clone();
-                    let target_env = migration.target.clone();
-
-                    // Store context for later use and reset resources
-                    state.selected_migration_context = Some((
-                        migration_name.clone(),
-                        source_env.clone(),
-                        target_env.clone(),
-                    ));
-                    state.source_entities = Resource::Loading;
-                    state.target_entities = Resource::Loading;
-
-                    // NEW API: Load entities in parallel with automatic LoadingScreen
-                    Command::perform_parallel()
-                        .add_task(
-                            format!("Loading source entities ({})", source_env),
-                            async move {
-                                use crate::api::metadata::parse_entity_list;
-                                let config = crate::config();
-                                let manager = crate::client_manager();
-
-                                match config.get_entity_cache(&source_env, 24).await {
-                                    Ok(Some(cached)) => {
-                                        log::debug!("Using cached entities for source: {}", source_env);
-                                        Ok::<Vec<String>, String>(cached)
-                                    }
-                                    _ => {
-                                        log::debug!("Fetching fresh metadata for source: {}", source_env);
-                                        let client = manager.get_client(&source_env).await.map_err(|e| e.to_string())?;
-                                        let metadata_xml = client.fetch_metadata().await.map_err(|e| e.to_string())?;
-                                        let entities = parse_entity_list(&metadata_xml).map_err(|e| e.to_string())?;
-
-                                        match config.set_entity_cache(&source_env, entities.clone()).await {
-                                            Ok(_) => log::info!("Successfully cached {} entities for {}", entities.len(), source_env),
-                                            Err(e) => log::error!("Failed to cache entities for {}: {}", source_env, e),
-                                        }
-
-                                        Ok(entities)
-                                    }
-                                }
-                            }
-                        )
-                        .add_task(
-                            format!("Loading target entities ({})", target_env),
-                            async move {
-                                use crate::api::metadata::parse_entity_list;
-                                let config = crate::config();
-                                let manager = crate::client_manager();
-
-                                match config.get_entity_cache(&target_env, 24).await {
-                                    Ok(Some(cached)) => {
-                                        log::debug!("Using cached entities for target: {}", target_env);
-                                        Ok::<Vec<String>, String>(cached)
-                                    }
-                                    _ => {
-                                        log::debug!("Fetching fresh metadata for target: {}", target_env);
-                                        let client = manager.get_client(&target_env).await.map_err(|e| e.to_string())?;
-                                        let metadata_xml = client.fetch_metadata().await.map_err(|e| e.to_string())?;
-                                        let entities = parse_entity_list(&metadata_xml).map_err(|e| e.to_string())?;
-
-                                        match config.set_entity_cache(&target_env, entities.clone()).await {
-                                            Ok(_) => log::info!("Successfully cached {} entities for {}", entities.len(), target_env),
-                                            Err(e) => log::error!("Failed to cache entities for {}: {}", target_env, e),
-                                        }
-
-                                        Ok(entities)
-                                    }
-                                }
-                            }
-                        )
-                        .with_title("Loading Migration Data")
-                        .on_complete(AppId::MigrationEnvironment)
-                        .build(|task_idx, result| {
-                            let data = result.downcast::<Result<Vec<String>, String>>().unwrap();
-                            Msg::ParallelEntityLoaded(task_idx, *data)
-                        })
-                } else {
-                    Command::None
-                }
-            }
-            Msg::ParallelEntityLoaded(task_idx, result) => {
-                // Store result in appropriate Resource
-                match task_idx {
-                    0 => state.source_entities = Resource::from_result(result.clone()),
-                    1 => state.target_entities = Resource::from_result(result.clone()),
-                    _ => {}
-                }
-
-                // Check if both tasks are done and both succeeded
-                if let (Resource::Success(source), Resource::Success(target)) =
-                    (&state.source_entities, &state.target_entities)
-                {
-                    log::info!("Both entity loading tasks complete, preparing final data");
-                    let (migration_name, source_env, target_env) = state.selected_migration_context.take().unwrap();
-                    let source_entities = source.clone();
-                    let target_entities = target.clone();
-
-                    Command::perform(
-                        async move {
-                            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-                            let config = crate::config();
-                            let comparisons = config.get_comparisons(&migration_name).await.map_err(|e| e.to_string())?;
-                            Ok::<_, String>(ComparisonData {
-                                migration_name,
-                                source_env,
-                                target_env,
-                                comparisons,
-                                source_entities,
-                                target_entities,
-                            })
-                        },
-                        Msg::AllDataLoaded,
-                    )
-                } else if state.source_entities.is_failure() || state.target_entities.is_failure() {
-                    // Handle failure case
-                    let error = match &state.source_entities {
-                        Resource::Failure(e) => e.clone(),
-                        _ => match &state.target_entities {
-                            Resource::Failure(e) => e.clone(),
-                            _ => "Unknown error".to_string(),
-                        }
-                    };
-                    state.selected_migration_context = None;
+                    // Just publish metadata and navigate - let comparison app load its own data
                     Command::batch(vec![
-                        Command::publish("error:init", serde_json::json!({
-                            "message": format!("Failed to load entities: {}", error),
-                            "target": "MigrationEnvironment",
+                        Command::publish("migration:selected", serde_json::json!({
+                            "migration_name": migration.name,
+                            "source_env": migration.source,
+                            "target_env": migration.target,
                         })),
-                        Command::navigate_to(AppId::ErrorScreen),
+                        Command::navigate_to(AppId::MigrationComparisonSelect),
                     ])
                 } else {
-                    // Still waiting for other task(s) to complete
                     Command::None
                 }
-            }
-            Msg::AllDataLoaded(result) => {
-                match result {
-                    Ok(data) => {
-                        log::info!("All data loaded successfully");
-                        Command::batch(vec![
-                            // Navigate to comparison select
-                            Command::navigate_to(AppId::MigrationComparisonSelect),
-                            // Delay publish slightly to ensure app is initialized
-                            Command::perform(
-                                async move {
-                                    tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-                                    data
-                                },
-                                Msg::PublishComparisonData,
-                            ),
-                        ])
-                    }
-                    Err(e) => {
-                        log::error!("Failed to load comparison data: {}", e);
-                        Command::batch(vec![
-                            // Publish error:init so ErrorScreen receives it
-                            Command::publish("error:init", serde_json::json!({
-                                "message": format!("Failed to load comparison data: {}", e),
-                                "target": "MigrationEnvironment",
-                            })),
-                            // Navigate to ErrorScreen
-                            Command::navigate_to(AppId::ErrorScreen),
-                        ])
-                    }
-                }
-            }
-            Msg::PublishComparisonData(data) => {
-                log::info!("Publishing comparison data after navigation delay");
-                log::debug!("Data: migration={}, source={}, target={}, source_entities={}, target_entities={}, comparisons={}",
-                    data.migration_name, data.source_env, data.target_env,
-                    data.source_entities.len(), data.target_entities.len(), data.comparisons.len());
-                Command::publish("comparison_data", serde_json::to_value(&data).unwrap())
             }
             Msg::ListNavigate(key) => {
                 let visible_height = 20;
@@ -957,9 +778,6 @@ impl State {
             show_rename_modal: false,
             rename_migration_name: None,
             rename_form: RenameMigrationForm::default(),
-            selected_migration_context: None,
-            source_entities: Resource::NotAsked,
-            target_entities: Resource::NotAsked,
         }
     }
 }

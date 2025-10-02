@@ -6,6 +6,7 @@ use crate::tui::{
     state::theme::Theme,
     widgets::list::{ListItem, ListState},
     widgets::AutocompleteState,
+    Resource,
 };
 use crate::config::repository::migrations::SavedComparison;
 use crossterm::event::KeyCode;
@@ -42,8 +43,8 @@ pub struct State {
     target_env: Option<String>,
     comparisons: Vec<SavedComparison>,
     list_state: ListState,
-    source_entities: Vec<String>,
-    target_entities: Vec<String>,
+    source_entities: Resource<Vec<String>>,
+    target_entities: Resource<Vec<String>>,
     show_create_modal: bool,
     create_form: CreateComparisonForm,
     show_delete_confirm: bool,
@@ -60,11 +61,18 @@ pub struct EntitiesLoadedData {
     pub target_entities: Vec<String>,
 }
 
+#[derive(Clone, serde::Deserialize)]
+pub struct MigrationMetadata {
+    pub migration_name: String,
+    pub source_env: String,
+    pub target_env: String,
+}
+
 #[derive(Clone)]
 pub enum Msg {
-    ComparisonDataReceived(crate::tui::apps::migration::migration_environment_app::ComparisonData),
+    Initialize(MigrationMetadata),
+    ParallelDataLoaded(usize, Result<Vec<String>, String>),
     ComparisonsLoaded(Result<Vec<SavedComparison>, String>),
-    EntitiesLoaded(EntitiesLoadedData),
     ListNavigate(KeyCode),
     SelectComparison,
     CreateComparison,
@@ -122,23 +130,104 @@ impl App for MigrationComparisonSelectApp {
     fn update(state: &mut Self::State, msg: Self::Msg) -> Command<Self::Msg> {
         log::debug!("MigrationComparisonSelectApp::update() called with message");
         match msg {
-            Msg::ComparisonDataReceived(data) => {
-                log::info!("✓ ComparisonDataReceived message processed in update()");
-                log::info!("  Migration: {} ({} -> {})", data.migration_name, data.source_env, data.target_env);
-                log::info!("  Source entities: {}, Target entities: {}, Comparisons: {}",
-                    data.source_entities.len(), data.target_entities.len(), data.comparisons.len());
-                state.migration_name = Some(data.migration_name);
-                state.source_env = Some(data.source_env);
-                state.target_env = Some(data.target_env);
-                state.comparisons = data.comparisons;
-                state.source_entities = data.source_entities;
-                state.target_entities = data.target_entities;
-                state.list_state = ListState::new();
-                if !state.comparisons.is_empty() {
-                    state.list_state.select(Some(0));
+            Msg::Initialize(metadata) => {
+                log::info!("✓ Initialize with migration: {} ({} -> {})",
+                    metadata.migration_name, metadata.source_env, metadata.target_env);
+
+                state.migration_name = Some(metadata.migration_name.clone());
+                state.source_env = Some(metadata.source_env.clone());
+                state.target_env = Some(metadata.target_env.clone());
+                state.source_entities = Resource::Loading;
+                state.target_entities = Resource::Loading;
+
+                // Load entities in parallel with automatic LoadingScreen
+                Command::perform_parallel()
+                    .add_task(
+                        format!("Loading source entities ({})", metadata.source_env),
+                        async move {
+                            use crate::api::metadata::parse_entity_list;
+                            let config = crate::config();
+                            let manager = crate::client_manager();
+
+                            match config.get_entity_cache(&metadata.source_env, 24).await {
+                                Ok(Some(cached)) => {
+                                    log::debug!("Using cached entities for source: {}", metadata.source_env);
+                                    Ok::<Vec<String>, String>(cached)
+                                }
+                                _ => {
+                                    log::debug!("Fetching fresh metadata for source: {}", metadata.source_env);
+                                    let client = manager.get_client(&metadata.source_env).await.map_err(|e| e.to_string())?;
+                                    let metadata_xml = client.fetch_metadata().await.map_err(|e| e.to_string())?;
+                                    let entities = parse_entity_list(&metadata_xml).map_err(|e| e.to_string())?;
+
+                                    match config.set_entity_cache(&metadata.source_env, entities.clone()).await {
+                                        Ok(_) => log::info!("Successfully cached {} entities for {}", entities.len(), metadata.source_env),
+                                        Err(e) => log::error!("Failed to cache entities for {}: {}", metadata.source_env, e),
+                                    }
+
+                                    Ok(entities)
+                                }
+                            }
+                        }
+                    )
+                    .add_task(
+                        format!("Loading target entities ({})", metadata.target_env),
+                        async move {
+                            use crate::api::metadata::parse_entity_list;
+                            let config = crate::config();
+                            let manager = crate::client_manager();
+
+                            match config.get_entity_cache(&metadata.target_env, 24).await {
+                                Ok(Some(cached)) => {
+                                    log::debug!("Using cached entities for target: {}", metadata.target_env);
+                                    Ok::<Vec<String>, String>(cached)
+                                }
+                                _ => {
+                                    log::debug!("Fetching fresh metadata for target: {}", metadata.target_env);
+                                    let client = manager.get_client(&metadata.target_env).await.map_err(|e| e.to_string())?;
+                                    let metadata_xml = client.fetch_metadata().await.map_err(|e| e.to_string())?;
+                                    let entities = parse_entity_list(&metadata_xml).map_err(|e| e.to_string())?;
+
+                                    match config.set_entity_cache(&metadata.target_env, entities.clone()).await {
+                                        Ok(_) => log::info!("Successfully cached {} entities for {}", entities.len(), metadata.target_env),
+                                        Err(e) => log::error!("Failed to cache entities for {}: {}", metadata.target_env, e),
+                                    }
+
+                                    Ok(entities)
+                                }
+                            }
+                        }
+                    )
+                    .with_title("Loading Migration Data")
+                    .on_complete(AppId::MigrationComparisonSelect)
+                    .build(|task_idx, result| {
+                        let data = result.downcast::<Result<Vec<String>, String>>().unwrap();
+                        Msg::ParallelDataLoaded(task_idx, *data)
+                    })
+            }
+            Msg::ParallelDataLoaded(task_idx, result) => {
+                // Store result in appropriate Resource
+                match task_idx {
+                    0 => state.source_entities = Resource::from_result(result),
+                    1 => state.target_entities = Resource::from_result(result),
+                    _ => {}
                 }
-                log::info!("✓ State updated successfully");
-                Command::None
+
+                // Load comparisons when both entities are loaded
+                if let (Resource::Success(_), Resource::Success(_)) =
+                    (&state.source_entities, &state.target_entities)
+                {
+                    let migration_name = state.migration_name.clone().unwrap();
+                    Command::perform(
+                        async move {
+                            let config = crate::config();
+                            config.get_comparisons(&migration_name).await.map_err(|e| e.to_string())
+                        },
+                        Msg::ComparisonsLoaded,
+                    )
+                } else {
+                    Command::None
+                }
             }
             Msg::ComparisonsLoaded(result) => {
                 match result {
@@ -153,13 +242,6 @@ impl App for MigrationComparisonSelectApp {
                         log::error!("Failed to load comparisons: {}", e);
                     }
                 }
-                Command::None
-            }
-            Msg::EntitiesLoaded(data) => {
-                state.source_entities = data.source_entities;
-                state.target_entities = data.target_entities;
-                log::debug!("Loaded {} source entities and {} target entities",
-                    state.source_entities.len(), state.target_entities.len());
                 Command::None
             }
             Msg::ListNavigate(key) => {
@@ -196,10 +278,12 @@ impl App for MigrationComparisonSelectApp {
                     None,
                 ) {
                     state.create_form.source_entity = new_value;
-                    state.create_form.source_autocomplete_state.update_filtered_options(
-                        &state.create_form.source_entity,
-                        &state.source_entities,
-                    );
+                    if let Resource::Success(entities) = &state.source_entities {
+                        state.create_form.source_autocomplete_state.update_filtered_options(
+                            &state.create_form.source_entity,
+                            entities,
+                        );
+                    }
                 }
                 Command::None
             }
@@ -238,10 +322,12 @@ impl App for MigrationComparisonSelectApp {
                     None,
                 ) {
                     state.create_form.target_entity = new_value;
-                    state.create_form.target_autocomplete_state.update_filtered_options(
-                        &state.create_form.target_entity,
-                        &state.target_entities,
-                    );
+                    if let Resource::Success(entities) = &state.target_entities {
+                        state.create_form.target_autocomplete_state.update_filtered_options(
+                            &state.create_form.target_entity,
+                            entities,
+                        );
+                    }
                 }
                 Command::None
             }
@@ -294,14 +380,18 @@ impl App for MigrationComparisonSelectApp {
                 }
 
                 // Validate that entities exist in their respective lists
-                if !state.source_entities.contains(&source_entity) {
-                    state.create_form.validation_error = Some(format!("Source entity '{}' not found", source_entity));
-                    return Command::None;
+                if let Resource::Success(source_list) = &state.source_entities {
+                    if !source_list.contains(&source_entity) {
+                        state.create_form.validation_error = Some(format!("Source entity '{}' not found", source_entity));
+                        return Command::None;
+                    }
                 }
 
-                if !state.target_entities.contains(&target_entity) {
-                    state.create_form.validation_error = Some(format!("Target entity '{}' not found", target_entity));
-                    return Command::None;
+                if let Resource::Success(target_list) = &state.target_entities {
+                    if !target_list.contains(&target_entity) {
+                        state.create_form.validation_error = Some(format!("Target entity '{}' not found", target_entity));
+                        return Command::None;
+                    }
                 }
 
                 let migration_name = state.migration_name.clone().unwrap_or_default();
@@ -601,7 +691,7 @@ impl App for MigrationComparisonSelectApp {
 
             let source_autocomplete = Element::autocomplete(
                 FocusId::new("create-source-autocomplete"),
-                state.source_entities.clone(),
+                state.source_entities.as_ref().ok().cloned().unwrap_or_default(),
                 state.create_form.source_entity.clone(),
                 &mut state.create_form.source_autocomplete_state,
             )
@@ -618,7 +708,7 @@ impl App for MigrationComparisonSelectApp {
 
             let target_autocomplete = Element::autocomplete(
                 FocusId::new("create-target-autocomplete"),
-                state.target_entities.clone(),
+                state.target_entities.as_ref().ok().cloned().unwrap_or_default(),
                 state.create_form.target_entity.clone(),
                 &mut state.create_form.target_autocomplete_state,
             )
@@ -710,27 +800,21 @@ impl App for MigrationComparisonSelectApp {
 
     fn subscriptions(state: &Self::State) -> Vec<Subscription<Self::Msg>> {
         let mut subs = vec![
-            // Listen for comparison data from MigrationEnvironmentApp
-            Subscription::subscribe("comparison_data", |data| {
-                log::info!("✓ Subscription handler called for 'comparison_data' event");
+            // Listen for migration selection from MigrationEnvironmentApp
+            Subscription::subscribe("migration:selected", |data| {
+                log::info!("✓ Subscription handler called for 'migration:selected' event");
                 log::debug!("  Raw data: {:?}", data);
-                match serde_json::from_value::<crate::tui::apps::migration::migration_environment_app::ComparisonData>(data.clone()) {
-                    Ok(comparison_data) => {
-                        log::info!("✓ Successfully deserialized comparison data");
-                        Some(Msg::ComparisonDataReceived(comparison_data))
+                match serde_json::from_value::<MigrationMetadata>(data.clone()) {
+                    Ok(metadata) => {
+                        log::info!("✓ Successfully deserialized migration metadata");
+                        Some(Msg::Initialize(metadata))
                     }
                     Err(e) => {
-                        log::error!("✗ Failed to deserialize comparison data: {}", e);
+                        log::error!("✗ Failed to deserialize migration metadata: {}", e);
                         log::error!("  Data was: {:?}", data);
                         None
                     }
                 }
-            }),
-            // Listen for entities loaded events
-            Subscription::subscribe("entities_loaded", |data| {
-                serde_json::from_value::<EntitiesLoadedData>(data)
-                    .ok()
-                    .map(Msg::EntitiesLoaded)
             }),
         ];
 
@@ -791,8 +875,8 @@ impl App for MigrationComparisonSelectApp {
         if let Some(ref migration_name) = state.migration_name {
             let source = state.source_env.as_deref().unwrap_or("?");
             let target = state.target_env.as_deref().unwrap_or("?");
-            let source_count = state.source_entities.len();
-            let target_count = state.target_entities.len();
+            let source_count = state.source_entities.as_ref().ok().map(|v| v.len()).unwrap_or(0);
+            let target_count = state.target_entities.as_ref().ok().map(|v| v.len()).unwrap_or(0);
             Some(Line::from(vec![
                 Span::styled(migration_name.clone(), Style::default().fg(theme.text)),
                 Span::styled(
