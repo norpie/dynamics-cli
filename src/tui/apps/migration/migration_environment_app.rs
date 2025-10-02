@@ -141,9 +141,25 @@ impl App for MigrationEnvironmentApp {
                 state.initialized = true;
                 Command::None
             }
-            Msg::SelectEnvironment(_idx) => {
-                // TODO: Navigate to next screen
-                Command::None
+            Msg::SelectEnvironment(idx) => {
+                if let Some(migration) = state.environments.get(idx) {
+                    // Publish migration selected event and navigate
+                    use crate::tui::apps::migration::migration_comparison_select_app::MigrationSelectedData;
+                    use crate::tui::command::AppId;
+                    Command::batch(vec![
+                        Command::publish(
+                            "migration_selected",
+                            MigrationSelectedData {
+                                name: migration.name.clone(),
+                                source_env: migration.source.clone(),
+                                target_env: migration.target.clone(),
+                            },
+                        ),
+                        Command::navigate_to(AppId::MigrationComparisonSelect),
+                    ])
+                } else {
+                    Command::None
+                }
             }
             Msg::ListNavigate(key) => {
                 let visible_height = 20;

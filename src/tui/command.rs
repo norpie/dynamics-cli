@@ -44,6 +44,7 @@ pub enum AppId {
     LoadingScreen,
     ErrorScreen,
     MigrationEnvironment,
+    MigrationComparisonSelect,
 }
 
 impl<Msg> Command<Msg> {
