@@ -1,11 +1,11 @@
 use crossterm::event::KeyCode;
-use crate::tui::{App, Command, Element, Subscription, Theme, FocusId, LayoutConstraint};
+use crate::tui::{App, Command, Element, Subscription, Theme, FocusId};
 use crate::tui::widgets::{TextInputField, SelectField, AutocompleteField};
-use crate::tui::element::ColumnBuilder;
-use dynamics_lib_macros::AppState;
+use dynamics_lib_macros::{AppState, Validate};
 use ratatui::text::{Line, Span};
 use ratatui::style::Style;
 use ratatui::prelude::Stylize;
+use crate::{col, spacer, button_row, use_constraints};
 
 pub struct Example8;
 
@@ -16,17 +16,20 @@ pub enum Msg {
     Submit,
 }
 
-#[derive(AppState)]
+#[derive(AppState, Validate)]
 pub struct State {
     initialized: bool,
 
     #[widget("migration-name")]
+    #[validate(not_empty, message = "Name is required")]
     name: TextInputField,
 
     #[widget("source-env", options = "self.environments")]
+    #[validate(required, message = "Source environment is required")]
     source: SelectField,
 
     #[widget("entity-type", options = "self.entities")]
+    #[validate(not_empty, message = "Entity is required")]
     entity: AutocompleteField,
 
     error: Option<String>,
@@ -80,36 +83,30 @@ impl App for Example8 {
                 Command::None
             }
             Msg::Submit => {
-                // Validation
-                if state.name.value().trim().is_empty() {
-                    state.error = Some("Name is required".to_string());
-                    return Command::None;
+                // Validate using generated macro method
+                match state.validate() {
+                    Ok(_) => {
+                        // Success - show confirmation
+                        state.error = Some(format!(
+                            "✓ Success! Created migration '{}' from {} for entity {}",
+                            state.name.value(),
+                            state.source.value().unwrap(),
+                            state.entity.value()
+                        ));
+                        Command::None
+                    }
+                    Err(validation_error) => {
+                        state.error = Some(validation_error);
+                        Command::None
+                    }
                 }
-
-                if state.source.value().is_none() {
-                    state.error = Some("Source environment is required".to_string());
-                    return Command::None;
-                }
-
-                if state.entity.value().trim().is_empty() {
-                    state.error = Some("Entity is required".to_string());
-                    return Command::None;
-                }
-
-                // Success - show confirmation
-                state.error = Some(format!(
-                    "✓ Success! Created migration '{}' from {} for entity {}",
-                    state.name.value(),
-                    state.source.value().unwrap(),
-                    state.entity.value()
-                ));
-
-                Command::None
             }
         }
     }
 
     fn view(state: &mut State, theme: &Theme) -> Element<Msg> {
+        use_constraints!();
+
         // Title
         let title = Element::styled_text(Line::from(vec![
             Span::styled("Form Builder with Auto-Routing", Style::default().fg(theme.mauve).bold())
@@ -117,8 +114,12 @@ impl App for Example8 {
 
         let description = Element::styled_text(Line::from(vec![
             Span::styled("This form uses ", Style::default().fg(theme.text)),
-            Span::styled("#[derive(AppState)]", Style::default().fg(theme.green).bold()),
-            Span::styled(" - all widget events are auto-routed!", Style::default().fg(theme.text)),
+            Span::styled("#[derive(AppState, Validate)]", Style::default().fg(theme.green).bold()),
+            Span::styled(" - zero boilerplate!", Style::default().fg(theme.text)),
+        ])).build();
+
+        let description2 = Element::styled_text(Line::from(vec![
+            Span::styled("• AppState: auto-routes widget events | Validate: declarative validation", Style::default().fg(theme.subtext1)),
         ])).build();
 
         // Name input
@@ -170,32 +171,25 @@ impl App for Example8 {
             Element::text("")
         };
 
-        // Buttons
-        let buttons = Element::row(vec![
-            Element::button(FocusId::new("cancel-btn"), "[ Cancel ]")
-                .on_press(Msg::Cancel)
-                .build(),
-            Element::text("  "),
-            Element::button(FocusId::new("submit-btn"), "[ Submit ]")
-                .on_press(Msg::Submit)
-                .build(),
-        ]).build();
-
-        // Build layout
-        ColumnBuilder::new()
-            .add(title, LayoutConstraint::Length(1))
-            .add(description, LayoutConstraint::Length(1))
-            .add(Element::text(""), LayoutConstraint::Length(1))
-            .add(name_input, LayoutConstraint::Length(3))
-            .add(Element::text(""), LayoutConstraint::Length(1))
-            .add(source_select, LayoutConstraint::Length(10))
-            .add(Element::text(""), LayoutConstraint::Length(1))
-            .add(entity_autocomplete, LayoutConstraint::Length(10))
-            .add(Element::text(""), LayoutConstraint::Length(1))
-            .add(message, LayoutConstraint::Length(2))
-            .add(Element::text(""), LayoutConstraint::Fill(1))
-            .add(buttons, LayoutConstraint::Length(3))
-            .build()
+        // Build layout using declarative macros
+        col![
+            title => Length(1),
+            description => Length(1),
+            description2 => Length(1),
+            spacer!() => Length(1),
+            name_input => Length(3),
+            spacer!() => Length(1),
+            source_select => Length(10),
+            spacer!() => Length(1),
+            entity_autocomplete => Length(10),
+            spacer!() => Length(1),
+            message => Length(2),
+            spacer!() => Fill(1),
+            button_row![
+                ("cancel-btn", "[ Cancel ]", Msg::Cancel),
+                ("submit-btn", "[ Submit ]", Msg::Submit)
+            ] => Length(3)
+        ]
     }
 
     fn subscriptions(state: &State) -> Vec<Subscription<Msg>> {
