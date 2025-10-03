@@ -90,4 +90,20 @@ impl ScrollableState {
             self.scroll_offset = self.scroll_offset.min(max_scroll);
         }
     }
+
+    /// Handle keyboard navigation (like ListState::handle_key)
+    pub fn handle_key(&mut self, key: crossterm::event::KeyCode, content_height: usize, viewport_height: usize) {
+        // Update dimensions first
+        self.update_dimensions(content_height, viewport_height);
+
+        match key {
+            crossterm::event::KeyCode::Up => self.scroll_up(1),
+            crossterm::event::KeyCode::Down => self.scroll_down(1),
+            crossterm::event::KeyCode::PageUp => self.page_up(),
+            crossterm::event::KeyCode::PageDown => self.page_down(),
+            crossterm::event::KeyCode::Home => self.scroll_to_top(),
+            crossterm::event::KeyCode::End => self.scroll_to_bottom(),
+            _ => {}
+        }
+    }
 }

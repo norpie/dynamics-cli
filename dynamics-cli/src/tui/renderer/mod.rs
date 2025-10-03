@@ -291,11 +291,11 @@ impl Renderer {
                 child,
                 scroll_offset,
                 content_height,
-                on_scroll,
+                on_navigate,
                 on_focus,
                 on_blur,
             } => {
-                render_scrollable(frame, theme, registry, focus_registry, dropdown_registry, focused_id, id, child, *scroll_offset, content_height, on_scroll, on_focus, on_blur, area, inside_panel, Self::render_element);
+                render_scrollable(frame, theme, registry, focus_registry, dropdown_registry, focused_id, id, child, *scroll_offset, content_height, on_navigate, on_focus, on_blur, area, inside_panel, Self::render_element);
             }
 
             Element::Select {

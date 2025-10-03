@@ -7,7 +7,7 @@ pub struct ScrollableBuilder<Msg> {
     pub(crate) child: Box<Element<Msg>>,
     pub(crate) scroll_offset: usize,
     pub(crate) content_height: Option<usize>,
-    pub(crate) on_scroll: Option<fn(usize) -> Msg>,
+    pub(crate) on_navigate: Option<fn(crossterm::event::KeyCode) -> Msg>,
     pub(crate) on_focus: Option<Msg>,
     pub(crate) on_blur: Option<Msg>,
 }
@@ -19,9 +19,9 @@ impl<Msg> ScrollableBuilder<Msg> {
         self
     }
 
-    /// Set callback when scroll position changes
-    pub fn on_scroll(mut self, msg: fn(usize) -> Msg) -> Self {
-        self.on_scroll = Some(msg);
+    /// Set callback for navigation keys (Up/Down/PageUp/PageDown/Home/End)
+    pub fn on_navigate(mut self, msg: fn(crossterm::event::KeyCode) -> Msg) -> Self {
+        self.on_navigate = Some(msg);
         self
     }
 
@@ -41,7 +41,7 @@ impl<Msg> ScrollableBuilder<Msg> {
             child: self.child,
             scroll_offset: self.scroll_offset,
             content_height: self.content_height,
-            on_scroll: self.on_scroll,
+            on_navigate: self.on_navigate,
             on_focus: self.on_focus,
             on_blur: self.on_blur,
         }

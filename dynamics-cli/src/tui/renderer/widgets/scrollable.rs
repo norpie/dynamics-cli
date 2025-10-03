@@ -6,16 +6,24 @@ use crate::tui::command::DispatchTarget;
 use crate::tui::renderer::{InteractionRegistry, FocusRegistry, DropdownRegistry, FocusableInfo};
 
 /// Create on_key handler for scrollable elements (scroll navigation)
-/// Scrollable doesn't support auto-dispatch - apps handle scroll via subscriptions
 pub fn scrollable_on_key<Msg: Clone + Send + 'static>(
-    on_scroll: Option<fn(usize) -> Msg>,
+    on_navigate: Option<fn(KeyCode) -> Msg>,
 ) -> Box<dyn Fn(KeyCode) -> DispatchTarget<Msg> + Send> {
-    Box::new(move |_key| {
-        // Scrollable doesn't emit scroll messages directly via keyboard
-        // The app should handle Up/Down/PageUp/PageDown in subscriptions
-        // and call ScrollableState methods directly
-        // Pass through to global subscriptions
-        DispatchTarget::PassThrough
+    Box::new(move |key| match key {
+        // Scroll navigation keys
+        KeyCode::Up | KeyCode::Down | KeyCode::PageUp | KeyCode::PageDown
+        | KeyCode::Home | KeyCode::End => {
+            if let Some(f) = on_navigate {
+                DispatchTarget::AppMsg(f(key))
+            } else {
+                // No callback - pass through to global subscriptions
+                DispatchTarget::PassThrough
+            }
+        }
+        _ => {
+            // Unhandled key - pass through to global subscriptions
+            DispatchTarget::PassThrough
+        }
     })
 }
 
@@ -31,7 +39,7 @@ pub fn render_scrollable<Msg: Clone + Send + 'static>(
     child: &Element<Msg>,
     scroll_offset: usize,
     content_height: &Option<usize>,
-    on_scroll: &Option<fn(usize) -> Msg>,
+    on_navigate: &Option<fn(KeyCode) -> Msg>,
     on_focus: &Option<Msg>,
     on_blur: &Option<Msg>,
     area: Rect,
@@ -42,7 +50,7 @@ pub fn render_scrollable<Msg: Clone + Send + 'static>(
     focus_registry.register_focusable(FocusableInfo {
         id: id.clone(),
         rect: area,
-        on_key: scrollable_on_key(on_scroll.clone()),
+        on_key: scrollable_on_key(on_navigate.clone()),
         on_focus: on_focus.clone(),
         on_blur: on_blur.clone(),
         inside_panel,
