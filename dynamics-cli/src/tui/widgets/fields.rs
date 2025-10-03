@@ -1,6 +1,6 @@
 use crate::tui::command::Command;
-use super::{AutocompleteState, TextInputState};
-use super::events::{AutocompleteEvent, TextInputEvent};
+use super::{AutocompleteState, TextInputState, SelectState};
+use super::events::{AutocompleteEvent, TextInputEvent, SelectEvent};
 
 /// Field that combines value + state for Autocomplete widget
 #[derive(Clone, Default)]
@@ -99,5 +99,51 @@ impl TextInputField {
     /// Set value (useful for initialization)
     pub fn set_value(&mut self, value: String) {
         self.value = value;
+    }
+}
+
+/// Field that combines value + state for Select widget
+#[derive(Clone, Default)]
+pub struct SelectField {
+    selected_option: Option<String>,
+    pub state: SelectState,
+}
+
+impl SelectField {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Handle select event and update selected value
+    pub fn handle_event<Msg>(&mut self, event: SelectEvent, options: &[String]) -> Command<Msg> {
+        match event {
+            SelectEvent::Navigate(key) => {
+                self.state.handle_event(event);
+            }
+            SelectEvent::Select(idx) => {
+                self.state.handle_event(event);
+                // Index 0 might be a placeholder, actual options start at 1
+                // This depends on how the caller sets up options
+                if idx < options.len() {
+                    self.selected_option = Some(options[idx].clone());
+                }
+            }
+        }
+        Command::None
+    }
+
+    /// Get selected value as Option
+    pub fn value(&self) -> Option<&str> {
+        self.selected_option.as_deref()
+    }
+
+    /// Set selected value (useful for initialization)
+    pub fn set_value(&mut self, value: Option<String>) {
+        self.selected_option = value;
+    }
+
+    /// Check if dropdown is open
+    pub fn is_open(&self) -> bool {
+        self.state.is_open()
     }
 }

@@ -1,12 +1,26 @@
 use proc_macro::TokenStream;
 
-// Placeholder for future derive macros
-// Examples from reducal.md:
-// - #[derive(Validate)] - validation framework
-// - #[derive(App)] - widget auto-routing
-// - Field type generators (TextInputField, SelectField, etc)
+mod validate;
+mod utils;
 
-#[proc_macro_derive(Placeholder)]
-pub fn placeholder_derive(_input: TokenStream) -> TokenStream {
-    TokenStream::new()
+/// Derive macro for validation framework
+///
+/// # Example
+/// ```rust
+/// #[derive(Validate)]
+/// struct CreateForm {
+///     #[validate(not_empty, message = "Name required")]
+///     name: TextInputField,
+///
+///     #[validate(required, message = "Source required")]
+///     source: SelectField,
+/// }
+/// ```
+#[proc_macro_derive(Validate, attributes(validate))]
+pub fn derive_validate(input: TokenStream) -> TokenStream {
+    validate::derive(input)
 }
+
+// Future proc macros:
+// - #[derive(App)] - Widget auto-routing
+// - Field type generators

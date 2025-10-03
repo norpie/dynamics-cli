@@ -234,3 +234,113 @@ macro_rules! labeled_input {
         .build()
     };
 }
+
+/// Load data into a Resource field with automatic Loading state
+///
+/// Sets the field to Loading, executes async future, and returns a Command
+/// that wraps the result in Resource::from_result().
+///
+/// # Examples
+/// ```
+/// // In update handler - requires a Msg variant to receive the result
+/// Msg::LoadData => {
+///     state.data = Resource::Loading;
+///     Command::perform(fetch_data(), Msg::DataLoaded)
+/// }
+/// Msg::DataLoaded(result) => {
+///     state.data = Resource::from_result(result);
+///     Command::None
+/// }
+/// ```
+///
+/// Note: This is a documentation macro pattern. The actual implementation
+/// is done manually in update handlers since we can't capture state mutably
+/// in the macro closure.
+
+/// Declarative subscriptions macro
+///
+/// Provides a more readable way to define subscriptions with conditional logic
+/// and key aliases.
+///
+/// # Examples
+/// ```
+/// subscriptions! {
+///     // Conditional timer
+///     timer!(1ms, when: !state.initialized, Msg::Initialize);
+///
+///     // Conditional keyboard subscriptions
+///     when(!state.show_modal) {
+///         key!('n' | 'N', "Create new", Msg::Create);
+///         key!('d' | 'D', "Delete", Msg::Delete);
+///     }
+///
+///     // Event subscription
+///     event!("migration:selected", |data| {
+///         serde_json::from_value::<Metadata>(data).ok().map(Msg::Init)
+///     });
+/// }
+/// ```
+#[macro_export]
+macro_rules! subscriptions {
+    (
+        $($item:tt)*
+    ) => {{
+        let mut subs = Vec::new();
+        $crate::subscriptions_impl!(subs; $($item)*);
+        subs
+    }};
+}
+
+/// Internal implementation macro for subscriptions
+#[macro_export]
+macro_rules! subscriptions_impl {
+    // Base case: empty
+    ($subs:ident;) => {};
+
+    // timer! macro
+    ($subs:ident; timer!($dur:expr, when: $cond:expr, $msg:expr); $($rest:tt)*) => {
+        if $cond {
+            $subs.push($crate::tui::Subscription::timer($dur, $msg));
+        }
+        $crate::subscriptions_impl!($subs; $($rest)*);
+    };
+
+    // key! macro with single key
+    ($subs:ident; key!($key:expr, $desc:expr, $msg:expr); $($rest:tt)*) => {
+        $subs.push($crate::tui::Subscription::keyboard(
+            crossterm::event::KeyCode::Char($key),
+            $desc,
+            $msg
+        ));
+        $crate::subscriptions_impl!($subs; $($rest)*);
+    };
+
+    // key! macro with multiple keys (aliases) - using tt to allow |
+    ($subs:ident; key!($key1:tt | $key2:tt, $desc:expr, $msg:expr); $($rest:tt)*) => {
+        $subs.push($crate::tui::Subscription::keyboard(
+            crossterm::event::KeyCode::Char($key1),
+            $desc,
+            $msg.clone()
+        ));
+        $subs.push($crate::tui::Subscription::keyboard(
+            crossterm::event::KeyCode::Char($key2),
+            $desc,
+            $msg
+        ));
+        $crate::subscriptions_impl!($subs; $($rest)*);
+    };
+
+    // when block
+    ($subs:ident; when($cond:expr) { $($inner:tt)* } $($rest:tt)*) => {
+        if $cond {
+            $crate::subscriptions_impl!($subs; $($inner)*);
+        }
+        $crate::subscriptions_impl!($subs; $($rest)*);
+    };
+
+    // event! macro
+    ($subs:ident; event!($topic:expr, $handler:expr); $($rest:tt)*) => {
+        $subs.push($crate::tui::Subscription::subscribe($topic, $handler));
+        $crate::subscriptions_impl!($subs; $($rest)*);
+    };
+}

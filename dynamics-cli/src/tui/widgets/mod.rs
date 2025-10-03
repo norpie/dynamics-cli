@@ -9,7 +9,7 @@ pub mod tree;
 
 pub use autocomplete::AutocompleteState;
 pub use events::{AutocompleteEvent, ListEvent, SelectEvent, TextInputEvent, TreeEvent};
-pub use fields::{AutocompleteField, TextInputField};
+pub use fields::{AutocompleteField, SelectField, TextInputField};
 pub use list::{ListItem, ListState};
 pub use scrollable::ScrollableState;
 pub use select::SelectState;

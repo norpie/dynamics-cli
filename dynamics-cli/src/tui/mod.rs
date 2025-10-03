@@ -13,6 +13,9 @@ pub mod resource;
 #[macro_use]
 pub mod macros;
 
+#[cfg(test)]
+mod test_validate;
+
 pub use command::{Command, AppId};
 pub use element::{Element, LayoutConstraint, Layer, Alignment, FocusId};
 pub use subscription::Subscription;
