@@ -730,6 +730,12 @@ impl App for MigrationComparisonSelectApp {
                 "Rename comparison",
                 Msg::RequestRename,
             ));
+        } else if state.show_create_modal {
+            subs.push(Subscription::keyboard(KeyCode::Esc, "Close modal", Msg::CreateFormCancel));
+        } else if state.show_delete_confirm {
+            subs.push(Subscription::keyboard(KeyCode::Esc, "Cancel delete", Msg::CancelDelete));
+        } else if state.show_rename_modal {
+            subs.push(Subscription::keyboard(KeyCode::Esc, "Close modal", Msg::RenameFormCancel));
         }
 
         subs
