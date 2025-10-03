@@ -1,44 +1,47 @@
 use crossterm::event::KeyCode;
-use crate::tui::{App, Command, Element, Subscription, Theme, FocusId};
-use crate::tui::widgets::{TextInputField, SelectField, AutocompleteField, TextInputEvent, SelectEvent, AutocompleteEvent};
-use crate::form_layout;
+use crate::tui::{App, Command, Element, Subscription, Theme, FocusId, LayoutConstraint};
+use crate::tui::widgets::{TextInputField, SelectField, AutocompleteField};
+use crate::tui::element::ColumnBuilder;
+use dynamics_lib_macros::AppState;
+use ratatui::text::{Line, Span};
+use ratatui::style::Style;
+use ratatui::prelude::Stylize;
 
 pub struct Example8;
 
 #[derive(Clone)]
 pub enum Msg {
     Initialize,
-    NameEvent(TextInputEvent),
-    SourceEvent(SelectEvent),
-    EntityEvent(AutocompleteEvent),
     Cancel,
     Submit,
 }
 
+#[derive(AppState)]
 pub struct State {
     initialized: bool,
-    form: FormData,
+
+    #[widget("migration-name")]
+    name: TextInputField,
+
+    #[widget("source-env", options = "self.environments")]
+    source: SelectField,
+
+    #[widget("entity-type", options = "self.entities")]
+    entity: AutocompleteField,
+
+    error: Option<String>,
     environments: Vec<String>,
     entities: Vec<String>,
-}
-
-struct FormData {
-    name: TextInputField,
-    source: SelectField,
-    entity: AutocompleteField,
-    error: Option<String>,
 }
 
 impl Default for State {
     fn default() -> Self {
         Self {
             initialized: false,
-            form: FormData {
-                name: TextInputField::new(),
-                source: SelectField::new(),
-                entity: AutocompleteField::new(),
-                error: None,
-            },
+            name: TextInputField::new(),
+            source: SelectField::new(),
+            entity: AutocompleteField::new(),
+            error: None,
             environments: vec![
                 "Development".to_string(),
                 "Staging".to_string(),
@@ -55,8 +58,6 @@ impl Default for State {
     }
 }
 
-impl crate::tui::AppState for State {}
-
 impl App for Example8 {
     type State = State;
     type Msg = Msg;
@@ -66,53 +67,41 @@ impl App for Example8 {
             Msg::Initialize => {
                 if !state.initialized {
                     state.initialized = true;
-                    Command::set_focus(FocusId::new("name"))
+                    Command::set_focus(FocusId::new("migration-name"))
                 } else {
                     Command::None
                 }
             }
-            Msg::NameEvent(event) => {
-                state.form.name.handle_event(event, None);
-                Command::None
-            }
-            Msg::SourceEvent(event) => {
-                state.form.source.handle_event::<Msg>(event, &state.environments);
-                Command::None
-            }
-            Msg::EntityEvent(event) => {
-                state.form.entity.handle_event::<Msg>(event, &state.entities);
-                Command::None
-            }
             Msg::Cancel => {
-                state.form.name = TextInputField::new();
-                state.form.source = SelectField::new();
-                state.form.entity = AutocompleteField::new();
-                state.form.error = None;
+                state.name = TextInputField::new();
+                state.source = SelectField::new();
+                state.entity = AutocompleteField::new();
+                state.error = None;
                 Command::None
             }
             Msg::Submit => {
                 // Validation
-                if state.form.name.value().trim().is_empty() {
-                    state.form.error = Some("Name is required".to_string());
+                if state.name.value().trim().is_empty() {
+                    state.error = Some("Name is required".to_string());
                     return Command::None;
                 }
 
-                if state.form.source.value().is_none() {
-                    state.form.error = Some("Source environment is required".to_string());
+                if state.source.value().is_none() {
+                    state.error = Some("Source environment is required".to_string());
                     return Command::None;
                 }
 
-                if state.form.entity.value().trim().is_empty() {
-                    state.form.error = Some("Entity is required".to_string());
+                if state.entity.value().trim().is_empty() {
+                    state.error = Some("Entity is required".to_string());
                     return Command::None;
                 }
 
-                // Success - clear form
-                state.form.error = Some(format!(
-                    "Success! Created migration '{}' from {} for entity {}",
-                    state.form.name.value(),
-                    state.form.source.value().unwrap(),
-                    state.form.entity.value()
+                // Success - show confirmation
+                state.error = Some(format!(
+                    "✓ Success! Created migration '{}' from {} for entity {}",
+                    state.name.value(),
+                    state.source.value().unwrap(),
+                    state.entity.value()
                 ));
 
                 Command::None
@@ -121,22 +110,92 @@ impl App for Example8 {
     }
 
     fn view(state: &mut State, theme: &Theme) -> Element<Msg> {
-        form_layout! {
-            theme: theme,
-            fields: [
-                text("Migration Name", "migration-name", state.form.name.value().to_string(), &mut state.form.name.state, Msg::NameEvent, placeholder: "Enter migration name") => crate::tui::LayoutConstraint::Length(3),
-                spacer => crate::tui::LayoutConstraint::Length(1),
-                select("Source Environment", "source-env", &mut state.form.source.state, Msg::SourceEvent, state.environments.clone()) => crate::tui::LayoutConstraint::Length(10),
-                spacer => crate::tui::LayoutConstraint::Length(1),
-                autocomplete("Entity Type", "entity-type", state.form.entity.value.clone(), &mut state.form.entity.state, Msg::EntityEvent, state.entities.clone()) => crate::tui::LayoutConstraint::Length(10),
-                spacer => crate::tui::LayoutConstraint::Length(1),
-                error(state.form.error) => crate::tui::LayoutConstraint::Length(2),
-            ],
-            buttons: [
-                ("cancel-btn", "Cancel", Msg::Cancel),
-                ("submit-btn", "Submit", Msg::Submit),
-            ]
-        }
+        // Title
+        let title = Element::styled_text(Line::from(vec![
+            Span::styled("Form Builder with Auto-Routing", Style::default().fg(theme.mauve).bold())
+        ])).build();
+
+        let description = Element::styled_text(Line::from(vec![
+            Span::styled("This form uses ", Style::default().fg(theme.text)),
+            Span::styled("#[derive(AppState)]", Style::default().fg(theme.green).bold()),
+            Span::styled(" - all widget events are auto-routed!", Style::default().fg(theme.text)),
+        ])).build();
+
+        // Name input
+        let name_input = Element::panel(
+            Element::text_input(
+                FocusId::new("migration-name"),
+                state.name.value(),
+                &state.name.state,
+            )
+            .placeholder("Enter migration name")
+            .build()
+        )
+        .title("Migration Name")
+        .build();
+
+        // Source environment select
+        let source_select = Element::panel(
+            Element::select(
+                FocusId::new("source-env"),
+                state.environments.clone(),
+                &mut state.source.state,
+            )
+            .build()
+        )
+        .title("Source Environment")
+        .build();
+
+        // Entity autocomplete
+        let entity_autocomplete = Element::panel(
+            Element::autocomplete(
+                FocusId::new("entity-type"),
+                state.entities.clone(),
+                state.entity.value().to_string(),
+                &mut state.entity.state,
+            )
+            .placeholder("Type entity name...")
+            .build()
+        )
+        .title("Entity Type")
+        .build();
+
+        // Error/success message
+        let message = if let Some(ref error) = state.error {
+            let color = if error.starts_with("✓") { theme.green } else { theme.red };
+            Element::styled_text(Line::from(vec![
+                Span::styled(error.clone(), Style::default().fg(color).bold())
+            ])).build()
+        } else {
+            Element::text("")
+        };
+
+        // Buttons
+        let buttons = Element::row(vec![
+            Element::button(FocusId::new("cancel-btn"), "[ Cancel ]")
+                .on_press(Msg::Cancel)
+                .build(),
+            Element::text("  "),
+            Element::button(FocusId::new("submit-btn"), "[ Submit ]")
+                .on_press(Msg::Submit)
+                .build(),
+        ]).build();
+
+        // Build layout
+        ColumnBuilder::new()
+            .add(title, LayoutConstraint::Length(1))
+            .add(description, LayoutConstraint::Length(1))
+            .add(Element::text(""), LayoutConstraint::Length(1))
+            .add(name_input, LayoutConstraint::Length(3))
+            .add(Element::text(""), LayoutConstraint::Length(1))
+            .add(source_select, LayoutConstraint::Length(10))
+            .add(Element::text(""), LayoutConstraint::Length(1))
+            .add(entity_autocomplete, LayoutConstraint::Length(10))
+            .add(Element::text(""), LayoutConstraint::Length(1))
+            .add(message, LayoutConstraint::Length(2))
+            .add(Element::text(""), LayoutConstraint::Fill(1))
+            .add(buttons, LayoutConstraint::Length(3))
+            .build()
     }
 
     fn subscriptions(state: &State) -> Vec<Subscription<Msg>> {
@@ -153,7 +212,7 @@ impl App for Example8 {
     }
 
     fn title() -> &'static str {
-        "Form Builder DSL Demo"
+        "Example 8 - Auto-Routing Form"
     }
 
     fn status(_state: &State, _theme: &Theme) -> Option<ratatui::text::Line<'static>> {

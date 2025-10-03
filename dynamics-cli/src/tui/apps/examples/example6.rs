@@ -3,105 +3,91 @@ use ratatui::text::{Line, Span};
 use ratatui::style::Style;
 use ratatui::prelude::Stylize;
 use crate::tui::{App, Command, Element, Subscription, Theme, LayoutConstraint, FocusId};
-use crate::tui::widgets::{SelectState, SelectEvent};
+use crate::tui::widgets::SelectField;
+use dynamics_lib_macros::AppState;
 
 pub struct Example6;
 
 #[derive(Clone)]
 pub enum Msg {
-    SortEvent(SelectEvent),
-    ExportEvent(SelectEvent),
-    FilterEvent(SelectEvent),
+    // No event routing messages needed - using auto-routing!
 }
 
+#[derive(AppState)]
 pub struct State {
-    sort_select: SelectState,
-    export_select: SelectState,
-    filter_select: SelectState,
+    #[widget("sort_select", options = "self.sort_options")]
+    sort_select: SelectField,
+
+    #[widget("export_select", options = "self.export_options")]
+    export_select: SelectField,
+
+    #[widget("filter_select", options = "self.filter_options")]
+    filter_select: SelectField,
+
+    sort_options: Vec<String>,
+    export_options: Vec<String>,
+    filter_options: Vec<String>,
 }
 
 impl Default for State {
     fn default() -> Self {
         Self {
-            sort_select: SelectState::new(),
-            export_select: SelectState::new(),
-            filter_select: SelectState::new(),
+            sort_select: SelectField::new(),
+            export_select: SelectField::new(),
+            filter_select: SelectField::new(),
+            sort_options: vec![
+                "Alphabetical".to_string(),
+                "By Type".to_string(),
+                "By Size".to_string(),
+                "Recently Modified".to_string(),
+            ],
+            export_options: vec![
+                "JSON".to_string(),
+                "CSV".to_string(),
+                "Excel (XLSX)".to_string(),
+                "XML".to_string(),
+                "YAML".to_string(),
+            ],
+            filter_options: vec![
+                "Show All".to_string(),
+                "Show Matched".to_string(),
+                "Show Unmatched".to_string(),
+                "Show Modified".to_string(),
+            ],
         }
     }
 }
-
-impl crate::tui::AppState for State {}
 
 impl App for Example6 {
     type State = State;
     type Msg = Msg;
 
-    fn update(state: &mut State, msg: Msg) -> Command<Msg> {
-        match msg {
-            Msg::SortEvent(event) => {
-                state.sort_select.handle_event(event);
-                Command::None
-            }
-            Msg::ExportEvent(event) => {
-                state.export_select.handle_event(event);
-                Command::None
-            }
-            Msg::FilterEvent(event) => {
-                state.filter_select.handle_event(event);
-                Command::None
-            }
-        }
+    fn update(_state: &mut State, _msg: Msg) -> Command<Msg> {
+        // All widget events are auto-routed - no manual handling needed!
+        Command::None
     }
 
     fn view(state: &mut State, theme: &Theme) -> Element<Msg> {
-        // Sort mode options
-        let sort_options = vec![
-            "Alphabetical".to_string(),
-            "By Type".to_string(),
-            "By Size".to_string(),
-            "Recently Modified".to_string(),
-        ];
-
-        // Export format options
-        let export_options = vec![
-            "JSON".to_string(),
-            "CSV".to_string(),
-            "Excel (XLSX)".to_string(),
-            "XML".to_string(),
-            "YAML".to_string(),
-        ];
-
-        // Filter options
-        let filter_options = vec![
-            "Show All".to_string(),
-            "Show Matched".to_string(),
-            "Show Unmatched".to_string(),
-            "Show Modified".to_string(),
-        ];
-
-        // Build selects
+        // Build selects - NO .on_event() needed, events are auto-routed!
         let sort_select = Element::select(
             FocusId::new("sort_select"),
-            sort_options,
-            &mut state.sort_select,
+            state.sort_options.clone(),
+            &mut state.sort_select.state,
         )
-        .on_event(Msg::SortEvent)
         .build();
 
         let export_select = Element::select(
             FocusId::new("export_select"),
-            export_options,
-            &mut state.export_select,
+            state.export_options.clone(),
+            &mut state.export_select.state,
         )
-        .on_event(Msg::ExportEvent)
         .build();
 
         let filter_select = Element::select(
             FocusId::new("filter_select"),
-            filter_options,
-            &mut state.filter_select,
+            state.filter_options.clone(),
+            &mut state.filter_select.state,
         )
-        .on_event(Msg::FilterEvent)
         .build();
 
         // Wrap in panels with labels
@@ -147,25 +133,28 @@ impl App for Example6 {
     }
 
     fn status(state: &State, theme: &Theme) -> Option<Line<'static>> {
-        let sort_names = ["Alphabetical", "By Type", "By Size", "Recently Modified"];
-        let export_names = ["JSON", "CSV", "Excel (XLSX)", "XML", "YAML"];
-        let filter_names = ["Show All", "Show Matched", "Show Unmatched", "Show Modified"];
-
-        let sort_name = sort_names.get(state.sort_select.selected()).unwrap_or(&"Unknown");
-        let export_name = export_names.get(state.export_select.selected()).unwrap_or(&"Unknown");
-        let filter_name = filter_names.get(state.filter_select.selected()).unwrap_or(&"Unknown");
+        // Get selected values from SelectField and convert to owned strings
+        let sort_name = state.sort_select.value()
+            .unwrap_or("(none)")
+            .to_string();
+        let export_name = state.export_select.value()
+            .unwrap_or("(none)")
+            .to_string();
+        let filter_name = state.filter_select.value()
+            .unwrap_or("(none)")
+            .to_string();
 
         Some(Line::from(vec![
-            Span::styled("Sort: ", Style::default().fg(theme.overlay1)),
-            Span::styled(sort_name.to_string(), Style::default().fg(theme.blue)),
-            Span::raw(" | "),
-            Span::styled("Export: ", Style::default().fg(theme.overlay1)),
-            Span::styled(export_name.to_string(), Style::default().fg(theme.green)),
-            Span::raw(" | "),
-            Span::styled("Filter: ", Style::default().fg(theme.overlay1)),
-            Span::styled(filter_name.to_string(), Style::default().fg(theme.peach)),
-            Span::raw(" | "),
-            Span::styled("Tab: focus | Click: toggle | ↑↓Enter when open", Style::default().fg(theme.overlay1)),
+            Span::styled("Sort: ".to_string(), Style::default().fg(theme.overlay1)),
+            Span::styled(sort_name, Style::default().fg(theme.blue)),
+            Span::raw(" | ".to_string()),
+            Span::styled("Export: ".to_string(), Style::default().fg(theme.overlay1)),
+            Span::styled(export_name, Style::default().fg(theme.green)),
+            Span::raw(" | ".to_string()),
+            Span::styled("Filter: ".to_string(), Style::default().fg(theme.overlay1)),
+            Span::styled(filter_name, Style::default().fg(theme.peach)),
+            Span::raw(" | ".to_string()),
+            Span::styled("Auto-routed with #[derive(AppState)]".to_string(), Style::default().fg(theme.mauve).bold()),
         ]))
     }
 }
