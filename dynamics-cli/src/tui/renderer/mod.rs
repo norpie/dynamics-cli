@@ -110,10 +110,11 @@ impl Renderer {
                 max_length,
                 on_change,
                 on_submit,
+                on_event,
                 on_focus,
                 on_blur,
             } => {
-                render_text_input(frame, theme, registry, focus_registry, focused_id, id, value, *cursor_pos, *scroll_offset, placeholder, max_length, on_change, on_submit, on_focus, on_blur, area, inside_panel);
+                render_text_input(frame, theme, registry, focus_registry, focused_id, id, value, *cursor_pos, *scroll_offset, placeholder, max_length, on_change, on_submit, on_event, on_focus, on_blur, area, inside_panel);
             }
 
             Element::Tree {

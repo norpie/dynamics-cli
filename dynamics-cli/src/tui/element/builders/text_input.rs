@@ -1,5 +1,6 @@
 use crate::tui::Element;
 use crate::tui::element::FocusId;
+use crate::tui::widgets::TextInputEvent;
 
 /// Builder for text input elements
 pub struct TextInputBuilder<Msg> {
@@ -11,6 +12,7 @@ pub struct TextInputBuilder<Msg> {
     pub(crate) max_length: Option<usize>,
     pub(crate) on_change: Option<fn(crossterm::event::KeyCode) -> Msg>,
     pub(crate) on_submit: Option<Msg>,
+    pub(crate) on_event: Option<fn(TextInputEvent) -> Msg>,
     pub(crate) on_focus: Option<Msg>,
     pub(crate) on_blur: Option<Msg>,
 }
@@ -36,6 +38,13 @@ impl<Msg> TextInputBuilder<Msg> {
         self
     }
 
+    /// Set unified event callback (new event pattern)
+    /// This replaces on_change and on_submit
+    pub fn on_event(mut self, msg: fn(TextInputEvent) -> Msg) -> Self {
+        self.on_event = Some(msg);
+        self
+    }
+
     pub fn on_focus(mut self, msg: Msg) -> Self {
         self.on_focus = Some(msg);
         self
@@ -56,6 +65,7 @@ impl<Msg> TextInputBuilder<Msg> {
             max_length: self.max_length,
             on_change: self.on_change,
             on_submit: self.on_submit,
+            on_event: self.on_event,
             on_focus: self.on_focus,
             on_blur: self.on_blur,
         }

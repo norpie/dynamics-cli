@@ -341,11 +341,13 @@ subscriptions! {
 
 ---
 
-## 6. Form Builder DSL
+## 6. Form Builder DSL ✅ COMPLETE
+
+**Status:** Implemented as `form_layout!` declarative macro
 
 **Problem:** Form UI code is highly repetitive (40% of view() function)
 
-**Current pattern:**
+**Current pattern (verbose ~30 lines):**
 ```rust
 let name_input = Element::panel(
     Element::text_input("create-name-input", &state.form.name, &state.form.name_input_state)
@@ -360,12 +362,6 @@ let source_select = Element::panel(
         .build()
 ).title("Source Environment").build();
 
-let target_select = Element::panel(
-    Element::select("create-target-select", target_options, &mut state.form.target_select_state)
-        .on_event(Msg::CreateFormTargetEvent)
-        .build()
-).title("Target Environment").build();
-
 let buttons = button_row![
     ("create-cancel", "Cancel", Msg::CreateFormCancel),
     ("create-confirm", "Confirm", Msg::CreateFormSubmit),
@@ -375,48 +371,50 @@ let modal_body = col![
     name_input => Length(3),
     spacer!() => Length(1),
     source_select => Length(10),
-    spacer!() => Length(1),
-    target_select => Length(10),
-    spacer!() => Length(1),
     error_display!(state.form.validation_error, theme) => Length(2),
     buttons => Length(3),
 ];
 ```
 
-**Target pattern:**
+**New pattern with form_layout! (~12 lines):**
 ```rust
 form_layout! {
+    theme: theme,
     fields: [
-        text("Name", state.form.name, placeholder: "Migration name") => 3,
-        spacer => 1,
-        select("Source Environment", state.form.source_env, &source_options) => 10,
-        spacer => 1,
-        select("Target Environment", state.form.target_env, &target_options) => 10,
-        spacer => 1,
-        error(state.form.validation_error) => 2,
+        text("Name", "name-id", field.value().to_string(), &mut field.state, Msg::NameEvent, placeholder: "Migration name") => Length(3),
+        spacer => Length(1),
+        select("Source", "source-id", &mut state, Msg::SourceEvent, options.clone()) => Length(10),
+        spacer => Length(1),
+        error(state.form.error) => Length(2),
     ],
     buttons: [
-        "Cancel" => Msg::Cancel,
-        "Create" => Msg::Submit,
-    ],
+        ("cancel-btn", "Cancel", Msg::Cancel),
+        ("submit-btn", "Submit", Msg::Submit),
+    ]
 }
 ```
 
 **Macro features:**
-- Auto-generates IDs from field names (kebab-case)
 - Auto-wraps fields in Panel with title
-- Auto-adds constraint layout
-- Auto-wires event handlers (assuming Field types)
+- Auto-adds constraint layout with column builder
+- Auto-wires event handlers to unified event pattern
 - Special `spacer` and `error(Option<String>)` helpers
+- Works with Field types (TextInputField, SelectField, AutocompleteField)
 
 **Field shortcuts:**
-- `text(title, field, [options])` → TextInputField in Panel
-- `select(title, field, &options)` → SelectField in Panel
-- `autocomplete(title, field, &options)` → AutocompleteField in Panel
-- `list(title, field)` → ListField in Panel
-- `tree(title, field)` → TreeField in Panel
+- `text(title, id, value, state, msg, [placeholder: "..."])` → TextInput in Panel
+- `select(title, id, state, msg, options)` → Select in Panel
+- `autocomplete(title, id, value, state, msg, options)` → Autocomplete in Panel
 
-**Impact:** Reduces form UI code by ~75%, enforces consistent styling
+**Note:** IDs must be provided explicitly as &'static str (not auto-generated) due to lifetime requirements.
+
+**Benefits:**
+- Reduces form UI code by ~60% (30 lines → 12 lines)
+- Enforces consistent panel + layout pattern
+- Works seamlessly with unified event pattern (TextInputEvent, SelectEvent, etc.)
+- See `Example8` for full working demo
+
+**Impact:** Reduces form view code by 60%, enforces consistent styling
 
 ---
 
@@ -430,11 +428,12 @@ form_layout! {
 
 **Achieved: ~40% code reduction**
 
-### Phase 2 (High Impact - 26 hours)
-5. Form Builder DSL (6h) - `form_layout!` macro
+### Phase 2 (High Impact)
+5. ✅ Form Builder DSL - `form_layout!` macro (COMPLETE)
 6. Widget Auto-Routing (20h) - Requires framework refactor (optional)
 
-**Expected: ~60% total code reduction**
+**Current: ~50% total code reduction** (with Field types + Resource + Subscriptions + Form Builder)
+**Potential: ~60% total with Widget Auto-Routing** (optional)
 
 ---
 

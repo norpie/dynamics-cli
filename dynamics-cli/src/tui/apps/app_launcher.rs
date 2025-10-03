@@ -61,6 +61,11 @@ impl Default for State {
                     description: "Autocomplete widget demo - fuzzy-matched input".to_string(),
                 },
                 AppInfo {
+                    id: AppId::Example8,
+                    name: "Example 8".to_string(),
+                    description: "Form Builder DSL demo - declarative form layout".to_string(),
+                },
+                AppInfo {
                     id: AppId::ExampleResourceMacro,
                     name: "Resource Macro Demo".to_string(),
                     description: "ResourceHandlers macro - automated async state".to_string(),

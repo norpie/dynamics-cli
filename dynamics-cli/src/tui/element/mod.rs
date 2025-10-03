@@ -157,6 +157,7 @@ pub enum Element<Msg> {
         max_length: Option<usize>,
         on_change: Option<fn(crossterm::event::KeyCode) -> Msg>,
         on_submit: Option<Msg>,
+        on_event: Option<fn(crate::tui::widgets::TextInputEvent) -> Msg>,  // Unified event handler
         on_focus: Option<Msg>,
         on_blur: Option<Msg>,
     },
@@ -419,6 +420,7 @@ impl<Msg> Element<Msg> {
             max_length: None,
             on_change: None,
             on_submit: None,
+            on_event: None,
             on_focus: None,
             on_blur: None,
         }

@@ -3,6 +3,7 @@ use crossterm::event::KeyCode;
 use crate::tui::{Element, Theme};
 use crate::tui::element::FocusId;
 use crate::tui::renderer::{InteractionRegistry, FocusRegistry, FocusableInfo};
+use crate::tui::widgets::TextInputEvent;
 
 /// Create on_key handler for text inputs (all keys pass to on_change, Enter also fires on_submit)
 pub fn text_input_on_key<Msg: Clone + Send + 'static>(
@@ -21,6 +22,16 @@ pub fn text_input_on_key<Msg: Clone + Send + 'static>(
     })
 }
 
+/// Create on_key handler for text inputs using unified event pattern
+pub fn text_input_on_key_event<Msg: Clone + Send + 'static>(
+    on_event: fn(TextInputEvent) -> Msg,
+) -> Box<dyn Fn(KeyCode) -> Option<Msg> + Send> {
+    Box::new(move |key| match key {
+        KeyCode::Enter => Some(on_event(TextInputEvent::Submit)),
+        _ => Some(on_event(TextInputEvent::Changed(key))),
+    })
+}
+
 /// Render TextInput element
 pub fn render_text_input<Msg: Clone + Send + 'static>(
     frame: &mut Frame,
@@ -36,16 +47,24 @@ pub fn render_text_input<Msg: Clone + Send + 'static>(
     max_length: &Option<usize>,
     on_change: &Option<fn(KeyCode) -> Msg>,
     on_submit: &Option<Msg>,
+    on_event: &Option<fn(TextInputEvent) -> Msg>,
     on_focus: &Option<Msg>,
     on_blur: &Option<Msg>,
     area: Rect,
     inside_panel: bool,
 ) {
+    // Choose handler based on which callback is provided
+    let on_key = if let Some(event_handler) = on_event {
+        text_input_on_key_event(*event_handler)
+    } else {
+        text_input_on_key(on_change.clone(), on_submit.clone())
+    };
+
     // Register in focus registry
     focus_registry.register_focusable(FocusableInfo {
         id: id.clone(),
         rect: area,
-        on_key: text_input_on_key(on_change.clone(), on_submit.clone()),
+        on_key,
         on_focus: on_focus.clone(),
         on_blur: on_blur.clone(),
         inside_panel,
