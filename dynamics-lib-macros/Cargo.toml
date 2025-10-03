@@ -1,0 +1,16 @@
+[package]
+name = "dynamics-lib-macros"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+description = "Derive macros for dynamics-lib and related crates"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = "2.0"
+quote = "1.0"
+proc-macro2 = "1.0"

@@ -637,6 +637,7 @@ dependencies = [
  "dirs",
  "dotenv",
  "dotenvy",
+ "dynamics-lib-macros",
  "env_logger",
  "futures",
  "fuzzy-matcher",
@@ -659,6 +660,15 @@ dependencies = [
  "toml",
  "urlencoding",
  "uuid",
+]
+
+[[package]]
+name = "dynamics-lib-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

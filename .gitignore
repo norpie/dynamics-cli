@@ -1,4 +1,6 @@
 /target
+/dynamics-cli/target
+/dynamics-lib-macros/target
 .env
 .direnv
 CLAUDE.md
