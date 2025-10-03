@@ -9,6 +9,7 @@ pub mod apps;
 pub mod state;
 pub mod widgets;
 pub mod resource;
+pub mod modals;
 
 #[macro_use]
 pub mod macros;
@@ -26,9 +27,9 @@ pub use command::{Command, AppId};
 pub use element::{Element, LayoutConstraint, Layer, Alignment, FocusId};
 pub use subscription::Subscription;
 pub use app::{App, AppState};
-pub use renderer::{Renderer, InteractionRegistry};
+pub use renderer::{Renderer, InteractionRegistry, RenderLayer, LayeredView};
 pub use runtime::{Runtime, AppRuntime};
 pub use multi_runtime::MultiAppRuntime;
-pub use state::{Theme, ThemeVariant, FocusMode, RuntimeConfig};
+pub use state::{Theme, ThemeVariant, FocusMode, RuntimeConfig, ModalState};
 pub use widgets::{ListItem, ListState, TextInputState};
 pub use resource::Resource;

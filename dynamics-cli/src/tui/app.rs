@@ -1,4 +1,4 @@
-use crate::tui::{Command, Element, Subscription, Theme};
+use crate::tui::{Command, Element, Subscription, Theme, LayeredView};
 use crate::tui::element::FocusId;
 use ratatui::text::Line;
 use std::any::Any;
@@ -36,9 +36,9 @@ pub trait App: Sized + Send + 'static {
     /// Update the state based on a message and return a command
     fn update(state: &mut Self::State, msg: Self::Msg) -> Command<Self::Msg>;
 
-    /// Render the current state to UI elements
+    /// Render the current state to layered UI elements
     /// Note: Takes &mut for internal optimizations (e.g., cache rebuilds)
-    fn view(state: &mut Self::State, theme: &Theme) -> Element<Self::Msg>;
+    fn view(state: &mut Self::State, theme: &Theme) -> LayeredView<Self::Msg>;
 
     /// Declare what inputs this app wants to receive
     fn subscriptions(state: &Self::State) -> Vec<Subscription<Self::Msg>>;

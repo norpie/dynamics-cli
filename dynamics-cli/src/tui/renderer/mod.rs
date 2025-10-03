@@ -20,10 +20,164 @@ pub use dropdown_registry::{DropdownRegistry, DropdownInfo, DropdownCallback};
 
 use widgets::*;
 
+/// Represents the different rendering layers in the TUI
+///
+/// Layers are rendered in order from bottom to top:
+/// 1. App - Main application content
+/// 2. AppModal - Modal within app context (dims app, but global UI still visible)
+/// 3. GlobalUI - Header/footer (always visible unless global modal present)
+/// 4. GlobalModal - Top-level modal (hides everything below)
+#[derive(Clone)]
+pub enum RenderLayer<Msg> {
+    /// Main application content
+    App {
+        element: Element<Msg>,
+    },
+
+    /// Modal within app context (dims app area, global UI still visible)
+    AppModal {
+        element: Element<Msg>,
+        alignment: LayerAlignment,
+    },
+
+    /// Global UI elements (header, footer, always visible unless global modal)
+    GlobalUI {
+        element: Element<Msg>,
+    },
+
+    /// Top-level modal (hides everything below)
+    GlobalModal {
+        element: Element<Msg>,
+        alignment: LayerAlignment,
+    },
+}
+
+/// Builder for constructing layered views
+///
+/// Usage:
+/// ```rust
+/// LayeredView::new(app_content)
+///     .with_global_ui(header)
+///     .with_app_modal(confirmation_modal, Alignment::Center)
+/// ```
+pub struct LayeredView<Msg> {
+    layers: Vec<RenderLayer<Msg>>,
+}
+
+impl<Msg> LayeredView<Msg> {
+    /// Create a new layered view with the main app content
+    pub fn new(app_element: Element<Msg>) -> Self {
+        Self {
+            layers: vec![RenderLayer::App { element: app_element }],
+        }
+    }
+
+    /// Add global UI layer (header/footer)
+    pub fn with_global_ui(mut self, element: Element<Msg>) -> Self {
+        self.layers.push(RenderLayer::GlobalUI { element });
+        self
+    }
+
+    /// Add app modal layer (dims app area)
+    pub fn with_app_modal(mut self, element: Element<Msg>, alignment: LayerAlignment) -> Self {
+        self.layers.push(RenderLayer::AppModal { element, alignment });
+        self
+    }
+
+    /// Add global modal layer (hides everything below)
+    pub fn with_global_modal(mut self, element: Element<Msg>, alignment: LayerAlignment) -> Self {
+        self.layers.push(RenderLayer::GlobalModal { element, alignment });
+        self
+    }
+
+    /// Get the layers for rendering
+    pub fn layers(&self) -> &[RenderLayer<Msg>] {
+        &self.layers
+    }
+
+    /// Consume self and return the layers
+    pub fn into_layers(self) -> Vec<RenderLayer<Msg>> {
+        self.layers
+    }
+}
+
 /// Renders elements to the terminal
 pub struct Renderer;
 
 impl Renderer {
+    /// Render a layered view (new API)
+    pub fn render_layers<Msg: Clone + Send + 'static>(
+        frame: &mut Frame,
+        theme: &Theme,
+        registry: &mut InteractionRegistry<Msg>,
+        focus_registry: &mut FocusRegistry<Msg>,
+        focused_id: Option<&FocusId>,
+        layered_view: &LayeredView<Msg>,
+        app_area: Rect,
+        global_ui_area: Option<Rect>,
+    ) {
+        let layers = layered_view.layers();
+
+        // Check if there's a global modal (hides everything)
+        let has_global_modal = layers.iter().any(|l| matches!(l, RenderLayer::GlobalModal { .. }));
+
+        // Render layers in order
+        for layer in layers {
+            match layer {
+                RenderLayer::App { element } => {
+                    // Always render app content first
+                    let mut app_dropdown_registry = DropdownRegistry::new();
+                    Self::render_element(frame, theme, registry, focus_registry, &mut app_dropdown_registry, focused_id, element, app_area, false);
+                    Self::render_dropdowns(frame, theme, registry, &app_dropdown_registry);
+                }
+
+                RenderLayer::AppModal { element, alignment } => {
+                    // Dim app area
+                    render_dim_overlay(frame, theme, app_area);
+
+                    // Calculate modal position based on alignment
+                    let modal_area = calculate_layer_position(element, *alignment, app_area, Self::estimate_element_size);
+
+                    // Clear the modal area (prevents bleed-through from dim overlay)
+                    frame.render_widget(Clear, modal_area);
+
+                    // Render modal
+                    let mut modal_dropdown_registry = DropdownRegistry::new();
+                    Self::render_element(frame, theme, registry, focus_registry, &mut modal_dropdown_registry, focused_id, element, modal_area, false);
+                    Self::render_dropdowns(frame, theme, registry, &modal_dropdown_registry);
+                }
+
+                RenderLayer::GlobalUI { element } => {
+                    // Only render if no global modal present
+                    if !has_global_modal {
+                        if let Some(ui_area) = global_ui_area {
+                            let mut global_ui_dropdown_registry = DropdownRegistry::new();
+                            Self::render_element(frame, theme, registry, focus_registry, &mut global_ui_dropdown_registry, focused_id, element, ui_area, false);
+                            Self::render_dropdowns(frame, theme, registry, &global_ui_dropdown_registry);
+                        }
+                    }
+                }
+
+                RenderLayer::GlobalModal { element, alignment } => {
+                    // Dim entire screen
+                    render_dim_overlay(frame, theme, frame.size());
+
+                    // Calculate modal position based on alignment
+                    let modal_area = calculate_layer_position(element, *alignment, frame.size(), Self::estimate_element_size);
+
+                    // Clear the modal area (prevents bleed-through from dim overlay)
+                    frame.render_widget(Clear, modal_area);
+
+                    // Render modal
+                    let mut global_modal_dropdown_registry = DropdownRegistry::new();
+                    Self::render_element(frame, theme, registry, focus_registry, &mut global_modal_dropdown_registry, focused_id, element, modal_area, false);
+                    Self::render_dropdowns(frame, theme, registry, &global_modal_dropdown_registry);
+                }
+            }
+        }
+    }
+
+    /// Legacy render method (kept for backward compatibility during migration)
     pub fn render<Msg: Clone + Send + 'static>(
         frame: &mut Frame,
         theme: &Theme,

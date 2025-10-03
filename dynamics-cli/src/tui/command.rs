@@ -78,15 +78,6 @@ impl Default for ParallelConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AppId {
     AppLauncher,
-    Example1,
-    Example2,
-    Example3,
-    Example4,
-    Example5,
-    Example6,
-    Example7,
-    Example8,
-    ExampleResourceMacro,
     LoadingScreen,
     ErrorScreen,
     MigrationEnvironment,

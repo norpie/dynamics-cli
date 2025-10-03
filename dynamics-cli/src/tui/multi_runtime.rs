@@ -6,7 +6,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use anyhow::Result;
 use std::collections::HashMap;
 
-use crate::tui::{AppId, Runtime, AppRuntime, apps::{AppLauncher, examples::{Example1, Example2, Example3, Example4, Example5, Example6, Example7, Example8, ExampleResourceMacro}, LoadingScreen, ErrorScreen, migration::{MigrationEnvironmentApp, MigrationComparisonSelectApp}}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App};
+use crate::tui::{AppId, Runtime, AppRuntime, apps::{AppLauncher, LoadingScreen, ErrorScreen, migration::{MigrationEnvironmentApp, MigrationComparisonSelectApp}}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App};
 use crate::tui::element::{ColumnBuilder, RowBuilder, FocusId};
 use crate::tui::widgets::ScrollableState;
 
@@ -77,15 +77,6 @@ impl MultiAppRuntime {
 
         // Register all apps here - this is the ONLY place you need to add new apps!
         runtimes.insert(AppId::AppLauncher, Box::new(Runtime::<AppLauncher>::new()));
-        runtimes.insert(AppId::Example1, Box::new(Runtime::<Example1>::new()));
-        runtimes.insert(AppId::Example2, Box::new(Runtime::<Example2>::new()));
-        runtimes.insert(AppId::Example3, Box::new(Runtime::<Example3>::new()));
-        runtimes.insert(AppId::Example4, Box::new(Runtime::<Example4>::new()));
-        runtimes.insert(AppId::Example5, Box::new(Runtime::<Example5>::new()));
-        runtimes.insert(AppId::Example6, Box::new(Runtime::<Example6>::new()));
-        runtimes.insert(AppId::Example7, Box::new(Runtime::<Example7>::new()));
-        runtimes.insert(AppId::Example8, Box::new(Runtime::<Example8>::new()));
-        runtimes.insert(AppId::ExampleResourceMacro, Box::new(Runtime::<ExampleResourceMacro>::new()));
         runtimes.insert(AppId::LoadingScreen, Box::new(Runtime::<LoadingScreen>::new()));
         runtimes.insert(AppId::ErrorScreen, Box::new(Runtime::<ErrorScreen>::new()));
         runtimes.insert(AppId::MigrationEnvironment, Box::new(Runtime::<MigrationEnvironmentApp>::new()));

@@ -22,4 +22,4 @@ pub use scrollable::render_scrollable;
 pub use select::render_select;
 pub use autocomplete::render_autocomplete;
 pub use panel::render_panel;
-pub use stack::render_stack;
+pub use stack::{render_stack, render_dim_overlay, calculate_layer_position};

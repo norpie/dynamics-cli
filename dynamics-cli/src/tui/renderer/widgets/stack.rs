@@ -1,10 +1,14 @@
-use ratatui::{Frame, style::Style, widgets::{Block}, layout::Rect};
+use ratatui::{Frame, style::Style, widgets::{Block, Clear}, layout::Rect};
 use crate::tui::{Element, Theme, Layer, Alignment as LayerAlignment};
 use crate::tui::element::FocusId;
 use crate::tui::renderer::{InteractionRegistry, FocusRegistry, DropdownRegistry};
 
 /// Render a semi-transparent dim overlay
 pub fn render_dim_overlay(frame: &mut Frame, theme: &Theme, area: Rect) {
+    // First, clear the area to prevent bleed-through
+    frame.render_widget(Clear, area);
+
+    // Then render the dim overlay
     let dim_block = Block::default()
         .style(Style::default().bg(theme.surface0));
     frame.render_widget(dim_block, area);
