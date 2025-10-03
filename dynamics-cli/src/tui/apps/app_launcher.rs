@@ -10,7 +10,6 @@ pub struct AppLauncher;
 
 #[derive(Clone)]
 pub enum Msg {
-    Initialize,
     LaunchApp(usize),
     ListNavigate(KeyCode),
 }
@@ -18,7 +17,6 @@ pub enum Msg {
 pub struct State {
     apps: Vec<AppInfo>,
     list_state: ListState,
-    initialized: bool,
 }
 
 impl Default for State {
@@ -77,7 +75,6 @@ impl Default for State {
                 },
             ],
             list_state: ListState::with_selection(),
-            initialized: false,
         }
     }
 }
@@ -117,17 +114,12 @@ impl App for AppLauncher {
     type State = State;
     type Msg = Msg;
 
+    fn init() -> (State, Command<Msg>) {
+        (State::default(), Command::set_focus(FocusId::new("app-list")))
+    }
+
     fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         match msg {
-            Msg::Initialize => {
-                // Auto-focus the list on app start
-                if !state.initialized {
-                    state.initialized = true;
-                    Command::set_focus(FocusId::new("app-list"))
-                } else {
-                    Command::None
-                }
-            }
             Msg::LaunchApp(idx) => {
                 if let Some(app_info) = state.apps.get(idx) {
                     Command::navigate_to(app_info.id)
@@ -161,15 +153,8 @@ impl App for AppLauncher {
             .build()
     }
 
-    fn subscriptions(state: &State) -> Vec<Subscription<Msg>> {
-        let mut subs = vec![];
-
-        // Fire initialization once on app start
-        if !state.initialized {
-            subs.push(Subscription::timer(std::time::Duration::from_millis(1), Msg::Initialize));
-        }
-
-        subs
+    fn subscriptions(_state: &State) -> Vec<Subscription<Msg>> {
+        vec![]
     }
 
     fn title() -> &'static str {

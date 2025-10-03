@@ -44,7 +44,6 @@ impl ListItem for MigrationEnvironment {
 pub struct State {
     environments: Vec<MigrationEnvironment>,
     list_state: ListState,
-    initialized: bool,
     show_create_modal: bool,
     create_form: CreateMigrationForm,
     available_environments: Vec<String>,
@@ -80,7 +79,6 @@ impl Default for State {
 
 #[derive(Clone)]
 pub enum Msg {
-    Initialize,
     MigrationsLoaded(Result<Vec<SavedMigration>, String>),
     SelectEnvironment(usize),
     ListNavigate(KeyCode),
@@ -109,35 +107,31 @@ impl App for MigrationEnvironmentApp {
     type State = State;
     type Msg = Msg;
 
+    fn init() -> (State, Command<Msg>) {
+        let state = State::default();
+        let cmd = Command::perform(
+            async {
+                let config = crate::config();
+                config.list_migrations().await
+                    .map_err(|e| e.to_string())
+            },
+            Msg::MigrationsLoaded
+        );
+        (state, cmd)
+    }
+
     fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         match msg {
-            Msg::Initialize => {
-                if !state.initialized {
-                    // Load migrations from database
-                    Command::perform(
-                        async {
-                            let config = crate::config();
-                            config.list_migrations().await
-                                .map_err(|e| e.to_string())
-                        },
-                        Msg::MigrationsLoaded
-                    )
-                } else {
-                    Command::None
-                }
-            }
             Msg::MigrationsLoaded(Ok(migrations)) => {
                 state.environments = migrations.into_iter().map(|m| MigrationEnvironment {
                     name: m.name,
                     source: m.source_env,
                     target: m.target_env,
                 }).collect();
-                state.initialized = true;
                 Command::set_focus(FocusId::new("migration-list"))
             }
             Msg::MigrationsLoaded(Err(err)) => {
                 log::error!("Failed to load migrations: {}", err);
-                state.initialized = true;
                 Command::batch(vec![
                     Command::publish("error:init", serde_json::json!({
                         "message": format!("Failed to load migrations: {}", err),
@@ -629,10 +623,6 @@ impl App for MigrationEnvironmentApp {
     fn subscriptions(state: &State) -> Vec<Subscription<Msg>> {
         let mut subs = vec![];
 
-        if !state.initialized {
-            subs.push(Subscription::timer(std::time::Duration::from_millis(1), Msg::Initialize));
-        }
-
         if !state.show_create_modal && !state.show_delete_confirm && !state.show_rename_modal {
             subs.push(Subscription::keyboard(KeyCode::Char('n'), "Create new migration", Msg::OpenCreateModal));
             subs.push(Subscription::keyboard(KeyCode::Char('N'), "Create new migration", Msg::OpenCreateModal));
@@ -655,7 +645,6 @@ impl State {
         Self {
             environments: vec![],
             list_state: ListState::with_selection(),
-            initialized: false,
             show_create_modal: false,
             create_form: CreateMigrationForm::default(),
             available_environments: vec![],

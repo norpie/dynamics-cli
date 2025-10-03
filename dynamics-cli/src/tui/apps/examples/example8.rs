@@ -11,15 +11,12 @@ pub struct Example8;
 
 #[derive(Clone)]
 pub enum Msg {
-    Initialize,
     Cancel,
     Submit,
 }
 
 #[derive(AppState, Validate)]
 pub struct State {
-    initialized: bool,
-
     #[widget("migration-name")]
     #[validate(not_empty, message = "Name is required")]
     name: TextInputField,
@@ -40,7 +37,6 @@ pub struct State {
 impl Default for State {
     fn default() -> Self {
         Self {
-            initialized: false,
             name: TextInputField::new(),
             source: SelectField::new(),
             entity: AutocompleteField::new(),
@@ -65,16 +61,12 @@ impl App for Example8 {
     type State = State;
     type Msg = Msg;
 
+    fn init() -> (State, Command<Msg>) {
+        (State::default(), Command::set_focus(FocusId::new("migration-name")))
+    }
+
     fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         match msg {
-            Msg::Initialize => {
-                if !state.initialized {
-                    state.initialized = true;
-                    Command::set_focus(FocusId::new("migration-name"))
-                } else {
-                    Command::None
-                }
-            }
             Msg::Cancel => {
                 state.name = TextInputField::new();
                 state.source = SelectField::new();
@@ -192,17 +184,8 @@ impl App for Example8 {
         ]
     }
 
-    fn subscriptions(state: &State) -> Vec<Subscription<Msg>> {
-        let mut subs = vec![];
-
-        if !state.initialized {
-            subs.push(Subscription::timer(
-                std::time::Duration::from_millis(1),
-                Msg::Initialize,
-            ));
-        }
-
-        subs
+    fn subscriptions(_state: &State) -> Vec<Subscription<Msg>> {
+        vec![]
     }
 
     fn title() -> &'static str {
