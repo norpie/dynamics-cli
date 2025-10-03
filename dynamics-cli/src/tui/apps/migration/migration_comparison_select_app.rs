@@ -126,6 +126,37 @@ impl ListItem for SavedComparison {
 
 impl crate::tui::AppState for State {}
 
+impl State {
+    fn open_delete_modal(&mut self, comparison_id: i64, comparison_name: String) {
+        self.delete_comparison_id = Some(comparison_id);
+        self.delete_comparison_name = Some(comparison_name);
+        self.show_delete_confirm = true;
+    }
+
+    fn close_delete_modal(&mut self) {
+        self.show_delete_confirm = false;
+        self.delete_comparison_id = None;
+        self.delete_comparison_name = None;
+    }
+
+    fn open_rename_modal(&mut self, comparison_id: i64, comparison_name: String) {
+        self.rename_comparison_id = Some(comparison_id);
+        self.rename_form.new_name.set_value(comparison_name);
+        self.show_rename_modal = true;
+    }
+
+    fn close_rename_modal(&mut self) {
+        self.show_rename_modal = false;
+        self.rename_comparison_id = None;
+        self.rename_form = RenameComparisonForm::default();
+    }
+
+    fn close_create_modal(&mut self) {
+        self.show_create_modal = false;
+        self.create_form.validation_error = None;
+    }
+}
+
 impl App for MigrationComparisonSelectApp {
     type State = State;
     type Msg = Msg;
@@ -331,24 +362,15 @@ impl App for MigrationComparisonSelectApp {
                 }
             }
             Msg::CreateFormCancel => {
-                state.show_create_modal = false;
-                state.create_form.validation_error = None;
+                state.close_create_modal();
                 Command::None
             }
             Msg::ComparisonCreated(result) => {
                 match result {
                     Ok(id) => {
                         log::info!("Created comparison with ID: {}", id);
-                        // Reload comparisons list
                         let migration_name = state.migration_name.clone().unwrap_or_default();
-                        Command::perform(
-                            async move {
-                                let config = crate::config();
-                                config.get_comparisons(&migration_name).await
-                                    .map_err(|e| e.to_string())
-                            },
-                            Msg::ComparisonsLoaded
-                        )
+                        reload_comparisons(migration_name)
                     }
                     Err(e) => {
                         log::error!("Failed to create comparison: {}", e);
@@ -357,12 +379,9 @@ impl App for MigrationComparisonSelectApp {
                 }
             }
             Msg::RequestDelete => {
-                // Get selected comparison
                 if let Some(selected_idx) = state.list_state.selected() {
                     if let Some(comparison) = state.comparisons.get(selected_idx) {
-                        state.delete_comparison_id = Some(comparison.id);
-                        state.delete_comparison_name = Some(comparison.name.clone());
-                        state.show_delete_confirm = true;
+                        state.open_delete_modal(comparison.id, comparison.name.clone());
                     }
                 }
                 Command::None
@@ -383,26 +402,15 @@ impl App for MigrationComparisonSelectApp {
                 }
             }
             Msg::CancelDelete => {
-                state.show_delete_confirm = false;
-                state.delete_comparison_id = None;
-                state.delete_comparison_name = None;
+                state.close_delete_modal();
                 Command::None
             }
             Msg::ComparisonDeleted(result) => {
                 match result {
                     Ok(_) => {
-                        state.delete_comparison_id = None;
-                        state.delete_comparison_name = None;
-                        // Reload comparisons list
+                        state.close_delete_modal();
                         let migration_name = state.migration_name.clone().unwrap_or_default();
-                        Command::perform(
-                            async move {
-                                let config = crate::config();
-                                config.get_comparisons(&migration_name).await
-                                    .map_err(|e| e.to_string())
-                            },
-                            Msg::ComparisonsLoaded
-                        )
+                        reload_comparisons(migration_name)
                     }
                     Err(e) => {
                         log::error!("Failed to delete comparison: {}", e);
@@ -413,9 +421,7 @@ impl App for MigrationComparisonSelectApp {
             Msg::RequestRename => {
                 if let Some(selected_idx) = state.list_state.selected() {
                     if let Some(comparison) = state.comparisons.get(selected_idx) {
-                        state.rename_comparison_id = Some(comparison.id);
-                        state.rename_form.new_name.set_value(comparison.name.clone());
-                        state.show_rename_modal = true;
+                        state.open_rename_modal(comparison.id, comparison.name.clone());
                     }
                 }
                 Command::None
@@ -445,26 +451,15 @@ impl App for MigrationComparisonSelectApp {
                 )
             }
             Msg::RenameFormCancel => {
-                state.show_rename_modal = false;
-                state.rename_comparison_id = None;
-                state.rename_form = RenameComparisonForm::default();
+                state.close_rename_modal();
                 Command::None
             }
             Msg::ComparisonRenamed(result) => {
                 match result {
                     Ok(_) => {
-                        state.rename_comparison_id = None;
-                        state.rename_form = RenameComparisonForm::default();
-                        // Reload list
+                        state.close_rename_modal();
                         let migration_name = state.migration_name.clone().unwrap_or_default();
-                        Command::perform(
-                            async move {
-                                let config = crate::config();
-                                config.get_comparisons(&migration_name).await
-                                    .map_err(|e| e.to_string())
-                            },
-                            Msg::ComparisonsLoaded
-                        )
+                        reload_comparisons(migration_name)
                     }
                     Err(e) => {
                         log::error!("Failed to rename comparison: {}", e);
@@ -755,4 +750,16 @@ impl App for MigrationComparisonSelectApp {
             ]))
         }
     }
+}
+
+// Helper functions
+
+fn reload_comparisons(migration_name: String) -> Command<Msg> {
+    Command::perform(
+        async move {
+            let config = crate::config();
+            config.get_comparisons(&migration_name).await.map_err(|e| e.to_string())
+        },
+        Msg::ComparisonsLoaded
+    )
 }

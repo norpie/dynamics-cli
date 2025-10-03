@@ -244,16 +244,13 @@ impl App for MigrationEnvironmentApp {
                 }
             }
             Msg::CreateFormCancel => {
-                state.show_create_modal = false;
-                state.create_form.validation_error = None;
+                state.close_create_modal();
                 Command::None
             }
             Msg::RequestDelete => {
-                // Get selected migration name
                 if let Some(selected_idx) = state.list_state.selected() {
                     if let Some(migration) = state.environments.get(selected_idx) {
-                        state.delete_migration_name = Some(migration.name.clone());
-                        state.show_delete_confirm = true;
+                        state.open_delete_modal(migration.name.clone());
                     }
                 }
                 Command::None
@@ -261,7 +258,6 @@ impl App for MigrationEnvironmentApp {
             Msg::ConfirmDelete => {
                 if let Some(name) = state.delete_migration_name.clone() {
                     state.show_delete_confirm = false;
-                    // Async delete from database
                     Command::perform(
                         async move {
                             let config = crate::config();
@@ -274,22 +270,14 @@ impl App for MigrationEnvironmentApp {
                 }
             }
             Msg::CancelDelete => {
-                state.show_delete_confirm = false;
-                state.delete_migration_name = None;
+                state.close_delete_modal();
                 Command::None
             }
             Msg::MigrationDeleted(result) => {
                 match result {
                     Ok(_) => {
-                        state.delete_migration_name = None;
-                        // Reload migration list
-                        Command::perform(
-                            async {
-                                let config = crate::config();
-                                config.list_migrations().await.map_err(|e| e.to_string())
-                            },
-                            Msg::MigrationsLoaded
-                        )
+                        state.close_delete_modal();
+                        reload_migrations()
                     }
                     Err(e) => {
                         log::error!("Failed to delete migration: {}", e);
@@ -300,9 +288,7 @@ impl App for MigrationEnvironmentApp {
             Msg::RequestRename => {
                 if let Some(selected_idx) = state.list_state.selected() {
                     if let Some(migration) = state.environments.get(selected_idx) {
-                        state.rename_migration_name = Some(migration.name.clone());
-                        state.rename_form.new_name.set_value(migration.name.clone());  // Pre-fill with current name
-                        state.show_rename_modal = true;
+                        state.open_rename_modal(migration.name.clone());
                     }
                 }
                 Command::None
@@ -349,24 +335,14 @@ impl App for MigrationEnvironmentApp {
                 )
             }
             Msg::RenameFormCancel => {
-                state.show_rename_modal = false;
-                state.rename_migration_name = None;
-                state.rename_form = RenameMigrationForm::default();
+                state.close_rename_modal();
                 Command::None
             }
             Msg::MigrationRenamed(result) => {
                 match result {
                     Ok(_) => {
-                        state.rename_migration_name = None;
-                        state.rename_form = RenameMigrationForm::default();
-                        // Reload list
-                        Command::perform(
-                            async {
-                                let config = crate::config();
-                                config.list_migrations().await.map_err(|e| e.to_string())
-                            },
-                            Msg::MigrationsLoaded
-                        )
+                        state.close_rename_modal();
+                        reload_migrations()
                     }
                     Err(e) => {
                         log::error!("Failed to rename migration: {}", e);
@@ -374,20 +350,10 @@ impl App for MigrationEnvironmentApp {
                     }
                 }
             }
-            Msg::MigrationCreated(Ok(())) => {
-                // Reload migrations list
-                Command::perform(
-                    async {
-                        let config = crate::config();
-                        config.list_migrations().await
-                            .map_err(|e| e.to_string())
-                    },
-                    Msg::MigrationsLoaded
-                )
-            }
+            Msg::MigrationCreated(Ok(())) => reload_migrations(),
             Msg::MigrationCreated(Err(err)) => {
                 log::error!("Failed to create migration: {}", err);
-                state.show_create_modal = false;
+                state.close_create_modal();
                 Command::batch(vec![
                     Command::publish("error:init", serde_json::json!({
                         "message": format!("Failed to create migration: {}", err),
@@ -608,6 +574,45 @@ impl State {
             rename_form: RenameMigrationForm::default(),
         }
     }
+
+    fn open_delete_modal(&mut self, migration_name: String) {
+        self.delete_migration_name = Some(migration_name);
+        self.show_delete_confirm = true;
+    }
+
+    fn close_delete_modal(&mut self) {
+        self.show_delete_confirm = false;
+        self.delete_migration_name = None;
+    }
+
+    fn open_rename_modal(&mut self, migration_name: String) {
+        self.rename_migration_name = Some(migration_name.clone());
+        self.rename_form.new_name.set_value(migration_name);
+        self.show_rename_modal = true;
+    }
+
+    fn close_rename_modal(&mut self) {
+        self.show_rename_modal = false;
+        self.rename_migration_name = None;
+        self.rename_form = RenameMigrationForm::default();
+    }
+
+    fn close_create_modal(&mut self) {
+        self.show_create_modal = false;
+        self.create_form.validation_error = None;
+    }
+}
+
+// Helper functions
+
+fn reload_migrations() -> Command<Msg> {
+    Command::perform(
+        async {
+            let config = crate::config();
+            config.list_migrations().await.map_err(|e| e.to_string())
+        },
+        Msg::MigrationsLoaded
+    )
 }
 
 fn get_filtered_source_envs(all_envs: &[String], exclude: Option<&str>) -> Vec<String> {
