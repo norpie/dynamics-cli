@@ -1,11 +1,12 @@
 use crossterm::event::KeyCode;
 use crate::tui::{App, AppId, Command, Element, Subscription, Theme, FocusId, Resource};
 use crate::tui::widgets::list::{ListItem, ListState};
-use crate::tui::widgets::{TextInputState, SelectState, SelectEvent};
+use crate::tui::widgets::{TextInputField, SelectField, TextInputEvent, SelectEvent};
 use crate::config::SavedMigration;
 use ratatui::text::{Line, Span};
 use ratatui::style::Style;
 use crate::{col, row, spacer, button_row, modal, use_constraints};
+use dynamics_lib_macros::Validate;
 
 pub struct MigrationEnvironmentApp;
 
@@ -54,21 +55,34 @@ pub struct State {
     rename_form: RenameMigrationForm,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Validate)]
 pub struct RenameMigrationForm {
-    new_name: String,
-    name_input_state: TextInputState,
+    #[validate(not_empty, message = "Migration name is required")]
+    new_name: TextInputField,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Validate)]
 pub struct CreateMigrationForm {
-    name: String,
-    name_input_state: TextInputState,
-    source_env: Option<String>,
-    source_select_state: SelectState,
-    target_env: Option<String>,
-    target_select_state: SelectState,
+    #[validate(not_empty, message = "Migration name is required")]
+    name: TextInputField,
+
+    #[validate(required, message = "Source environment is required")]
+    source: SelectField,
+
+    #[validate(required, custom = "validate_target_different", message = "Target must differ from source")]
+    target: SelectField,
+
     validation_error: Option<String>,
+}
+
+impl CreateMigrationForm {
+    fn validate_target_different(&self) -> Result<(), String> {
+        if self.source.value() == self.target.value() {
+            Err("Source and target environments must be different".to_string())
+        } else {
+            Ok(())
+        }
+    }
 }
 
 impl Default for State {
@@ -84,7 +98,7 @@ pub enum Msg {
     ListNavigate(KeyCode),
     OpenCreateModal,
     EnvironmentsLoaded(Result<Vec<String>, String>),
-    CreateFormNameChanged(KeyCode),
+    CreateFormNameEvent(TextInputEvent),
     CreateFormSourceEvent(SelectEvent),
     CreateFormTargetEvent(SelectEvent),
     CreateFormSubmit,
@@ -95,7 +109,7 @@ pub enum Msg {
     CancelDelete,
     MigrationDeleted(Result<(), String>),
     RequestRename,
-    RenameFormNameChanged(KeyCode),
+    RenameFormNameEvent(TextInputEvent),
     RenameFormSubmit,
     RenameFormCancel,
     MigrationRenamed(Result<(), String>),
@@ -182,104 +196,52 @@ impl App for MigrationEnvironmentApp {
                 state.show_create_modal = false;
                 Command::None
             }
-            Msg::CreateFormNameChanged(key) => {
-                if let Some(new_value) = state.create_form.name_input_state.handle_key(
-                    key,
-                    &state.create_form.name,
-                    Some(50) // Max 50 characters
-                ) {
-                    state.create_form.name = new_value;
-                }
+            Msg::CreateFormNameEvent(event) => {
+                state.create_form.name.handle_event(event, Some(50));
                 Command::None
             }
             Msg::CreateFormSourceEvent(event) => {
-                use SelectEvent::*;
-                match event {
-                    Navigate(key) => {
-                        state.create_form.source_select_state.handle_event(event);
-                    }
-                    Select(idx) => {
-                        state.create_form.source_select_state.handle_event(event);
-                        // Index 0 is the placeholder, actual environments start at index 1
-                        if idx == 0 {
-                            state.create_form.source_env = None;
-                        } else {
-                            let filtered_envs = get_filtered_source_envs(&state.available_environments, &state.create_form.target_env);
-                            if let Some(env) = filtered_envs.get(idx - 1) {
-                                state.create_form.source_env = Some(env.clone());
-                            }
-                        }
-                    }
-                }
+                let filtered_envs = get_filtered_source_envs(&state.available_environments, state.create_form.target.value());
+                state.create_form.source.handle_event::<Msg>(event, &filtered_envs);
                 Command::None
             }
             Msg::CreateFormTargetEvent(event) => {
-                use SelectEvent::*;
-                match event {
-                    Navigate(key) => {
-                        state.create_form.target_select_state.handle_event(event);
-                    }
-                    Select(idx) => {
-                        state.create_form.target_select_state.handle_event(event);
-                        // Index 0 is the placeholder, actual environments start at index 1
-                        if idx == 0 {
-                            state.create_form.target_env = None;
-                        } else {
-                            let filtered_envs = get_filtered_target_envs(&state.available_environments, &state.create_form.source_env);
-                            if let Some(env) = filtered_envs.get(idx - 1) {
-                                state.create_form.target_env = Some(env.clone());
-                            }
-                        }
-                    }
-                }
+                let filtered_envs = get_filtered_target_envs(&state.available_environments, state.create_form.source.value());
+                state.create_form.target.handle_event::<Msg>(event, &filtered_envs);
                 Command::None
             }
             Msg::CreateFormSubmit => {
-                let name = state.create_form.name.trim().to_string();
-                let source = state.create_form.source_env.clone();
-                let target = state.create_form.target_env.clone();
+                // Validate using generated macro method
+                match state.create_form.validate() {
+                    Ok(_) => {
+                        let name = state.create_form.name.value().trim().to_string();
+                        let source = state.create_form.source.value().unwrap().to_string();
+                        let target = state.create_form.target.value().unwrap().to_string();
 
-                if name.is_empty() {
-                    state.create_form.validation_error = Some("Migration name is required".to_string());
-                    return Command::None;
+                        state.show_create_modal = false;
+                        state.create_form.validation_error = None;
+
+                        Command::perform(
+                            async move {
+                                let config = crate::config();
+                                let migration = SavedMigration {
+                                    name,
+                                    source_env: source,
+                                    target_env: target,
+                                    created_at: chrono::Utc::now(),
+                                    last_used: chrono::Utc::now(),
+                                };
+                                config.add_migration(migration).await
+                                    .map_err(|e| e.to_string())
+                            },
+                            Msg::MigrationCreated
+                        )
+                    }
+                    Err(validation_error) => {
+                        state.create_form.validation_error = Some(validation_error);
+                        Command::None
+                    }
                 }
-
-                if source.is_none() {
-                    state.create_form.validation_error = Some("Source environment is required".to_string());
-                    return Command::None;
-                }
-
-                if target.is_none() {
-                    state.create_form.validation_error = Some("Target environment is required".to_string());
-                    return Command::None;
-                }
-
-                let source = source.unwrap();
-                let target = target.unwrap();
-
-                if source == target {
-                    state.create_form.validation_error = Some("Source and target environments must be different".to_string());
-                    return Command::None;
-                }
-
-                state.show_create_modal = false;
-                state.create_form.validation_error = None;
-
-                Command::perform(
-                    async move {
-                        let config = crate::config();
-                        let migration = SavedMigration {
-                            name,
-                            source_env: source,
-                            target_env: target,
-                            created_at: chrono::Utc::now(),
-                            last_used: chrono::Utc::now(),
-                        };
-                        config.add_migration(migration).await
-                            .map_err(|e| e.to_string())
-                    },
-                    Msg::MigrationCreated
-                )
             }
             Msg::CreateFormCancel => {
                 state.show_create_modal = false;
@@ -339,25 +301,19 @@ impl App for MigrationEnvironmentApp {
                 if let Some(selected_idx) = state.list_state.selected() {
                     if let Some(migration) = state.environments.get(selected_idx) {
                         state.rename_migration_name = Some(migration.name.clone());
-                        state.rename_form.new_name = migration.name.clone();  // Pre-fill with current name
+                        state.rename_form.new_name.set_value(migration.name.clone());  // Pre-fill with current name
                         state.show_rename_modal = true;
                     }
                 }
                 Command::None
             }
-            Msg::RenameFormNameChanged(key) => {
-                if let Some(new_value) = state.rename_form.name_input_state.handle_key(
-                    key,
-                    &state.rename_form.new_name,
-                    Some(50)
-                ) {
-                    state.rename_form.new_name = new_value;
-                }
+            Msg::RenameFormNameEvent(event) => {
+                state.rename_form.new_name.handle_event(event, Some(50));
                 Command::None
             }
             Msg::RenameFormSubmit => {
                 let old_name = state.rename_migration_name.clone();
-                let new_name = state.rename_form.new_name.trim().to_string();
+                let new_name = state.rename_form.new_name.value().trim().to_string();
 
                 if new_name.is_empty() || old_name.is_none() {
                     return Command::None;
@@ -473,11 +429,11 @@ impl App for MigrationEnvironmentApp {
             let name_input = Element::panel(
                 Element::text_input(
                     "rename-name-input",
-                    &state.rename_form.new_name,
-                    &state.rename_form.name_input_state
+                    state.rename_form.new_name.value(),
+                    &state.rename_form.new_name.state
                 )
                 .placeholder("Migration name")
-                .on_change(Msg::RenameFormNameChanged)
+                .on_event(Msg::RenameFormNameEvent)
                 .build()
             )
             .title("New Name")
@@ -528,21 +484,18 @@ impl App for MigrationEnvironmentApp {
             }
 
             // Get filtered environment options
-            let mut source_options = vec!["(Select source environment)".to_string()];
-            source_options.extend(get_filtered_source_envs(&state.available_environments, &state.create_form.target_env));
-
-            let mut target_options = vec!["(Select target environment)".to_string()];
-            target_options.extend(get_filtered_target_envs(&state.available_environments, &state.create_form.source_env));
+            let source_options = get_filtered_source_envs(&state.available_environments, state.create_form.target.value());
+            let target_options = get_filtered_target_envs(&state.available_environments, state.create_form.source.value());
 
             // Name input
             let name_input = Element::panel(
                 Element::text_input(
                     "create-name-input",
-                    &state.create_form.name,
-                    &state.create_form.name_input_state
+                    state.create_form.name.value(),
+                    &state.create_form.name.state
                 )
                 .placeholder("Migration name")
-                .on_change(Msg::CreateFormNameChanged)
+                .on_event(Msg::CreateFormNameEvent)
                 .build()
             )
             .title("Name")
@@ -553,7 +506,7 @@ impl App for MigrationEnvironmentApp {
                 Element::select(
                     "create-source-select",
                     source_options,
-                    &mut state.create_form.source_select_state
+                    &mut state.create_form.source.state
                 )
                 .on_event(Msg::CreateFormSourceEvent)
                 .build()
@@ -566,7 +519,7 @@ impl App for MigrationEnvironmentApp {
                 Element::select(
                     "create-target-select",
                     target_options,
-                    &mut state.create_form.target_select_state
+                    &mut state.create_form.target.state
                 )
                 .on_event(Msg::CreateFormTargetEvent)
                 .build()
@@ -657,11 +610,11 @@ impl State {
     }
 }
 
-fn get_filtered_source_envs(all_envs: &[String], exclude: &Option<String>) -> Vec<String> {
+fn get_filtered_source_envs(all_envs: &[String], exclude: Option<&str>) -> Vec<String> {
     all_envs.iter()
         .filter(|e| {
             if let Some(target) = exclude {
-                *e != target
+                e.as_str() != target
             } else {
                 true
             }
@@ -670,11 +623,11 @@ fn get_filtered_source_envs(all_envs: &[String], exclude: &Option<String>) -> Ve
         .collect()
 }
 
-fn get_filtered_target_envs(all_envs: &[String], exclude: &Option<String>) -> Vec<String> {
+fn get_filtered_target_envs(all_envs: &[String], exclude: Option<&str>) -> Vec<String> {
     all_envs.iter()
         .filter(|e| {
             if let Some(source) = exclude {
-                *e != source
+                e.as_str() != source
             } else {
                 true
             }

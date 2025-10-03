@@ -5,9 +5,10 @@ use crate::tui::{
     subscription::Subscription,
     state::theme::Theme,
     widgets::list::{ListItem, ListState},
-    widgets::{AutocompleteField, AutocompleteEvent},
+    widgets::{AutocompleteField, AutocompleteEvent, TextInputField, TextInputEvent},
     Resource,
 };
+use dynamics_lib_macros::Validate;
 use crate::config::repository::migrations::SavedComparison;
 use crossterm::event::KeyCode;
 use ratatui::{
@@ -20,19 +21,24 @@ use crate::{col, row, spacer, button_row, modal, use_constraints, error_display}
 
 pub struct MigrationComparisonSelectApp;
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Validate)]
 pub struct CreateComparisonForm {
-    name: String,
-    name_input_state: crate::tui::widgets::TextInputState,
-    source_entity_field: AutocompleteField,
-    target_entity_field: AutocompleteField,
+    #[validate(not_empty, message = "Comparison name is required")]
+    name: TextInputField,
+
+    #[validate(not_empty, message = "Source entity is required")]
+    source_entity: AutocompleteField,
+
+    #[validate(not_empty, message = "Target entity is required")]
+    target_entity: AutocompleteField,
+
     validation_error: Option<String>,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Validate)]
 pub struct RenameComparisonForm {
-    new_name: String,
-    name_input_state: crate::tui::widgets::TextInputState,
+    #[validate(not_empty, message = "Comparison name is required")]
+    new_name: TextInputField,
 }
 
 #[derive(Clone, Default)]
@@ -75,7 +81,7 @@ pub enum Msg {
     ListNavigate(KeyCode),
     SelectComparison,
     CreateComparison,
-    CreateFormNameChanged(KeyCode),
+    CreateFormNameEvent(TextInputEvent),
     CreateFormSourceEvent(AutocompleteEvent),
     CreateFormTargetEvent(AutocompleteEvent),
     CreateFormSubmit,
@@ -86,7 +92,7 @@ pub enum Msg {
     CancelDelete,
     ComparisonDeleted(Result<(), String>),
     RequestRename,
-    RenameFormNameChanged(KeyCode),
+    RenameFormNameEvent(TextInputEvent),
     RenameFormSubmit,
     RenameFormCancel,
     ComparisonRenamed(Result<(), String>),
@@ -258,83 +264,71 @@ impl App for MigrationComparisonSelectApp {
                 state.create_form = CreateComparisonForm::default();
                 Command::set_focus(FocusId::new("create-name-input"))
             }
-            Msg::CreateFormNameChanged(key) => {
-                if let Some(new_value) = state.create_form.name_input_state.handle_key(
-                    key,
-                    &state.create_form.name,
-                    Some(50), // Max 50 characters
-                ) {
-                    state.create_form.name = new_value;
-                }
+            Msg::CreateFormNameEvent(event) => {
+                state.create_form.name.handle_event(event, Some(50));
                 Command::None
             }
             Msg::CreateFormSourceEvent(event) => {
                 let options = state.source_entities.as_ref().ok().cloned().unwrap_or_default();
-                state.create_form.source_entity_field.handle_event::<Msg>(event, &options);
+                state.create_form.source_entity.handle_event::<Msg>(event, &options);
                 Command::None
             }
             Msg::CreateFormTargetEvent(event) => {
                 let options = state.target_entities.as_ref().ok().cloned().unwrap_or_default();
-                state.create_form.target_entity_field.handle_event::<Msg>(event, &options);
+                state.create_form.target_entity.handle_event::<Msg>(event, &options);
                 Command::None
             }
             Msg::CreateFormSubmit => {
-                let name = state.create_form.name.trim().to_string();
-                let source_entity = state.create_form.source_entity_field.value().trim().to_string();
-                let target_entity = state.create_form.target_entity_field.value().trim().to_string();
+                // Validate using generated macro method
+                match state.create_form.validate() {
+                    Ok(_) => {
+                        let name = state.create_form.name.value().trim().to_string();
+                        let source_entity = state.create_form.source_entity.value().trim().to_string();
+                        let target_entity = state.create_form.target_entity.value().trim().to_string();
 
-                if name.is_empty() {
-                    state.create_form.validation_error = Some("Comparison name is required".to_string());
-                    return Command::None;
-                }
+                        // Additional validation: check entities exist in lists
+                        if let Resource::Success(source_list) = &state.source_entities {
+                            if !source_list.contains(&source_entity) {
+                                state.create_form.validation_error = Some(format!("Source entity '{}' not found", source_entity));
+                                return Command::None;
+                            }
+                        }
 
-                if source_entity.is_empty() {
-                    state.create_form.validation_error = Some("Source entity is required".to_string());
-                    return Command::None;
-                }
+                        if let Resource::Success(target_list) = &state.target_entities {
+                            if !target_list.contains(&target_entity) {
+                                state.create_form.validation_error = Some(format!("Target entity '{}' not found", target_entity));
+                                return Command::None;
+                            }
+                        }
 
-                if target_entity.is_empty() {
-                    state.create_form.validation_error = Some("Target entity is required".to_string());
-                    return Command::None;
-                }
+                        let migration_name = state.migration_name.clone().unwrap_or_default();
+                        state.show_create_modal = false;
+                        state.create_form.validation_error = None;
 
-                // Validate that entities exist in their respective lists
-                if let Resource::Success(source_list) = &state.source_entities {
-                    if !source_list.contains(&source_entity) {
-                        state.create_form.validation_error = Some(format!("Source entity '{}' not found", source_entity));
-                        return Command::None;
+                        Command::perform(
+                            async move {
+                                let config = crate::config();
+                                let comparison = SavedComparison {
+                                    id: 0, // Will be assigned by database
+                                    name,
+                                    migration_name,
+                                    source_entity,
+                                    target_entity,
+                                    entity_comparison: None,
+                                    created_at: chrono::Utc::now(),
+                                    last_used: chrono::Utc::now(),
+                                };
+                                config.add_comparison(comparison).await
+                                    .map_err(|e| e.to_string())
+                            },
+                            Msg::ComparisonCreated
+                        )
+                    }
+                    Err(validation_error) => {
+                        state.create_form.validation_error = Some(validation_error);
+                        Command::None
                     }
                 }
-
-                if let Resource::Success(target_list) = &state.target_entities {
-                    if !target_list.contains(&target_entity) {
-                        state.create_form.validation_error = Some(format!("Target entity '{}' not found", target_entity));
-                        return Command::None;
-                    }
-                }
-
-                let migration_name = state.migration_name.clone().unwrap_or_default();
-                state.show_create_modal = false;
-                state.create_form.validation_error = None;
-
-                Command::perform(
-                    async move {
-                        let config = crate::config();
-                        let comparison = SavedComparison {
-                            id: 0, // Will be assigned by database
-                            name,
-                            migration_name,
-                            source_entity,
-                            target_entity,
-                            entity_comparison: None,
-                            created_at: chrono::Utc::now(),
-                            last_used: chrono::Utc::now(),
-                        };
-                        config.add_comparison(comparison).await
-                            .map_err(|e| e.to_string())
-                    },
-                    Msg::ComparisonCreated
-                )
             }
             Msg::CreateFormCancel => {
                 state.show_create_modal = false;
@@ -420,25 +414,19 @@ impl App for MigrationComparisonSelectApp {
                 if let Some(selected_idx) = state.list_state.selected() {
                     if let Some(comparison) = state.comparisons.get(selected_idx) {
                         state.rename_comparison_id = Some(comparison.id);
-                        state.rename_form.new_name = comparison.name.clone();
+                        state.rename_form.new_name.set_value(comparison.name.clone());
                         state.show_rename_modal = true;
                     }
                 }
                 Command::None
             }
-            Msg::RenameFormNameChanged(key) => {
-                if let Some(new_value) = state.rename_form.name_input_state.handle_key(
-                    key,
-                    &state.rename_form.new_name,
-                    Some(50)
-                ) {
-                    state.rename_form.new_name = new_value;
-                }
+            Msg::RenameFormNameEvent(event) => {
+                state.rename_form.new_name.handle_event(event, Some(50));
                 Command::None
             }
             Msg::RenameFormSubmit => {
                 let id = state.rename_comparison_id;
-                let new_name = state.rename_form.new_name.trim().to_string();
+                let new_name = state.rename_form.new_name.value().trim().to_string();
 
                 if new_name.is_empty() || id.is_none() {
                     return Command::None;
@@ -529,11 +517,11 @@ impl App for MigrationComparisonSelectApp {
             let name_input = Element::panel(
                 Element::text_input(
                     "rename-name-input",
-                    &state.rename_form.new_name,
-                    &mut state.rename_form.name_input_state
+                    state.rename_form.new_name.value(),
+                    &state.rename_form.new_name.state
                 )
                 .placeholder("Comparison name")
-                .on_change(Msg::RenameFormNameChanged)
+                .on_event(Msg::RenameFormNameEvent)
                 .build()
             )
             .title("New Name")
@@ -568,11 +556,11 @@ impl App for MigrationComparisonSelectApp {
             let name_input = Element::panel(
                 Element::text_input(
                     "create-name-input",
-                    &state.create_form.name,
-                    &mut state.create_form.name_input_state,
+                    state.create_form.name.value(),
+                    &state.create_form.name.state,
                 )
                 .placeholder("Comparison name")
-                .on_change(Msg::CreateFormNameChanged)
+                .on_event(Msg::CreateFormNameEvent)
                 .build()
             )
             .title("Name")
@@ -586,8 +574,8 @@ impl App for MigrationComparisonSelectApp {
             let source_autocomplete = Element::autocomplete(
                 "create-source-autocomplete",
                 state.source_entities.as_ref().ok().cloned().unwrap_or_default(),
-                state.create_form.source_entity_field.value().to_string(),
-                &mut state.create_form.source_entity_field.state,
+                state.create_form.source_entity.value().to_string(),
+                &mut state.create_form.source_entity.state,
             )
             .placeholder("Type source entity name...")
             .on_event(Msg::CreateFormSourceEvent)
@@ -601,8 +589,8 @@ impl App for MigrationComparisonSelectApp {
             let target_autocomplete = Element::autocomplete(
                 "create-target-autocomplete",
                 state.target_entities.as_ref().ok().cloned().unwrap_or_default(),
-                state.create_form.target_entity_field.value().to_string(),
-                &mut state.create_form.target_entity_field.state,
+                state.create_form.target_entity.value().to_string(),
+                &mut state.create_form.target_entity.state,
             )
             .placeholder("Type target entity name...")
             .on_event(Msg::CreateFormTargetEvent)

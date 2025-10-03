@@ -46,6 +46,11 @@ pub fn derive(input: TokenStream) -> TokenStream {
                         return Err(#message.to_string());
                     }
                 });
+            } else if let Some(custom_fn) = get_attr_string(attr, "custom") {
+                let fn_ident = syn::Ident::new(&custom_fn, field_name.span());
+                validations.push(quote! {
+                    self.#fn_ident().map_err(|_| #message.to_string())?;
+                });
             }
         }
     }
