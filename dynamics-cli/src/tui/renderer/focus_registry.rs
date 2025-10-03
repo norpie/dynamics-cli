@@ -111,4 +111,67 @@ impl<Msg: Clone> FocusRegistry<Msg> {
     fn point_in_rect(&self, x: u16, y: u16, rect: Rect) -> bool {
         x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height
     }
+
+    /// Move focus to the next focusable element in the active layer
+    /// Returns the new focused ID, or None if there are no focusables
+    pub fn next_focus(&self, current: Option<&FocusId>) -> Option<FocusId> {
+        let layer = self.active_layer()?;
+        if layer.focusables.is_empty() {
+            return None;
+        }
+
+        match current {
+            None => {
+                // No current focus, focus the first element
+                Some(layer.focusables[0].id.clone())
+            }
+            Some(id) => {
+                // Find current index
+                let current_index = layer.focusables.iter().position(|f| &f.id == id)?;
+                // Wrap around to next
+                let next_index = (current_index + 1) % layer.focusables.len();
+                Some(layer.focusables[next_index].id.clone())
+            }
+        }
+    }
+
+    /// Move focus to the previous focusable element in the active layer
+    /// Returns the new focused ID, or None if there are no focusables
+    pub fn prev_focus(&self, current: Option<&FocusId>) -> Option<FocusId> {
+        let layer = self.active_layer()?;
+        if layer.focusables.is_empty() {
+            return None;
+        }
+
+        match current {
+            None => {
+                // No current focus, focus the last element
+                Some(layer.focusables[layer.focusables.len() - 1].id.clone())
+            }
+            Some(id) => {
+                // Find current index
+                let current_index = layer.focusables.iter().position(|f| &f.id == id)?;
+                // Wrap around to previous
+                let prev_index = if current_index == 0 {
+                    layer.focusables.len() - 1
+                } else {
+                    current_index - 1
+                };
+                Some(layer.focusables[prev_index].id.clone())
+            }
+        }
+    }
+
+    /// Dispatch a key event to the focused element
+    /// Returns Some(Msg) if the element handled the key and produced a message
+    pub fn dispatch_key(&self, focused_id: &FocusId, key: KeyCode) -> Option<Msg> {
+        use crate::tui::command::DispatchTarget;
+
+        let focusable = self.find_in_active_layer(focused_id)?;
+        match (focusable.on_key)(key) {
+            DispatchTarget::AppMsg(msg) => Some(msg),
+            DispatchTarget::WidgetEvent(_) => None, // Widget events not supported in global focus
+            DispatchTarget::PassThrough => None,
+        }
+    }
 }
