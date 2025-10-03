@@ -24,6 +24,8 @@ pub struct State {
     show_confirm: bool,
 }
 
+impl crate::tui::AppState for State {}
+
 impl App for Example2 {
     type State = State;
     type Msg = Msg;

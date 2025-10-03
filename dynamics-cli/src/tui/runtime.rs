@@ -9,8 +9,8 @@ use std::pin::Pin;
 use std::future::Future;
 use std::any::Any;
 
-use crate::tui::{App, AppId, Command, Renderer, InteractionRegistry, Subscription};
-use crate::tui::command::{ParallelConfig};
+use crate::tui::{App, AppId, Command, Renderer, InteractionRegistry, Subscription, AppState};
+use crate::tui::command::{ParallelConfig, DispatchTarget};
 use crate::tui::renderer::{FocusRegistry, FocusableInfo, DropdownRegistry};
 use crate::tui::element::FocusId;
 use crate::tui::state::{RuntimeConfig, FocusMode};
@@ -399,9 +399,22 @@ impl<A: App> Runtime<A> {
         // If there's a focused element, try routing the key to it first
         if let Some(focused_id) = &self.focused_id {
             if let Some(focusable) = self.focus_registry.find_in_active_layer(focused_id) {
-                if let Some(msg) = (focusable.on_key)(key_event.code) {
-                    let command = A::update(&mut self.state, msg);
-                    return self.execute_command(command);
+                match (focusable.on_key)(key_event.code) {
+                    DispatchTarget::WidgetEvent(boxed_event) => {
+                        // Try widget auto-dispatch
+                        if self.state.dispatch_widget_event(focused_id, boxed_event.as_ref()) {
+                            return Ok(true);  // Handled!
+                        }
+                        // Not handled - widget event was not auto-dispatched
+                        // This means the widget has no #[widget] attribute or doesn't match
+                        // Just ignore the event (no-op)
+                        return Ok(true);
+                    }
+                    DispatchTarget::AppMsg(msg) => {
+                        // Direct to update()
+                        let command = A::update(&mut self.state, msg);
+                        return self.execute_command(command);
+                    }
                 }
             }
         }
@@ -480,9 +493,17 @@ impl<A: App> Runtime<A> {
                             && pos.1 >= focusable.rect.y
                             && pos.1 < focusable.rect.y + focusable.rect.height
                         {
-                            if let Some(msg) = (focusable.on_key)(KeyCode::Up) {
-                                let command = A::update(&mut self.state, msg);
-                                return self.execute_command(command);
+                            match (focusable.on_key)(KeyCode::Up) {
+                                DispatchTarget::WidgetEvent(boxed_event) => {
+                                    if self.state.dispatch_widget_event(focused_id, boxed_event.as_ref()) {
+                                        return Ok(true);
+                                    }
+                                    return Ok(true);
+                                }
+                                DispatchTarget::AppMsg(msg) => {
+                                    let command = A::update(&mut self.state, msg);
+                                    return self.execute_command(command);
+                                }
                             }
                         }
                     }
@@ -498,9 +519,17 @@ impl<A: App> Runtime<A> {
                             && pos.1 >= focusable.rect.y
                             && pos.1 < focusable.rect.y + focusable.rect.height
                         {
-                            if let Some(msg) = (focusable.on_key)(KeyCode::Down) {
-                                let command = A::update(&mut self.state, msg);
-                                return self.execute_command(command);
+                            match (focusable.on_key)(KeyCode::Down) {
+                                DispatchTarget::WidgetEvent(boxed_event) => {
+                                    if self.state.dispatch_widget_event(focused_id, boxed_event.as_ref()) {
+                                        return Ok(true);
+                                    }
+                                    return Ok(true);
+                                }
+                                DispatchTarget::AppMsg(msg) => {
+                                    let command = A::update(&mut self.state, msg);
+                                    return self.execute_command(command);
+                                }
                             }
                         }
                     }

@@ -2,6 +2,7 @@ use ratatui::{Frame, style::{Style, Stylize}, widgets::Paragraph, layout::Rect};
 use crossterm::event::KeyCode;
 use crate::tui::{Element, Theme};
 use crate::tui::element::FocusId;
+use crate::tui::command::DispatchTarget;
 use crate::tui::renderer::{InteractionRegistry, FocusRegistry, FocusableInfo};
 use crate::tui::widgets::TextInputEvent;
 
@@ -9,15 +10,25 @@ use crate::tui::widgets::TextInputEvent;
 pub fn text_input_on_key<Msg: Clone + Send + 'static>(
     on_change: Option<fn(KeyCode) -> Msg>,
     on_submit: Option<Msg>,
-) -> Box<dyn Fn(KeyCode) -> Option<Msg> + Send> {
+) -> Box<dyn Fn(KeyCode) -> DispatchTarget<Msg> + Send> {
     Box::new(move |key| match key {
         KeyCode::Enter => {
             // Enter fires on_submit (app handles whether to also send on_change)
-            on_submit.clone()
+            if let Some(msg) = on_submit.clone() {
+                DispatchTarget::AppMsg(msg)
+            } else {
+                // No handler - use WidgetEvent for auto-dispatch
+                DispatchTarget::WidgetEvent(Box::new(TextInputEvent::Submit))
+            }
         }
         _ => {
             // All other keys go to on_change for app to handle via TextInputState
-            on_change.map(|f| f(key))
+            if let Some(f) = on_change {
+                DispatchTarget::AppMsg(f(key))
+            } else {
+                // No handler - use WidgetEvent for auto-dispatch
+                DispatchTarget::WidgetEvent(Box::new(TextInputEvent::Changed(key)))
+            }
         }
     })
 }
@@ -25,10 +36,10 @@ pub fn text_input_on_key<Msg: Clone + Send + 'static>(
 /// Create on_key handler for text inputs using unified event pattern
 pub fn text_input_on_key_event<Msg: Clone + Send + 'static>(
     on_event: fn(TextInputEvent) -> Msg,
-) -> Box<dyn Fn(KeyCode) -> Option<Msg> + Send> {
+) -> Box<dyn Fn(KeyCode) -> DispatchTarget<Msg> + Send> {
     Box::new(move |key| match key {
-        KeyCode::Enter => Some(on_event(TextInputEvent::Submit)),
-        _ => Some(on_event(TextInputEvent::Changed(key))),
+        KeyCode::Enter => DispatchTarget::AppMsg(on_event(TextInputEvent::Submit)),
+        _ => DispatchTarget::AppMsg(on_event(TextInputEvent::Changed(key))),
     })
 }
 

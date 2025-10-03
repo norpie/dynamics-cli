@@ -4,6 +4,19 @@ use std::any::Any;
 use serde_json::Value;
 use crate::tui::element::FocusId;
 
+/// Target for event dispatch - either widget auto-routing or app message
+///
+/// This enum allows the runtime to distinguish between:
+/// - Widget events that should be auto-dispatched to Field types via AppState
+/// - App messages that should go directly to the update function
+pub enum DispatchTarget<Msg> {
+    /// Widget event - runtime tries auto-dispatch via AppState::dispatch_widget_event
+    WidgetEvent(Box<dyn Any + Send>),
+
+    /// App message - goes directly to update() as before
+    AppMsg(Msg),
+}
+
 /// Commands represent side effects that apps want to perform.
 /// They are returned from the update() function and executed by the runtime.
 pub enum Command<Msg> {

@@ -22,7 +22,7 @@ mod test_resource_handlers;
 pub use command::{Command, AppId};
 pub use element::{Element, LayoutConstraint, Layer, Alignment, FocusId};
 pub use subscription::Subscription;
-pub use app::App;
+pub use app::{App, AppState};
 pub use renderer::{Renderer, InteractionRegistry};
 pub use runtime::{Runtime, AppRuntime};
 pub use multi_runtime::MultiAppRuntime;

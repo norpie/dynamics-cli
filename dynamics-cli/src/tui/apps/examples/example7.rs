@@ -3,19 +3,22 @@ use ratatui::text::{Line, Span};
 use ratatui::style::Style;
 use ratatui::prelude::Stylize;
 use crate::tui::{App, Command, Element, Subscription, Theme, LayoutConstraint, FocusId};
-use crate::tui::widgets::{AutocompleteField, AutocompleteEvent};
+use crate::tui::widgets::AutocompleteField;
 use crate::tui::element::ColumnBuilder;
+use dynamics_lib_macros::AppState;
 
 pub struct Example7;
 
 #[derive(Clone)]
 pub enum Msg {
-    AutocompleteEvent(AutocompleteEvent),
     Back,
 }
 
+#[derive(AppState)]
 pub struct State {
+    #[widget("entity_autocomplete", options = "self.all_entities")]
     entity_field: AutocompleteField,
+
     all_entities: Vec<String>,
     selected_entity: Option<String>,
 }
@@ -79,18 +82,13 @@ impl App for Example7 {
 
     fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         match msg {
-            Msg::AutocompleteEvent(event) => {
-                // All autocomplete logic handled by the field
-                state.entity_field.handle_event::<Msg>(event, &state.all_entities);
-
-                // Update selected_entity when value changes (on selection)
+            Msg::Back => {
+                // Update selected_entity when user navigates away (if value changed)
                 if !state.entity_field.value().is_empty() && !state.entity_field.is_open() {
                     state.selected_entity = Some(state.entity_field.value().to_string());
                 }
-
-                Command::None
+                Command::navigate_to(crate::tui::AppId::AppLauncher)
             }
-            Msg::Back => Command::navigate_to(crate::tui::AppId::AppLauncher),
         }
     }
 
@@ -110,7 +108,6 @@ impl App for Example7 {
             &mut state.entity_field.state,
         )
         .placeholder("Type entity name...")
-        .on_event(Msg::AutocompleteEvent)
         .build();
 
         let selected_display = if let Some(ref entity) = state.selected_entity {

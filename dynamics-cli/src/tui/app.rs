@@ -1,5 +1,22 @@
 use crate::tui::{Command, Element, Subscription, Theme};
+use crate::tui::element::FocusId;
 use ratatui::text::Line;
+use std::any::Any;
+
+/// Trait for state types that can auto-dispatch widget events
+///
+/// This trait enables automatic routing of widget events to Field types,
+/// eliminating the need for manual Msg variants and update handlers.
+///
+/// Usually implemented via `#[derive(AppState)]` with `#[widget("id")]` attributes.
+pub trait AppState {
+    /// Try to handle widget event internally by dispatching to Field types
+    ///
+    /// Returns true if handled, false if event should be passed to update()
+    fn dispatch_widget_event(&mut self, _id: &FocusId, _event: &dyn Any) -> bool {
+        false  // Default: not handled
+    }
+}
 
 /// The main trait that all TUI apps must implement.
 ///
@@ -11,7 +28,7 @@ use ratatui::text::Line;
 /// - subscriptions: declares what inputs the app wants to receive
 pub trait App: Sized + Send + 'static {
     /// The app's state type
-    type State: Default + Send;
+    type State: Default + Send + AppState;
 
     /// The app's message type
     type Msg: Clone + Send + 'static;

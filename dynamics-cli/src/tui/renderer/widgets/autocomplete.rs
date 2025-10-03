@@ -2,6 +2,7 @@ use ratatui::{Frame, style::{Style, Stylize}, widgets::{Block, Borders, Paragrap
 use crossterm::event::KeyCode;
 use crate::tui::{Element, Theme};
 use crate::tui::element::FocusId;
+use crate::tui::command::DispatchTarget;
 use crate::tui::widgets::AutocompleteEvent;
 use crate::tui::renderer::{InteractionRegistry, FocusRegistry, DropdownRegistry, DropdownInfo, DropdownCallback, FocusableInfo};
 
@@ -10,22 +11,34 @@ pub fn autocomplete_on_key<Msg: Clone + Send + 'static>(
     is_open: bool,
     on_input: Option<fn(KeyCode) -> Msg>,
     on_navigate: Option<fn(KeyCode) -> Msg>,
-) -> Box<dyn Fn(KeyCode) -> Option<Msg> + Send> {
+) -> Box<dyn Fn(KeyCode) -> DispatchTarget<Msg> + Send> {
     Box::new(move |key| {
         if is_open {
             // Dropdown open: Up/Down/Enter/Esc go to navigate, others to input
             match key {
                 KeyCode::Up | KeyCode::Down | KeyCode::Enter | KeyCode::Esc => {
-                    on_navigate.map(|f| f(key))
+                    if let Some(f) = on_navigate {
+                        DispatchTarget::AppMsg(f(key))
+                    } else {
+                        DispatchTarget::WidgetEvent(Box::new(AutocompleteEvent::Navigate(key)))
+                    }
                 }
                 _ => {
                     // All other keys go to input for typing
-                    on_input.map(|f| f(key))
+                    if let Some(f) = on_input {
+                        DispatchTarget::AppMsg(f(key))
+                    } else {
+                        DispatchTarget::WidgetEvent(Box::new(AutocompleteEvent::Input(key)))
+                    }
                 }
             }
         } else {
             // Dropdown closed: all keys go to input
-            on_input.map(|f| f(key))
+            if let Some(f) = on_input {
+                DispatchTarget::AppMsg(f(key))
+            } else {
+                DispatchTarget::WidgetEvent(Box::new(AutocompleteEvent::Input(key)))
+            }
         }
     })
 }
@@ -34,22 +47,22 @@ pub fn autocomplete_on_key<Msg: Clone + Send + 'static>(
 pub fn autocomplete_on_key_event<Msg: Clone + Send + 'static>(
     is_open: bool,
     on_event: fn(AutocompleteEvent) -> Msg,
-) -> Box<dyn Fn(KeyCode) -> Option<Msg> + Send> {
+) -> Box<dyn Fn(KeyCode) -> DispatchTarget<Msg> + Send> {
     Box::new(move |key| {
         if is_open {
             // Dropdown open: Up/Down/Enter/Esc go to navigate, others to input
             match key {
                 KeyCode::Up | KeyCode::Down | KeyCode::Enter | KeyCode::Esc => {
-                    Some(on_event(AutocompleteEvent::Navigate(key)))
+                    DispatchTarget::AppMsg(on_event(AutocompleteEvent::Navigate(key)))
                 }
                 _ => {
                     // All other keys go to input for typing
-                    Some(on_event(AutocompleteEvent::Input(key)))
+                    DispatchTarget::AppMsg(on_event(AutocompleteEvent::Input(key)))
                 }
             }
         } else {
             // Dropdown closed: all keys go to input
-            Some(on_event(AutocompleteEvent::Input(key)))
+            DispatchTarget::AppMsg(on_event(AutocompleteEvent::Input(key)))
         }
     })
 }

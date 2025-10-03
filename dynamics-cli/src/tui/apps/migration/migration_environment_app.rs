@@ -103,6 +103,8 @@ pub enum Msg {
     MigrationRenamed(Result<(), String>),
 }
 
+impl crate::tui::AppState for State {}
+
 impl App for MigrationEnvironmentApp {
     type State = State;
     type Msg = Msg;

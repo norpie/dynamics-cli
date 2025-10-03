@@ -20,6 +20,8 @@ pub struct State {
     target_app: Option<AppId>,
 }
 
+impl crate::tui::AppState for State {}
+
 impl App for ErrorScreen {
     type State = State;
     type Msg = Msg;

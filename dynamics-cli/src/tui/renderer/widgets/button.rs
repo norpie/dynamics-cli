@@ -2,13 +2,26 @@ use ratatui::{Frame, style::Style, widgets::{Block, Borders, Paragraph}, layout:
 use crossterm::event::KeyCode;
 use crate::tui::{Element, Theme};
 use crate::tui::element::FocusId;
+use crate::tui::command::DispatchTarget;
 use crate::tui::renderer::{InteractionRegistry, FocusRegistry, FocusableInfo};
 
 /// Create on_key handler for buttons (Enter or Space activates)
-pub fn button_on_key<Msg: Clone + Send + 'static>(on_press: Option<Msg>) -> Box<dyn Fn(KeyCode) -> Option<Msg> + Send> {
+/// Buttons don't support auto-dispatch since they have no Field type
+pub fn button_on_key<Msg: Clone + Send + 'static>(on_press: Option<Msg>) -> Box<dyn Fn(KeyCode) -> DispatchTarget<Msg> + Send> {
     Box::new(move |key| match key {
-        KeyCode::Enter | KeyCode::Char(' ') => on_press.clone(),
-        _ => None,
+        KeyCode::Enter | KeyCode::Char(' ') => {
+            if let Some(msg) = on_press.clone() {
+                DispatchTarget::AppMsg(msg)
+            } else {
+                // Button has no callback - this shouldn't happen in practice
+                // Just return a dummy WidgetEvent that will be ignored
+                DispatchTarget::WidgetEvent(Box::new(()))
+            }
+        }
+        _ => {
+            // Unhandled key - return dummy WidgetEvent
+            DispatchTarget::WidgetEvent(Box::new(()))
+        }
     })
 }
 

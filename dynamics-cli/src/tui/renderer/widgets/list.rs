@@ -2,6 +2,8 @@ use ratatui::{Frame, style::Style, widgets::{Block, Borders}, layout::{Rect, Con
 use crossterm::event::KeyCode;
 use crate::tui::{Element, Theme, LayoutConstraint};
 use crate::tui::element::FocusId;
+use crate::tui::command::DispatchTarget;
+use crate::tui::widgets::ListEvent;
 use crate::tui::renderer::{InteractionRegistry, FocusRegistry, DropdownRegistry, FocusableInfo};
 
 /// Create on_key handler for lists (navigation and activation)
@@ -9,22 +11,29 @@ pub fn list_on_key<Msg: Clone + Send + 'static>(
     selected: Option<usize>,
     on_navigate: Option<fn(KeyCode) -> Msg>,
     on_activate: Option<fn(usize) -> Msg>,
-) -> Box<dyn Fn(KeyCode) -> Option<Msg> + Send> {
+) -> Box<dyn Fn(KeyCode) -> DispatchTarget<Msg> + Send> {
     Box::new(move |key| match key {
         // Navigation keys - handled by on_navigate callback
         KeyCode::Up | KeyCode::Down | KeyCode::PageUp | KeyCode::PageDown
         | KeyCode::Home | KeyCode::End => {
-            on_navigate.map(|f| f(key))
+            if let Some(f) = on_navigate {
+                DispatchTarget::AppMsg(f(key))
+            } else {
+                DispatchTarget::WidgetEvent(Box::new(ListEvent::Navigate(key)))
+            }
         }
         // Enter activates selected item
         KeyCode::Enter => {
             if let (Some(idx), Some(activate)) = (selected, on_activate) {
-                Some(activate(idx))
+                DispatchTarget::AppMsg(activate(idx))
             } else {
-                None
+                DispatchTarget::WidgetEvent(Box::new(ListEvent::Select))
             }
         }
-        _ => None,
+        _ => {
+            // Unhandled key
+            DispatchTarget::WidgetEvent(Box::new(ListEvent::Navigate(key)))
+        }
     })
 }
 

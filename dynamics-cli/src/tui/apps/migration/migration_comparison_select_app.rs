@@ -118,6 +118,8 @@ impl ListItem for SavedComparison {
     }
 }
 
+impl crate::tui::AppState for State {}
+
 impl App for MigrationComparisonSelectApp {
     type State = State;
     type Msg = Msg;

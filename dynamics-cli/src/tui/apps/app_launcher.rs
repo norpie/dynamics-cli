@@ -111,6 +111,8 @@ impl ListItem for AppInfo {
     }
 }
 
+impl crate::tui::AppState for State {}
+
 impl App for AppLauncher {
     type State = State;
     type Msg = Msg;

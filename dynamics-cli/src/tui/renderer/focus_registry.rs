@@ -1,12 +1,13 @@
 use crossterm::event::KeyCode;
 use ratatui::layout::Rect;
 use crate::tui::element::FocusId;
+use crate::tui::command::DispatchTarget;
 
 /// Information about a focusable element
 pub struct FocusableInfo<Msg> {
     pub id: FocusId,
     pub rect: Rect,
-    pub on_key: Box<dyn Fn(KeyCode) -> Option<Msg> + Send>,
+    pub on_key: Box<dyn Fn(KeyCode) -> DispatchTarget<Msg> + Send>,
     pub on_focus: Option<Msg>,
     pub on_blur: Option<Msg>,
     pub inside_panel: bool,  // True if this element is inside a Panel

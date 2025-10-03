@@ -55,6 +55,8 @@ impl Default for State {
     }
 }
 
+impl crate::tui::AppState for State {}
+
 impl App for Example4 {
     type State = State;
     type Msg = Msg;

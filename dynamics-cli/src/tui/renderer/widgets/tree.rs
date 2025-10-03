@@ -2,6 +2,7 @@ use ratatui::{Frame, style::Style, widgets::{Block, Borders}, layout::{Rect, Con
 use crossterm::event::KeyCode;
 use crate::tui::{Element, Theme, LayoutConstraint};
 use crate::tui::element::FocusId;
+use crate::tui::command::DispatchTarget;
 use crate::tui::widgets::TreeEvent;
 use crate::tui::renderer::{InteractionRegistry, FocusRegistry, DropdownRegistry, FocusableInfo};
 
@@ -10,44 +11,58 @@ pub fn tree_on_key<Msg: Clone + Send + 'static>(
     selected: Option<String>,
     on_navigate: Option<fn(KeyCode) -> Msg>,
     on_toggle: Option<fn(String) -> Msg>,
-) -> Box<dyn Fn(KeyCode) -> Option<Msg> + Send> {
+) -> Box<dyn Fn(KeyCode) -> DispatchTarget<Msg> + Send> {
     Box::new(move |key| match key {
         // Navigation keys - handled by on_navigate callback
         KeyCode::Up | KeyCode::Down | KeyCode::PageUp | KeyCode::PageDown
         | KeyCode::Home | KeyCode::End => {
-            on_navigate.map(|f| f(key))
+            if let Some(f) = on_navigate {
+                DispatchTarget::AppMsg(f(key))
+            } else {
+                DispatchTarget::WidgetEvent(Box::new(TreeEvent::Navigate(key)))
+            }
         }
         // Left/Right for expand/collapse - also handled by on_navigate
         KeyCode::Left | KeyCode::Right => {
-            on_navigate.map(|f| f(key))
+            if let Some(f) = on_navigate {
+                DispatchTarget::AppMsg(f(key))
+            } else {
+                DispatchTarget::WidgetEvent(Box::new(TreeEvent::Navigate(key)))
+            }
         }
         // Enter toggles expansion
         KeyCode::Enter => {
             if let (Some(id), Some(toggle)) = (selected.as_ref(), on_toggle) {
-                Some(toggle(id.clone()))
+                DispatchTarget::AppMsg(toggle(id.clone()))
             } else {
-                None
+                DispatchTarget::WidgetEvent(Box::new(TreeEvent::Toggle))
             }
         }
-        _ => None,
+        _ => {
+            // Unhandled key
+            DispatchTarget::WidgetEvent(Box::new(TreeEvent::Navigate(key)))
+        }
     })
 }
 
 /// Create on_key handler for trees (new event pattern)
 pub fn tree_on_key_event<Msg: Clone + Send + 'static>(
     on_event: fn(TreeEvent) -> Msg,
-) -> Box<dyn Fn(KeyCode) -> Option<Msg> + Send> {
+) -> Box<dyn Fn(KeyCode) -> DispatchTarget<Msg> + Send> {
     Box::new(move |key| match key {
         // Navigation keys
         KeyCode::Up | KeyCode::Down | KeyCode::PageUp | KeyCode::PageDown
         | KeyCode::Home | KeyCode::End | KeyCode::Left | KeyCode::Right => {
-            Some(on_event(TreeEvent::Navigate(key)))
+            DispatchTarget::AppMsg(on_event(TreeEvent::Navigate(key)))
         }
         // Enter toggles expansion
         KeyCode::Enter => {
-            Some(on_event(TreeEvent::Toggle))
+            DispatchTarget::AppMsg(on_event(TreeEvent::Toggle))
         }
-        _ => None,
+        _ => {
+            // Unhandled key
+            DispatchTarget::WidgetEvent(Box::new(TreeEvent::Navigate(key)))
+        }
     })
 }
 

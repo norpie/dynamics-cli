@@ -2,6 +2,7 @@ use ratatui::{Frame, style::Style, widgets::{Block, Borders, Paragraph}, layout:
 use crossterm::event::KeyCode;
 use crate::tui::{Element, Theme};
 use crate::tui::element::FocusId;
+use crate::tui::command::DispatchTarget;
 use crate::tui::widgets::SelectEvent;
 use crate::tui::renderer::{InteractionRegistry, FocusRegistry, DropdownRegistry, DropdownInfo, DropdownCallback, FocusableInfo};
 
@@ -10,21 +11,37 @@ pub fn select_on_key<Msg: Clone + Send + 'static>(
     is_open: bool,
     on_toggle: Option<Msg>,
     on_navigate: Option<fn(KeyCode) -> Msg>,
-) -> Box<dyn Fn(KeyCode) -> Option<Msg> + Send> {
+) -> Box<dyn Fn(KeyCode) -> DispatchTarget<Msg> + Send> {
     Box::new(move |key| {
         if !is_open {
             // Closed: Enter/Space toggles dropdown
             match key {
-                KeyCode::Enter | KeyCode::Char(' ') => on_toggle.clone(),
-                _ => None,
+                KeyCode::Enter | KeyCode::Char(' ') => {
+                    if let Some(msg) = on_toggle.clone() {
+                        DispatchTarget::AppMsg(msg)
+                    } else {
+                        DispatchTarget::WidgetEvent(Box::new(SelectEvent::Navigate(key)))
+                    }
+                }
+                _ => {
+                    // Unhandled key - no-op via WidgetEvent (will be ignored)
+                    DispatchTarget::WidgetEvent(Box::new(SelectEvent::Navigate(key)))
+                }
             }
         } else {
             // Open: Up/Down/Enter/Esc handled via on_navigate
             match key {
                 KeyCode::Up | KeyCode::Down | KeyCode::Enter | KeyCode::Esc => {
-                    on_navigate.map(|f| f(key))
+                    if let Some(f) = on_navigate {
+                        DispatchTarget::AppMsg(f(key))
+                    } else {
+                        DispatchTarget::WidgetEvent(Box::new(SelectEvent::Navigate(key)))
+                    }
                 }
-                _ => None,
+                _ => {
+                    // Unhandled key
+                    DispatchTarget::WidgetEvent(Box::new(SelectEvent::Navigate(key)))
+                }
             }
         }
     })
@@ -34,24 +51,30 @@ pub fn select_on_key<Msg: Clone + Send + 'static>(
 pub fn select_on_key_event<Msg: Clone + Send + 'static>(
     is_open: bool,
     on_event: fn(SelectEvent) -> Msg,
-) -> Box<dyn Fn(KeyCode) -> Option<Msg> + Send> {
+) -> Box<dyn Fn(KeyCode) -> DispatchTarget<Msg> + Send> {
     Box::new(move |key| {
         if !is_open {
             // Closed: Enter/Space toggles dropdown (but we don't have toggle in SelectEvent)
             // We'll handle this via Navigate event
             match key {
                 KeyCode::Enter | KeyCode::Char(' ') => {
-                    Some(on_event(SelectEvent::Navigate(key)))
+                    DispatchTarget::AppMsg(on_event(SelectEvent::Navigate(key)))
                 }
-                _ => None,
+                _ => {
+                    // Unhandled key
+                    DispatchTarget::WidgetEvent(Box::new(SelectEvent::Navigate(key)))
+                }
             }
         } else {
             // Open: Up/Down/Enter/Esc handled via Navigate event
             match key {
                 KeyCode::Up | KeyCode::Down | KeyCode::Enter | KeyCode::Esc => {
-                    Some(on_event(SelectEvent::Navigate(key)))
+                    DispatchTarget::AppMsg(on_event(SelectEvent::Navigate(key)))
                 }
-                _ => None,
+                _ => {
+                    // Unhandled key
+                    DispatchTarget::WidgetEvent(Box::new(SelectEvent::Navigate(key)))
+                }
             }
         }
     })

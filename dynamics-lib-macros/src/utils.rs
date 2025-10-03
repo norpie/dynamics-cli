@@ -7,11 +7,10 @@ pub fn get_attr_string(attr: &Attribute, key: &str) -> Option<String> {
         if meta.path.is_ident(key) {
             let value = meta.value()?;
             let lit: ExprLit = value.parse()?;
-            if let Expr::Lit(expr_lit) = &Expr::Lit(lit) {
-                if let Lit::Str(lit_str) = &expr_lit.lit {
+            if let Expr::Lit(expr_lit) = &Expr::Lit(lit)
+                && let Lit::Str(lit_str) = &expr_lit.lit {
                     result = Some(lit_str.value());
                 }
-            }
         }
         Ok(())
     });

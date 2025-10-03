@@ -2,6 +2,7 @@ use proc_macro::TokenStream;
 
 mod validate;
 mod resource_handlers;
+mod app_state;
 mod utils;
 
 /// Derive macro for validation framework
@@ -43,5 +44,24 @@ pub fn derive_resource_handlers(input: TokenStream) -> TokenStream {
     resource_handlers::derive(input)
 }
 
-// Future proc macros:
-// - #[derive(App)] - Widget auto-routing
+/// Derive macro for AppState trait with widget auto-routing
+///
+/// Automatically implements AppState::dispatch_widget_event to route events to Field types.
+///
+/// # Example
+/// ```rust
+/// #[derive(AppState)]
+/// struct State {
+///     #[widget("name-input")]
+///     name: TextInputField,
+///
+///     #[widget("entity-autocomplete", options = "self.all_entities")]
+///     entity: AutocompleteField,
+///
+///     all_entities: Vec<String>,
+/// }
+/// ```
+#[proc_macro_derive(AppState, attributes(widget))]
+pub fn derive_app_state(input: TokenStream) -> TokenStream {
+    app_state::derive(input)
+}

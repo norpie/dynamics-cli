@@ -43,6 +43,8 @@ pub struct State {
 
 const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
+impl crate::tui::AppState for State {}
+
 impl App for LoadingScreen {
     type State = State;
     type Msg = Msg;

@@ -2,18 +2,20 @@ use ratatui::{Frame, style::Style, widgets::{Block, Borders}, layout::{Rect, Con
 use crossterm::event::KeyCode;
 use crate::tui::{Element, Theme, LayoutConstraint};
 use crate::tui::element::FocusId;
+use crate::tui::command::DispatchTarget;
 use crate::tui::renderer::{InteractionRegistry, FocusRegistry, DropdownRegistry, FocusableInfo};
 
 /// Create on_key handler for scrollable elements (scroll navigation)
+/// Scrollable doesn't support auto-dispatch - apps handle scroll via subscriptions
 pub fn scrollable_on_key<Msg: Clone + Send + 'static>(
     on_scroll: Option<fn(usize) -> Msg>,
-) -> Box<dyn Fn(KeyCode) -> Option<Msg> + Send> {
+) -> Box<dyn Fn(KeyCode) -> DispatchTarget<Msg> + Send> {
     Box::new(move |_key| {
         // Scrollable doesn't emit scroll messages directly via keyboard
         // The app should handle Up/Down/PageUp/PageDown in subscriptions
         // and call ScrollableState methods directly
-        // This handler is here for focus management
-        on_scroll.map(|_f| None)?
+        // This handler is here for focus management - return dummy WidgetEvent
+        DispatchTarget::WidgetEvent(Box::new(()))
     })
 }
 

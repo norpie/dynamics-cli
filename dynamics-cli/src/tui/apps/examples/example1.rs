@@ -23,6 +23,8 @@ pub struct State {
     parallel_data2: Resource<String>,
 }
 
+impl crate::tui::AppState for State {}
+
 impl App for Example1 {
     type State = State;
     type Msg = Msg;

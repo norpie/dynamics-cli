@@ -44,6 +44,8 @@ impl Default for State {
     }
 }
 
+impl crate::tui::AppState for State {}
+
 impl App for ExampleResourceMacro {
     type State = State;
     type Msg = Msg;
