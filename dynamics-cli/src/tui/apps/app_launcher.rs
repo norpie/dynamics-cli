@@ -2,7 +2,7 @@ use crossterm::event::KeyCode;
 use ratatui::text::{Line, Span};
 use ratatui::style::Style;
 use ratatui::prelude::Stylize;
-use crate::tui::{App, AppId, Command, Element, Subscription, Theme, LayoutConstraint, FocusId};
+use crate::tui::{App, AppId, Command, Element, Subscription, Theme, LayoutConstraint, FocusId, LayeredView};
 use crate::tui::element::ColumnBuilder;
 use crate::tui::widgets::{ListItem, ListState};
 
@@ -24,54 +24,9 @@ impl Default for State {
         Self {
             apps: vec![
                 AppInfo {
-                    id: AppId::Example1,
-                    name: "Example 1".to_string(),
-                    description: "Constraint layout system demo".to_string(),
-                },
-                AppInfo {
-                    id: AppId::Example2,
-                    name: "Example 2".to_string(),
-                    description: "Modal confirmation demo".to_string(),
-                },
-                AppInfo {
-                    id: AppId::Example3,
-                    name: "Example 3".to_string(),
-                    description: "Text input form demo".to_string(),
-                },
-                AppInfo {
-                    id: AppId::Example4,
-                    name: "Example 4".to_string(),
-                    description: "Tab pattern demo".to_string(),
-                },
-                AppInfo {
-                    id: AppId::Example5,
-                    name: "Example 5".to_string(),
-                    description: "Tree widget demo - hierarchical navigation".to_string(),
-                },
-                AppInfo {
-                    id: AppId::Example6,
-                    name: "Example 6".to_string(),
-                    description: "Select widget demo - dropdowns and options".to_string(),
-                },
-                AppInfo {
-                    id: AppId::Example7,
-                    name: "Example 7".to_string(),
-                    description: "Autocomplete widget demo - fuzzy-matched input".to_string(),
-                },
-                AppInfo {
-                    id: AppId::Example8,
-                    name: "Example 8".to_string(),
-                    description: "Form Builder DSL demo - declarative form layout".to_string(),
-                },
-                AppInfo {
-                    id: AppId::ExampleResourceMacro,
-                    name: "Resource Macro Demo".to_string(),
-                    description: "ResourceHandlers macro - automated async state".to_string(),
-                },
-                AppInfo {
                     id: AppId::MigrationEnvironment,
                     name: "Migration Environments".to_string(),
-                    description: "Migration environment selection".to_string(),
+                    description: "Manage Dynamics 365 migrations".to_string(),
                 },
             ],
             list_state: ListState::with_selection(),
@@ -136,7 +91,7 @@ impl App for AppLauncher {
         }
     }
 
-    fn view(state: &mut State, theme: &Theme) -> Element<Msg> {
+    fn view(state: &mut State, theme: &Theme) -> LayeredView<Msg> {
         let list = Element::list(
             FocusId::new("app-list"),
             &state.apps,
@@ -148,9 +103,11 @@ impl App for AppLauncher {
         .build();
 
         // Just the list in a panel, filling the entire area
-        Element::panel(list)
+        let panel = Element::panel(list)
             .title("Apps")
-            .build()
+            .build();
+
+        LayeredView::new(panel)
     }
 
     fn subscriptions(_state: &State) -> Vec<Subscription<Msg>> {

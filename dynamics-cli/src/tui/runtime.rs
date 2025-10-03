@@ -716,19 +716,19 @@ impl<A: App> Runtime<A> {
         // Set current hover position for auto-hover tracking
         self.registry.set_hover_pos(self.last_hover_pos);
 
-        // Get the view from the app
-        let view = A::view(&mut self.state, &self.config.theme);
+        // Get the layered view from the app
+        let layered_view = A::view(&mut self.state, &self.config.theme);
 
-        // Render the view
-        Renderer::render(
+        // Render using the new layered API
+        Renderer::render_layers(
             frame,
             &self.config.theme,
             &mut self.registry,
             &mut self.focus_registry,
-            &mut self.dropdown_registry,
             self.focused_id.as_ref(),
-            &view,
+            &layered_view,
             area,
+            None, // No global UI area in single-app runtime
         );
 
         // Check if focused element still exists in the tree

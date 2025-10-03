@@ -1,5 +1,5 @@
 use crate::tui::{Element, Theme, FocusId};
-use crate::tui::element::LayoutConstraint;
+use crate::tui::element::{LayoutConstraint, RowBuilder, ColumnBuilder};
 use ratatui::prelude::*;
 use ratatui::text::{Line, Span};
 
@@ -100,12 +100,18 @@ impl<Msg: Clone> ConfirmationModal<Msg> {
             vec![]
         };
 
+        // Extract messages to ensure proper typing
+        let cancel_msg = self.on_cancel.clone()
+            .expect("ConfirmationModal requires on_cancel callback");
+        let confirm_msg = self.on_confirm.clone()
+            .expect("ConfirmationModal requires on_confirm callback");
+
         // Cancel button with hotkey indicator
         let cancel_button = Element::button(
             FocusId::new("confirmation-cancel"),
             format!("[ {} (Esc) ]", self.cancel_text),
         )
-        .on_press(self.on_cancel.clone())
+        .on_press(cancel_msg)
         .build();
 
         // Confirm button with hotkey indicator
@@ -113,28 +119,27 @@ impl<Msg: Clone> ConfirmationModal<Msg> {
             FocusId::new("confirmation-confirm"),
             format!("[ {} (Ctrl+Enter) ]", self.confirm_text),
         )
-        .on_press(self.on_confirm.clone())
+        .on_press(confirm_msg)
         .style(Style::default().fg(theme.green))
         .build();
 
-        // Button row
-        let buttons = Element::row()
+        // Button row - use Element::row with Vec to avoid type inference issues
+        let buttons = Element::row(vec![cancel_button, confirm_button])
             .spacing(2)
-            .item(LayoutConstraint::Fill(1), cancel_button)
-            .item(LayoutConstraint::Fill(1), confirm_button)
             .build();
 
         // Build the modal content
-        let mut content_items = vec![
-            (LayoutConstraint::Length(1), title_element),
-        ];
-        content_items.extend(message_elements);
-        content_items.push((LayoutConstraint::Length(1), Element::text("")));
-        content_items.push((LayoutConstraint::Length(3), buttons));
+        let mut content = ColumnBuilder::new();
+        content = content.add(title_element, LayoutConstraint::Length(1));
 
-        let content = Element::column()
-            .items(content_items)
-            .build();
+        for (constraint, element) in message_elements {
+            content = content.add(element, constraint);
+        }
+
+        content = content.add(Element::text(""), LayoutConstraint::Length(1));
+        content = content.add(buttons, LayoutConstraint::Length(3));
+
+        let content = content.build();
 
         // Wrap in panel with optional size
         let mut panel = Element::panel(content);

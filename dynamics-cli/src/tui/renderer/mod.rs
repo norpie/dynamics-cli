@@ -27,7 +27,6 @@ use widgets::*;
 /// 2. AppModal - Modal within app context (dims app, but global UI still visible)
 /// 3. GlobalUI - Header/footer (always visible unless global modal present)
 /// 4. GlobalModal - Top-level modal (hides everything below)
-#[derive(Clone)]
 pub enum RenderLayer<Msg> {
     /// Main application content
     App {

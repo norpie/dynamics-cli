@@ -1,5 +1,5 @@
 use crate::tui::{Element, Theme};
-use crate::tui::element::LayoutConstraint;
+use crate::tui::element::{LayoutConstraint, ColumnBuilder};
 use ratatui::prelude::*;
 use ratatui::text::{Line, Span};
 
@@ -73,15 +73,16 @@ impl<Msg> LoadingModal<Msg> {
         }
 
         // Build the modal content
-        let mut content_items = vec![
-            (LayoutConstraint::Length(1), title_element),
-        ];
-        content_items.extend(task_elements);
-        content_items.push((LayoutConstraint::Length(1), Element::text("")));
+        let mut content = ColumnBuilder::new();
+        content = content.add(title_element, LayoutConstraint::Length(1));
 
-        let content = Element::column()
-            .items(content_items)
-            .build();
+        for (constraint, element) in task_elements {
+            content = content.add(element, constraint);
+        }
+
+        content = content.add(Element::text(""), LayoutConstraint::Length(1));
+
+        let content = content.build();
 
         // Wrap in panel with optional size
         let mut panel = Element::panel(content);

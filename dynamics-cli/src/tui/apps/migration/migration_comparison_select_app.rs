@@ -6,6 +6,7 @@ use crate::tui::{
     state::theme::Theme,
     widgets::list::{ListItem, ListState},
     widgets::{AutocompleteField, AutocompleteEvent, TextInputField, TextInputEvent},
+    renderer::LayeredView,
     Resource,
 };
 use dynamics_lib_macros::Validate;
@@ -17,7 +18,7 @@ use ratatui::{
     text::{Line, Span},
 };
 use serde::{Deserialize, Serialize};
-use crate::{col, row, spacer, button_row, modal, use_constraints, error_display};
+use crate::{col, row, spacer, button_row, use_constraints, error_display};
 
 pub struct MigrationComparisonSelectApp;
 
@@ -471,8 +472,7 @@ impl App for MigrationComparisonSelectApp {
         }
     }
 
-    fn view(state: &mut Self::State, theme: &Theme) -> Element<Self::Msg> {
-        use crate::tui::element::Alignment;
+    fn view(state: &mut Self::State, theme: &Theme) -> LayeredView<Self::Msg> {
         use_constraints!();
 
         log::trace!("MigrationComparisonSelectApp::view() - migration_name={:?}, comparisons={}",
@@ -498,15 +498,41 @@ impl App for MigrationComparisonSelectApp {
             // Render delete confirmation modal
             let comparison_name = state.delete_comparison_name.as_deref().unwrap_or("Unknown");
 
-            Element::modal_confirm(
-                main_ui,
-                "Delete Comparison",
-                format!("Delete comparison '{}'?", comparison_name),
-                "delete-cancel",
-                Msg::CancelDelete,
-                "delete-confirm",
-                Msg::ConfirmDelete,
+            // Delete confirmation buttons
+            let cancel_button = Element::button("delete-cancel", "Cancel".to_string())
+                .on_press(Msg::CancelDelete)
+                .build();
+
+            let confirm_button = Element::button("delete-confirm", "Delete".to_string())
+                .on_press(Msg::ConfirmDelete)
+                .style(Style::default().fg(theme.red))
+                .build();
+
+            let buttons = Element::row(vec![cancel_button, confirm_button])
+                .spacing(2)
+                .build();
+
+            // Modal content
+            let modal_content = Element::panel(
+                Element::container(
+                    col![
+                        Element::styled_text(Line::from(vec![
+                            Span::styled("Delete Comparison", Style::default().fg(theme.mauve).bold())
+                        ])).build() => Length(1),
+                        spacer!() => Length(1),
+                        Element::text(format!("Delete comparison '{}'?\n\nThis action cannot be undone.", comparison_name)) => Length(3),
+                        spacer!() => Length(1),
+                        buttons => Length(3),
+                    ]
+                )
+                .padding(2)
+                .build()
             )
+            .width(60)
+            .height(13)
+            .build();
+
+            LayeredView::new(main_ui).with_app_modal(modal_content, crate::tui::Alignment::Center)
         } else if state.show_rename_modal {
             // Name input
             let name_input = Element::panel(
@@ -545,7 +571,7 @@ impl App for MigrationComparisonSelectApp {
             .height(13)
             .build();
 
-            modal!(main_ui, modal_content)
+            LayeredView::new(main_ui).with_app_modal(modal_content, crate::tui::Alignment::Center)
         } else if state.show_create_modal {
             // Name input (using TextInput directly without autocomplete for simple text)
             let name_input = Element::panel(
@@ -635,9 +661,9 @@ impl App for MigrationComparisonSelectApp {
             .height(if state.create_form.validation_error.is_some() { 25 } else { 23 })
             .build();
 
-            modal!(main_ui, modal_content)
+            LayeredView::new(main_ui).with_app_modal(modal_content, crate::tui::Alignment::Center)
         } else {
-            main_ui
+            LayeredView::new(main_ui)
         }
     }
 

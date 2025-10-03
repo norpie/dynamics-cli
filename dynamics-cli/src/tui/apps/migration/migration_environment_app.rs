@@ -1,11 +1,12 @@
 use crossterm::event::KeyCode;
 use crate::tui::{App, AppId, Command, Element, Subscription, Theme, FocusId, Resource};
+use crate::tui::renderer::LayeredView;
 use crate::tui::widgets::list::{ListItem, ListState};
 use crate::tui::widgets::{TextInputField, SelectField, TextInputEvent, SelectEvent};
 use crate::config::SavedMigration;
 use ratatui::text::{Line, Span};
-use ratatui::style::Style;
-use crate::{col, row, spacer, button_row, modal, use_constraints};
+use ratatui::style::{Style, Stylize};
+use crate::{col, row, spacer, button_row, use_constraints};
 use dynamics_lib_macros::Validate;
 
 pub struct MigrationEnvironmentApp;
@@ -365,7 +366,7 @@ impl App for MigrationEnvironmentApp {
         }
     }
 
-    fn view(state: &mut State, theme: &Theme) -> Element<Msg> {
+    fn view(state: &mut State, theme: &Theme) -> LayeredView<Msg> {
         use_constraints!();
 
         let list = Element::list("migration-list", &state.environments, &state.list_state, theme)
@@ -381,15 +382,41 @@ impl App for MigrationEnvironmentApp {
             // Render delete confirmation modal
             let migration_name = state.delete_migration_name.as_deref().unwrap_or("Unknown");
 
-            Element::modal_confirm(
-                main_ui,
-                "Delete Migration",
-                format!("Delete migration '{}'?", migration_name),
-                "delete-cancel",
-                Msg::CancelDelete,
-                "delete-confirm",
-                Msg::ConfirmDelete,
+            // Delete confirmation buttons
+            let cancel_button = Element::button("delete-cancel", "Cancel".to_string())
+                .on_press(Msg::CancelDelete)
+                .build();
+
+            let confirm_button = Element::button("delete-confirm", "Delete".to_string())
+                .on_press(Msg::ConfirmDelete)
+                .style(Style::default().fg(theme.red))
+                .build();
+
+            let buttons = Element::row(vec![cancel_button, confirm_button])
+                .spacing(2)
+                .build();
+
+            // Modal content
+            let modal_content = Element::panel(
+                Element::container(
+                    col![
+                        Element::styled_text(Line::from(vec![
+                            Span::styled("Delete Migration", Style::default().fg(theme.mauve).bold())
+                        ])).build() => Length(1),
+                        spacer!() => Length(1),
+                        Element::text(format!("Delete migration '{}'?\n\nThis action cannot be undone.", migration_name)) => Length(3),
+                        spacer!() => Length(1),
+                        buttons => Length(3),
+                    ]
+                )
+                .padding(2)
+                .build()
             )
+            .width(60)
+            .height(13)
+            .build();
+
+            LayeredView::new(main_ui).with_app_modal(modal_content, crate::tui::Alignment::Center)
         } else if state.show_rename_modal {
             // Name input
             let name_input = Element::panel(
@@ -428,10 +455,8 @@ impl App for MigrationEnvironmentApp {
             .height(13)
             .build();
 
-            modal!(main_ui, modal_content)
+            LayeredView::new(main_ui).with_app_modal(modal_content, crate::tui::Alignment::Center)
         } else if state.show_create_modal {
-            use crate::tui::element::Alignment;
-
             // If environments haven't loaded yet, show loading message
             if state.available_environments.is_empty() {
                 let loading_content = Element::panel(
@@ -446,7 +471,7 @@ impl App for MigrationEnvironmentApp {
                 .title("Create New Migration")
                 .build();
 
-                return modal!(main_ui, loading_content, Alignment::Center);
+                return LayeredView::new(main_ui).with_app_modal(loading_content, crate::tui::Alignment::Center);
             }
 
             // Get filtered environment options
@@ -533,9 +558,9 @@ impl App for MigrationEnvironmentApp {
             .height(if state.create_form.validation_error.is_some() { 37 } else { 35 })
             .build();
 
-            modal!(main_ui, modal_content)
+            LayeredView::new(main_ui).with_app_modal(modal_content, crate::tui::Alignment::Center)
         } else {
-            main_ui
+            LayeredView::new(main_ui)
         }
     }
 

@@ -3,7 +3,7 @@ use ratatui::text::{Line, Span};
 use ratatui::style::Style;
 use ratatui::prelude::Stylize;
 use serde_json::Value;
-use crate::tui::{App, AppId, Command, Element, Subscription, Theme, LayoutConstraint};
+use crate::tui::{App, AppId, Command, Element, Subscription, Theme, LayoutConstraint, LayeredView};
 use crate::tui::element::ColumnBuilder;
 
 pub struct LoadingScreen;
@@ -81,8 +81,6 @@ impl App for LoadingScreen {
                     .get("target")
                     .and_then(|v| v.as_str())
                     .and_then(|s| match s {
-                        "Example1" => Some(AppId::Example1),
-                        "Example2" => Some(AppId::Example2),
                         "ErrorScreen" => Some(AppId::ErrorScreen),
                         "MigrationEnvironment" => Some(AppId::MigrationEnvironment),
                         "MigrationComparisonSelect" => Some(AppId::MigrationComparisonSelect),
@@ -93,8 +91,6 @@ impl App for LoadingScreen {
                     .get("caller")
                     .and_then(|v| v.as_str())
                     .and_then(|s| match s {
-                        "Example1" => Some(AppId::Example1),
-                        "Example2" => Some(AppId::Example2),
                         "ErrorScreen" => Some(AppId::ErrorScreen),
                         "MigrationEnvironment" => Some(AppId::MigrationEnvironment),
                         "MigrationComparisonSelect" => Some(AppId::MigrationComparisonSelect),
@@ -227,7 +223,7 @@ impl App for LoadingScreen {
         }
     }
 
-    fn view(state: &mut State, theme: &Theme) -> Element<Msg> {
+    fn view(state: &mut State, theme: &Theme) -> LayeredView<Msg> {
         let mut content = vec![];
 
         // Header
@@ -281,7 +277,7 @@ impl App for LoadingScreen {
         )).build());
 
         // Wrap in panel
-        Element::panel(
+        let panel = Element::panel(
             Element::container(
                 ColumnBuilder::new()
                     .add(Element::column(content).build(), LayoutConstraint::Fill(1))
@@ -291,7 +287,9 @@ impl App for LoadingScreen {
             .build()
         )
         .title("Loading Tasks")
-        .build()
+        .build();
+
+        LayeredView::new(panel)
     }
 
     fn subscriptions(_state: &State) -> Vec<Subscription<Msg>> {

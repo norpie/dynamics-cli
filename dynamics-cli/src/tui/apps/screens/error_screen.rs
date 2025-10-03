@@ -3,7 +3,7 @@ use ratatui::text::{Line, Span};
 use ratatui::style::Style;
 use ratatui::prelude::Stylize;
 use serde_json::Value;
-use crate::tui::{App, AppId, Command, Element, Subscription, Theme, LayoutConstraint};
+use crate::tui::{App, AppId, Command, Element, Subscription, Theme, LayoutConstraint, LayeredView};
 use crate::tui::element::ColumnBuilder;
 
 pub struct ErrorScreen;
@@ -43,12 +43,6 @@ impl App for ErrorScreen {
                     .and_then(|v| v.as_str())
                     .and_then(|s| match s {
                         "AppLauncher" => Some(AppId::AppLauncher),
-                        "Example1" => Some(AppId::Example1),
-                        "Example2" => Some(AppId::Example2),
-                        "Example3" => Some(AppId::Example3),
-                        "Example4" => Some(AppId::Example4),
-                        "Example5" => Some(AppId::Example5),
-                        "Example6" => Some(AppId::Example6),
                         "LoadingScreen" => Some(AppId::LoadingScreen),
                         "ErrorScreen" => Some(AppId::ErrorScreen),
                         "MigrationEnvironment" => Some(AppId::MigrationEnvironment),
@@ -69,7 +63,7 @@ impl App for ErrorScreen {
         }
     }
 
-    fn view(state: &mut State, theme: &Theme) -> Element<Msg> {
+    fn view(state: &mut State, theme: &Theme) -> LayeredView<Msg> {
         let content = vec![
             Element::styled_text(Line::from(vec![
                 Span::styled("❌ Error", Style::default().fg(theme.red).bold()),
@@ -83,7 +77,7 @@ impl App for ErrorScreen {
         ];
 
         // Wrap in panel
-        Element::panel(
+        let panel = Element::panel(
             Element::container(
                 ColumnBuilder::new()
                     .add(Element::column(content).build(), LayoutConstraint::Fill(1))
@@ -93,7 +87,9 @@ impl App for ErrorScreen {
             .build()
         )
         .title("Error")
-        .build()
+        .build();
+
+        LayeredView::new(panel)
     }
 
     fn subscriptions(_state: &State) -> Vec<Subscription<Msg>> {

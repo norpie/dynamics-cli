@@ -1,5 +1,5 @@
 use crate::tui::{Element, Theme, FocusId};
-use crate::tui::element::LayoutConstraint;
+use crate::tui::element::{LayoutConstraint, RowBuilder, ColumnBuilder};
 use ratatui::prelude::*;
 use ratatui::text::{Line, Span};
 
@@ -74,31 +74,37 @@ impl<Msg: Clone> ErrorModal<Msg> {
             vec![]
         };
 
+        // Extract message to ensure proper typing
+        let close_msg = self.on_close.clone()
+            .expect("ErrorModal requires on_close callback");
+
         // Close button with hotkey indicator
         let close_button = Element::button(
             FocusId::new("error-close"),
             "[ Close (Esc) ]".to_string(),
         )
-        .on_press(self.on_close.clone())
+        .on_press(close_msg)
         .build();
 
-        let button_row = Element::row()
-            .item(LayoutConstraint::Fill(1), Element::text(""))
-            .item(LayoutConstraint::Length(16), close_button)
-            .item(LayoutConstraint::Fill(1), Element::text(""))
-            .build();
+        // Button row - use Element::row with Vec to avoid type inference issues
+        let button_row = Element::row(vec![
+            Element::text(""),
+            close_button,
+            Element::text(""),
+        ]).build();
 
         // Build the modal content
-        let mut content_items = vec![
-            (LayoutConstraint::Length(1), title_element),
-        ];
-        content_items.extend(details_elements);
-        content_items.push((LayoutConstraint::Length(1), Element::text("")));
-        content_items.push((LayoutConstraint::Length(3), button_row));
+        let mut content = ColumnBuilder::new();
+        content = content.add(title_element, LayoutConstraint::Length(1));
 
-        let content = Element::column()
-            .items(content_items)
-            .build();
+        for (constraint, element) in details_elements {
+            content = content.add(element, constraint);
+        }
+
+        content = content.add(Element::text(""), LayoutConstraint::Length(1));
+        content = content.add(button_row, LayoutConstraint::Length(3));
+
+        let content = content.build();
 
         // Wrap in panel with optional size
         let mut panel = Element::panel(content);
