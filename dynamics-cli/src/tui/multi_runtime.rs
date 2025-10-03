@@ -563,6 +563,7 @@ impl MultiAppRuntime {
 
         // Broadcast each event to all apps
         for (topic, data) in all_events {
+            log::debug!("Broadcasting event '{}' to all apps", topic);
             for runtime in self.runtimes.values_mut() {
                 runtime.handle_publish(&topic, data.clone())?;
             }
@@ -573,30 +574,30 @@ impl MultiAppRuntime {
 
     /// Process side effects (navigation, events) from timers and async commands
     pub fn process_side_effects(&mut self) -> Result<()> {
-        // IMPORTANT: Navigate BEFORE broadcasting events
-        // This ensures that when we publish events (e.g. "migration:selected"),
-        // the target app (e.g. MigrationComparisonSelect) has already been navigated to
-        // and will receive the event immediately, triggering Initialize which may
-        // create a PerformParallel command that shows the LoadingScreen.
+        // IMPORTANT: Broadcast events FIRST, then check navigation ONCE
+        // This ensures:
+        // 1. Parallel task completion events are broadcast to LoadingScreen before we navigate away
+        // 2. Initial navigation still works because we loop until things settle
         //
-        // We loop until no more navigation happens because:
-        // 1. Initial navigation (e.g. to MigrationComparisonSelect)
-        // 2. Broadcast events
-        // 3. Event handler sets new navigation (e.g. to LoadingScreen via PerformParallel)
-        // 4. Loop again to process that navigation immediately
-        //
-        // This prevents rendering intermediate frames between navigations.
-        // Keep processing navigation + events until everything settles
-        // We need multiple iterations because:
-        // - Iteration 1: Navigate to ComparisonSelect, broadcast "migration:selected"
+        // We loop until no more navigation happens:
+        // - Iteration 1: Broadcast "migration:selected", then navigate to ComparisonSelect
         //   - ComparisonSelect.Initialize creates PerformParallel which sets navigation to LoadingScreen
-        // - Iteration 2: Navigate to LoadingScreen, broadcast "loading:init"
+        // - Iteration 2: Broadcast "loading:init", then navigate to LoadingScreen
         //   - LoadingScreen.Initialize sets up loading state
-        // - Iteration 3: No more navigation, exits
+        // - Iteration 3: Broadcast parallel completion events, then navigate to target
+        //   - LoadingScreen received all events before navigation
         const MAX_LOOPS: usize = 5;
         for _ in 0..MAX_LOOPS {
-            self.check_navigation()?;
+            // Broadcast events first so LoadingScreen gets completion events before we navigate
             self.broadcast_events()?;
+
+            // Then check if we need to navigate
+            let navigated = self.check_navigation()?;
+
+            // If no navigation happened, we're done
+            if !navigated {
+                break;
+            }
         }
         Ok(())
     }

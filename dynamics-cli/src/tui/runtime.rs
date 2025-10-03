@@ -275,12 +275,13 @@ impl<A: App> Runtime<A> {
             }
         }
 
-        // Process completed parallel tasks
+        // Process completed parallel tasks - FIRST publish all completion events
         parallel_completed.sort_by(|a, b| b.0.cmp(&a.0));
         for (i, task_idx, task_name) in parallel_completed {
             self.pending_parallel.remove(i);
 
             // Publish task completion to LoadingScreen
+            log::info!("✓ Runtime - task '{}' completed, publishing loading:progress event", task_name);
             self.pending_publishes.push((
                 "loading:progress".to_string(),
                 serde_json::json!({
@@ -288,59 +289,39 @@ impl<A: App> Runtime<A> {
                     "status": "Completed",
                 }),
             ));
+        }
 
-            // Check if all tasks are complete
-            if let Some(coordinator) = &self.parallel_coordinator {
-                let results = coordinator.results.lock().unwrap();
-                let all_complete = results.iter().all(|r| r.is_some());
+        // AFTER all completion events are published, check if all tasks are complete
+        if let Some(coordinator) = &self.parallel_coordinator {
+            let results = coordinator.results.lock().unwrap();
+            let all_complete = results.iter().all(|r| r.is_some());
 
-                if all_complete {
-                    // Get all results and apply them via msg_mapper
-                    let total = coordinator.total_tasks;
-                    let mapper = coordinator.msg_mapper.clone();
-                    let config = coordinator.config.clone();
+            if all_complete {
+                log::info!("✓ Runtime - all parallel tasks complete, applying results");
+                // Get all results and apply them via msg_mapper
+                let total = coordinator.total_tasks;
+                drop(results); // Release lock before taking coordinator
 
-                    // Clone results out of the lock
-                    let results_vec: Vec<_> = results.iter()
-                        .enumerate()
-                        .filter_map(|(idx, r)| {
-                            if let Some(result) = r {
-                                // We need to clone the Box<dyn Any + Send>
-                                // This is tricky - we can't clone Any, so we pass ownership
-                                // Actually, we can't take ownership here either
-                                // Let's restructure to take results outside the lock
-                                Some(idx)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
+                // Take ownership of coordinator to get results
+                if let Some(coordinator) = self.parallel_coordinator.take() {
+                    let mut results = coordinator.results.lock().unwrap();
 
-                    drop(results); // Release lock
-
-                    // Take ownership of coordinator to get results
-                    if let Some(coordinator) = self.parallel_coordinator.take() {
-                        let mut results = coordinator.results.lock().unwrap();
-
-                        // Apply each result via msg_mapper
-                        for idx in 0..total {
-                            if let Some(result) = results[idx].take() {
-                                let msg = (coordinator.msg_mapper)(idx, result);
-                                let command = A::update(&mut self.state, msg);
-                                self.execute_command(command)?;
-                            }
+                    // Apply each result via msg_mapper
+                    for idx in 0..total {
+                        if let Some(result) = results[idx].take() {
+                            let msg = (coordinator.msg_mapper)(idx, result);
+                            let command = A::update(&mut self.state, msg);
+                            self.execute_command(command)?;
                         }
-
-                        // Navigate to target if specified
-                        if let Some(target) = config.on_complete {
-                            self.navigation_target = Some(target);
-                        }
-
-                        // Clear all pending parallel futures to prevent re-polling
-                        self.pending_parallel.clear();
                     }
 
-                    break; // Exit loop since we took the coordinator
+                    // DON'T set navigation target here!
+                    // LoadingScreen will handle navigation after showing completion status
+                    // via its countdown timer. The target is already stored in the
+                    // "loading:init" event data that was sent to LoadingScreen.
+
+                    // Clear all pending parallel futures to prevent re-polling
+                    self.pending_parallel.clear();
                 }
             }
         }

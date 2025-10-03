@@ -52,6 +52,7 @@ impl App for LoadingScreen {
     fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         match msg {
             Msg::Initialize(data) => {
+                log::info!("✓ LoadingScreen::Initialize - received loading:init event");
                 use rand::Rng;
 
                 // IMPORTANT: Reset ALL state from previous runs
@@ -81,20 +82,30 @@ impl App for LoadingScreen {
                     .get("target")
                     .and_then(|v| v.as_str())
                     .and_then(|s| match s {
+                        "AppLauncher" => Some(AppId::AppLauncher),
+                        "LoadingScreen" => Some(AppId::LoadingScreen),
                         "ErrorScreen" => Some(AppId::ErrorScreen),
                         "MigrationEnvironment" => Some(AppId::MigrationEnvironment),
                         "MigrationComparisonSelect" => Some(AppId::MigrationComparisonSelect),
-                        _ => None,
+                        _ => {
+                            log::warn!("Unknown target app in loading:init: '{}'", s);
+                            None
+                        }
                     });
 
                 state.caller_app = data
                     .get("caller")
                     .and_then(|v| v.as_str())
                     .and_then(|s| match s {
+                        "AppLauncher" => Some(AppId::AppLauncher),
+                        "LoadingScreen" => Some(AppId::LoadingScreen),
                         "ErrorScreen" => Some(AppId::ErrorScreen),
                         "MigrationEnvironment" => Some(AppId::MigrationEnvironment),
                         "MigrationComparisonSelect" => Some(AppId::MigrationComparisonSelect),
-                        _ => None,
+                        _ => {
+                            log::warn!("Unknown caller app in loading:init: '{}'", s);
+                            None
+                        }
                     });
 
                 state.cancellable = data.get("cancellable").and_then(|v| v.as_bool()).unwrap_or(false);
@@ -146,12 +157,18 @@ impl App for LoadingScreen {
             }
 
             Msg::TaskProgress(data) => {
+                log::info!("✓ LoadingScreen::TaskProgress - received loading:progress event");
+                log::debug!("  Event data: {:?}", data);
+
                 // Ignore stale events from previous loads
                 if !state.initialized {
+                    log::warn!("✗ LoadingScreen - ignoring TaskProgress because not initialized");
                     return Command::None;
                 }
                 let task_name = data.get("task").and_then(|v| v.as_str()).unwrap_or("");
                 let status_str = data.get("status").and_then(|v| v.as_str()).unwrap_or("");
+
+                log::info!("  Task: '{}', Status: '{}'", task_name, status_str);
 
                 if let Some(task) = state.tasks.iter_mut().find(|t| t.name == task_name) {
                     task.status = match status_str {
@@ -176,6 +193,7 @@ impl App for LoadingScreen {
 
                 if all_done && state.countdown_ticks.is_none() {
                     // Start countdown: 1000ms / 80ms per tick = 12.5 ticks, round to 13
+                    log::info!("✓ LoadingScreen - all tasks complete, starting countdown");
                     state.countdown_ticks = Some(13);
                 }
 
@@ -192,8 +210,13 @@ impl App for LoadingScreen {
                             // Only navigate if we have tasks (prevents stale countdown from navigating)
                             if !state.tasks.is_empty() {
                                 if let Some(target) = state.target_app {
+                                    log::info!("✓ LoadingScreen - countdown complete, navigating to {:?}", target);
                                     return Command::navigate_to(target);
+                                } else {
+                                    log::warn!("✗ LoadingScreen - countdown complete but target_app is None!");
                                 }
+                            } else {
+                                log::warn!("✗ LoadingScreen - countdown complete but tasks is empty!");
                             }
                         } else {
                             state.countdown_ticks = Some(remaining - 1);
