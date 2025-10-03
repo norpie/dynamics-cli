@@ -735,8 +735,21 @@ impl App for MigrationComparisonSelectApp {
         if let Some(ref migration_name) = state.migration_name {
             let source = state.source_env.as_deref().unwrap_or("?");
             let target = state.target_env.as_deref().unwrap_or("?");
-            let source_count = state.source_entities.as_ref().ok().map(|v| v.len()).unwrap_or(0);
-            let target_count = state.target_entities.as_ref().ok().map(|v| v.len()).unwrap_or(0);
+
+            let source_count_str = match &state.source_entities {
+                Resource::Loading => "...".to_string(),
+                Resource::Success(v) => v.len().to_string(),
+                Resource::Failure(_) => "ERR".to_string(),
+                Resource::NotAsked => "0".to_string(),
+            };
+
+            let target_count_str = match &state.target_entities {
+                Resource::Loading => "...".to_string(),
+                Resource::Success(v) => v.len().to_string(),
+                Resource::Failure(_) => "ERR".to_string(),
+                Resource::NotAsked => "0".to_string(),
+            };
+
             Some(Line::from(vec![
                 Span::styled(migration_name.clone(), Style::default().fg(theme.text)),
                 Span::styled(
@@ -744,7 +757,7 @@ impl App for MigrationComparisonSelectApp {
                     Style::default().fg(theme.subtext1),
                 ),
                 Span::styled(
-                    format!(" ({}:{})", source_count, target_count),
+                    format!(" ({}:{})", source_count_str, target_count_str),
                     Style::default().fg(theme.overlay1),
                 ),
             ]))

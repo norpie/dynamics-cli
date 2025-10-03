@@ -142,14 +142,14 @@ impl App for MigrationEnvironmentApp {
             }
             Msg::SelectEnvironment(idx) => {
                 if let Some(migration) = state.environments.get(idx) {
-                    // Just publish metadata and navigate - let comparison app load its own data
+                    // Publish metadata first - comparison app will receive it and start loading
                     Command::batch(vec![
+                        Command::navigate_to(AppId::MigrationComparisonSelect),
                         Command::publish("migration:selected", serde_json::json!({
                             "migration_name": migration.name,
                             "source_env": migration.source,
                             "target_env": migration.target,
                         })),
-                        Command::navigate_to(AppId::MigrationComparisonSelect),
                     ])
                 } else {
                     Command::None

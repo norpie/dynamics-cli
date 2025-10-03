@@ -197,7 +197,7 @@ impl MultiAppRuntime {
             .handle_key(key_event)?;
 
         self.broadcast_events()?;
-        self.check_navigation()?;
+        let _ = self.check_navigation()?;
         Ok(result)
     }
 
@@ -233,7 +233,7 @@ impl MultiAppRuntime {
             .handle_mouse(mouse_event)?;
 
         self.broadcast_events()?;
-        self.check_navigation()?;
+        let _ = self.check_navigation()?;
         Ok(result)
     }
 
@@ -546,23 +546,20 @@ impl MultiAppRuntime {
     }
 
     /// Check if any navigation commands were issued
-    fn check_navigation(&mut self) -> Result<()> {
+    fn check_navigation(&mut self) -> Result<bool> {
         // Check if navigation was requested from active app
         let nav_target = self.runtimes.get_mut(&self.active_app)
             .expect("Active app not found in runtimes")
             .take_navigation();
 
         if let Some(target) = nav_target {
-            // Clear any stale navigation from the target app before switching to it
-            // This prevents old navigation requests from when it was previously active
-            self.runtimes.get_mut(&target)
-                .expect("Target app not found in runtimes")
-                .take_navigation();
-
+            // Don't clear target's navigation - it may have been set by event handlers
+            // during broadcast_events() (e.g., PerformParallel setting LoadingScreen)
             self.active_app = target;
+            Ok(true) // Navigation happened
+        } else {
+            Ok(false) // No navigation
         }
-
-        Ok(())
     }
 
     /// Broadcast events globally to all apps
@@ -585,8 +582,31 @@ impl MultiAppRuntime {
 
     /// Process side effects (navigation, events) from timers and async commands
     pub fn process_side_effects(&mut self) -> Result<()> {
-        self.broadcast_events()?;
-        self.check_navigation()?;
+        // IMPORTANT: Navigate BEFORE broadcasting events
+        // This ensures that when we publish events (e.g. "migration:selected"),
+        // the target app (e.g. MigrationComparisonSelect) has already been navigated to
+        // and will receive the event immediately, triggering Initialize which may
+        // create a PerformParallel command that shows the LoadingScreen.
+        //
+        // We loop until no more navigation happens because:
+        // 1. Initial navigation (e.g. to MigrationComparisonSelect)
+        // 2. Broadcast events
+        // 3. Event handler sets new navigation (e.g. to LoadingScreen via PerformParallel)
+        // 4. Loop again to process that navigation immediately
+        //
+        // This prevents rendering intermediate frames between navigations.
+        // Keep processing navigation + events until everything settles
+        // We need multiple iterations because:
+        // - Iteration 1: Navigate to ComparisonSelect, broadcast "migration:selected"
+        //   - ComparisonSelect.Initialize creates PerformParallel which sets navigation to LoadingScreen
+        // - Iteration 2: Navigate to LoadingScreen, broadcast "loading:init"
+        //   - LoadingScreen.Initialize sets up loading state
+        // - Iteration 3: No more navigation, exits
+        const MAX_LOOPS: usize = 5;
+        for _ in 0..MAX_LOOPS {
+            self.check_navigation()?;
+            self.broadcast_events()?;
+        }
         Ok(())
     }
 }
