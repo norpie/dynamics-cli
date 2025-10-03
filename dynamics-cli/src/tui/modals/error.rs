@@ -86,12 +86,12 @@ impl<Msg: Clone> ErrorModal<Msg> {
         .on_press(close_msg)
         .build();
 
-        // Button row - use Element::row with Vec to avoid type inference issues
-        let button_row = Element::row(vec![
-            Element::text(""),
-            close_button,
-            Element::text(""),
-        ]).build();
+        // Button row - explicitly set Fill constraints for width distribution
+        let button_row = RowBuilder::new()
+            .add(Element::text(""), LayoutConstraint::Fill(1))
+            .add(close_button, LayoutConstraint::Fill(1))
+            .add(Element::text(""), LayoutConstraint::Fill(1))
+            .build();
 
         // Build the modal content
         let mut content = ColumnBuilder::new();

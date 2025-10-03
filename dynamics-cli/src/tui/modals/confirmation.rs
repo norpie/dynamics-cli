@@ -20,6 +20,8 @@ pub struct ConfirmationModal<Msg> {
     message: Option<String>,
     confirm_text: String,
     cancel_text: String,
+    confirm_hotkey: Option<String>,
+    cancel_hotkey: Option<String>,
     on_confirm: Option<Msg>,
     on_cancel: Option<Msg>,
     width: Option<u16>,
@@ -34,6 +36,8 @@ impl<Msg: Clone> ConfirmationModal<Msg> {
             message: None,
             confirm_text: "Confirm".to_string(),
             cancel_text: "Cancel".to_string(),
+            confirm_hotkey: None,  // No default hotkey - caller should set specific keys
+            cancel_hotkey: None,   // No default hotkey - caller should set specific keys
             on_confirm: None,
             on_cancel: None,
             width: None,
@@ -59,7 +63,19 @@ impl<Msg: Clone> ConfirmationModal<Msg> {
         self
     }
 
-    /// Set the message sent when confirmed (Ctrl+Enter)
+    /// Set the confirm hotkey text (default: "Ctrl+Enter")
+    pub fn confirm_hotkey(mut self, hotkey: impl Into<String>) -> Self {
+        self.confirm_hotkey = Some(hotkey.into());
+        self
+    }
+
+    /// Set the cancel hotkey text (default: "Esc")
+    pub fn cancel_hotkey(mut self, hotkey: impl Into<String>) -> Self {
+        self.cancel_hotkey = Some(hotkey.into());
+        self
+    }
+
+    /// Set the message sent when confirmed
     pub fn on_confirm(mut self, msg: Msg) -> Self {
         self.on_confirm = Some(msg);
         self
@@ -107,24 +123,36 @@ impl<Msg: Clone> ConfirmationModal<Msg> {
             .expect("ConfirmationModal requires on_confirm callback");
 
         // Cancel button with hotkey indicator
+        let cancel_label = if let Some(hotkey) = &self.cancel_hotkey {
+            format!("[ {} ({}) ]", self.cancel_text, hotkey)
+        } else {
+            format!("[ {} ]", self.cancel_text)
+        };
         let cancel_button = Element::button(
             FocusId::new("confirmation-cancel"),
-            format!("[ {} (Esc) ]", self.cancel_text),
+            cancel_label,
         )
         .on_press(cancel_msg)
         .build();
 
         // Confirm button with hotkey indicator
+        let confirm_label = if let Some(hotkey) = &self.confirm_hotkey {
+            format!("[ {} ({}) ]", self.confirm_text, hotkey)
+        } else {
+            format!("[ {} ]", self.confirm_text)
+        };
         let confirm_button = Element::button(
             FocusId::new("confirmation-confirm"),
-            format!("[ {} (Ctrl+Enter) ]", self.confirm_text),
+            confirm_label,
         )
         .on_press(confirm_msg)
         .style(Style::default().fg(theme.green))
         .build();
 
-        // Button row - use Element::row with Vec to avoid type inference issues
-        let buttons = Element::row(vec![cancel_button, confirm_button])
+        // Button row - explicitly set Fill constraints for width distribution
+        let buttons = RowBuilder::new()
+            .add(cancel_button, LayoutConstraint::Fill(1))
+            .add(confirm_button, LayoutConstraint::Fill(1))
             .spacing(2)
             .build();
 

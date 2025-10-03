@@ -6,55 +6,16 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use anyhow::Result;
 use std::collections::HashMap;
 
-use crate::tui::{AppId, Runtime, AppRuntime, apps::{AppLauncher, LoadingScreen, ErrorScreen, migration::{MigrationEnvironmentApp, MigrationComparisonSelectApp}}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App};
+use crate::tui::{AppId, Runtime, AppRuntime, apps::{AppLauncher, LoadingScreen, ErrorScreen, migration::{MigrationEnvironmentApp, MigrationComparisonSelectApp}}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App, ModalState};
 use crate::tui::element::{ColumnBuilder, RowBuilder, FocusId};
 use crate::tui::widgets::ScrollableState;
+use crate::tui::modals::{HelpModal, ConfirmationModal};
 
-/// Format a KeyCode for display (e.g., Char('i') → "i", F(1) → "F1")
-fn format_key(key: &KeyCode) -> String {
-    match key {
-        KeyCode::Char(' ') => "Space".to_string(),
-        KeyCode::Char(c) => c.to_string(),
-        KeyCode::F(n) => format!("F{}", n),
-        KeyCode::Enter => "Enter".to_string(),
-        KeyCode::Tab => "Tab".to_string(),
-        KeyCode::Backspace => "Backspace".to_string(),
-        KeyCode::Esc => "Esc".to_string(),
-        KeyCode::Up => "↑".to_string(),
-        KeyCode::Down => "↓".to_string(),
-        KeyCode::Left => "←".to_string(),
-        KeyCode::Right => "→".to_string(),
-        KeyCode::Home => "Home".to_string(),
-        KeyCode::End => "End".to_string(),
-        KeyCode::PageUp => "PgUp".to_string(),
-        KeyCode::PageDown => "PgDn".to_string(),
-        KeyCode::Delete => "Del".to_string(),
-        KeyCode::Insert => "Ins".to_string(),
-        _ => format!("{:?}", key),
-    }
-}
-
-/// Group keybindings by description and format as aliases (e.g., "n/N")
-fn group_and_format_bindings(bindings: &[(KeyCode, String)]) -> Vec<(String, String)> {
-    let mut grouped: HashMap<String, Vec<String>> = HashMap::new();
-
-    for (key, desc) in bindings {
-        grouped.entry(desc.clone())
-            .or_default()
-            .push(format_key(key));
-    }
-
-    let mut result: Vec<(String, String)> = grouped.into_iter()
-        .map(|(desc, mut keys)| {
-            keys.sort();  // Consistent ordering
-            let key_str = keys.join("/");
-            (key_str, desc)
-        })
-        .collect();
-
-    // Sort by key string for consistent display
-    result.sort_by(|a, b| a.0.cmp(&b.0));
-    result
+/// Messages for quit confirmation modal
+#[derive(Clone)]
+enum QuitConfirmMsg {
+    Confirm,
+    Cancel,
 }
 
 /// Manages multiple app runtimes and handles navigation between them
@@ -66,9 +27,10 @@ pub struct MultiAppRuntime {
     active_app: AppId,
 
     // Global UI state
-    help_menu_open: bool,
+    help_modal: ModalState<()>,
     help_scroll_state: ScrollableState,
-    quit_confirm_open: bool,
+    quit_modal: ModalState<()>,
+    quit_registry: crate::tui::InteractionRegistry<QuitConfirmMsg>,
 }
 
 impl MultiAppRuntime {
@@ -85,34 +47,39 @@ impl MultiAppRuntime {
         Self {
             runtimes,
             active_app: AppId::AppLauncher,
-            help_menu_open: false,
+            help_modal: ModalState::Closed,
             help_scroll_state: ScrollableState::new(),
-            quit_confirm_open: false,
+            quit_modal: ModalState::Closed,
+            quit_registry: crate::tui::InteractionRegistry::new(),
         }
     }
 
     pub fn request_quit(&mut self) {
-        self.quit_confirm_open = true;
+        self.quit_modal.open_empty();
+        self.quit_registry = crate::tui::InteractionRegistry::new(); // Reset registry
     }
 
     pub fn handle_key(&mut self, key_event: KeyEvent) -> Result<bool> {
         // Handle quit confirmation modal (highest priority)
-        if self.quit_confirm_open {
+        if self.quit_modal.is_open() {
             match key_event.code {
-                KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
+                KeyCode::Char('y') | KeyCode::Char('Y') => {
                     return Ok(false);  // Quit
                 }
                 KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
-                    self.quit_confirm_open = false;
-                    return Ok(true);  // Don't quit
+                    self.quit_modal.close();
+                    return Ok(true);  // Don't quit, close modal
                 }
-                _ => return Ok(true),  // Consume other keys
+                _ => return Ok(true),  // Consume all other keys
             }
         }
+
         // Global keys: F1 toggles help menu
         if key_event.code == KeyCode::F(1) {
-            self.help_menu_open = !self.help_menu_open;
-            if self.help_menu_open {
+            if self.help_modal.is_open() {
+                self.help_modal.close();
+            } else {
+                self.help_modal.open_empty();
                 self.help_scroll_state.scroll_to_top(); // Reset scroll when opening
             }
             return Ok(true);
@@ -129,10 +96,10 @@ impl MultiAppRuntime {
         }
 
         // When help menu is open, intercept keys for help control
-        if self.help_menu_open {
+        if self.help_modal.is_open() {
             match key_event.code {
                 KeyCode::Esc => {
-                    self.help_menu_open = false;
+                    self.help_modal.close();
                     return Ok(true);
                 }
                 KeyCode::Up => {
@@ -195,13 +162,27 @@ impl MultiAppRuntime {
     pub fn handle_mouse(&mut self, mouse_event: MouseEvent) -> Result<bool> {
         use crossterm::event::MouseEventKind;
 
-        // When quit confirmation is open, consume all mouse events
-        if self.quit_confirm_open {
-            return Ok(true);
+        // When quit confirmation is open, check for button clicks
+        if self.quit_modal.is_open() {
+            if let MouseEventKind::Down(_) = mouse_event.kind {
+                // Check if any button was clicked
+                if let Some(msg) = self.quit_registry.find_click(mouse_event.column, mouse_event.row) {
+                    match msg {
+                        QuitConfirmMsg::Confirm => {
+                            return Ok(false); // Quit
+                        }
+                        QuitConfirmMsg::Cancel => {
+                            self.quit_modal.close();
+                            return Ok(true);
+                        }
+                    }
+                }
+            }
+            return Ok(true); // Consume all mouse events when modal is open
         }
 
         // When help menu is open, intercept scroll wheel events
-        if self.help_menu_open {
+        if self.help_modal.is_open() {
             match mouse_event.kind {
                 MouseEventKind::ScrollUp => {
                     self.help_scroll_state.scroll_up(3);  // 3 lines per scroll
@@ -260,12 +241,12 @@ impl MultiAppRuntime {
             .render_to_area(frame, app_area);
 
         // If help menu is open, overlay it on top
-        if self.help_menu_open {
+        if self.help_modal.is_open() {
             self.render_help_menu(frame, full_area, &theme);
         }
 
         // If quit confirmation is open, overlay it on top (highest priority)
-        if self.quit_confirm_open {
+        if self.quit_modal.is_open() {
             self.render_quit_confirm(frame, full_area, &theme);
         }
     }
@@ -339,71 +320,18 @@ impl MultiAppRuntime {
             .filter(|(id, _, _)| *id != self.active_app)
             .collect();
 
-        // Build ALL help content items (no skipping - List widget handles scrolling)
-        let mut help_items = vec![
-            Element::styled_text(Line::from(vec![
-                Span::styled("Keyboard Shortcuts", Style::default().fg(theme.lavender).bold())
-            ])).build(),
-            Element::text(""),
-        ];
+        // Build help modal using HelpModal builder
+        let mut modal_builder = HelpModal::new()
+            .global_bindings(global_bindings.clone())
+            .current_app(current_app_data.1, current_app_data.2.clone())
+            .scroll_state(&self.help_scroll_state);
 
-        // Section 1: Global Keys (highest priority)
-        help_items.push(Element::styled_text(Line::from(vec![
-            Span::styled("▼ Global", Style::default().fg(theme.peach).bold())
-        ])).build());
-
-        let formatted_global = group_and_format_bindings(&global_bindings);
-        for (key_str, description) in &formatted_global {
-            let line = Line::from(vec![
-                Span::styled(format!("  {:13}", key_str), Style::default().fg(theme.mauve)),
-                Span::raw("  "),
-                Span::styled(description.clone(), Style::default().fg(theme.text)),
-            ]);
-            help_items.push(Element::styled_text(line).build());
+        // Add other apps
+        for (_, app_title, app_bindings) in &other_apps {
+            modal_builder = modal_builder.add_app(*app_title, app_bindings.clone());
         }
 
-        help_items.push(Element::text(""));
-
-        // Section 2: Current App Keys
-        help_items.push(Element::styled_text(Line::from(vec![
-            Span::styled(format!("▼ {}", current_app_data.1), Style::default().fg(theme.blue).bold())
-        ])).build());
-
-        let formatted_current = group_and_format_bindings(&current_app_data.2);
-        for (key_str, description) in &formatted_current {
-            let line = Line::from(vec![
-                Span::styled(format!("  {:13}", key_str), Style::default().fg(theme.green)),
-                Span::raw("  "),
-                Span::styled(description.clone(), Style::default().fg(theme.text)),
-            ]);
-            help_items.push(Element::styled_text(line).build());
-        }
-
-        help_items.push(Element::text(""));
-
-        // Section 3: Other Apps
-        for (_, app_title, app_bindings) in other_apps {
-            help_items.push(Element::styled_text(Line::from(vec![
-                Span::styled(format!("▼ {}", app_title), Style::default().fg(theme.overlay1).bold())
-            ])).build());
-
-            let formatted_other = group_and_format_bindings(app_bindings);
-            for (key_str, description) in &formatted_other {
-                let line = Line::from(vec![
-                    Span::styled(format!("  {:13}", key_str), Style::default().fg(theme.overlay2)),
-                    Span::raw("  "),
-                    Span::styled(description.clone(), Style::default().fg(theme.subtext0)),
-                ]);
-                help_items.push(Element::styled_text(line).build());
-            }
-
-            help_items.push(Element::text(""));
-        }
-
-        help_items.push(Element::text(""));
-        help_items.push(Element::styled_text(Line::from(vec![
-            Span::styled("[ESC to close | ↑↓/PgUp/PgDn/Home/End to scroll]", Style::default().fg(theme.overlay1))
-        ])).build());
+        let help_modal = modal_builder.build(theme);
 
         // Calculate modal dimensions and position
         let modal_width = area.width.min(60);
@@ -415,34 +343,25 @@ impl MultiAppRuntime {
             height: modal_height,
         };
 
-        // Calculate available content height (subtract panel borders + container padding)
+        // Calculate available content height and update scroll state dimensions
+        // This must happen BEFORE rendering since ScrollableState needs it for scroll calculations
         let content_height = modal_height.saturating_sub(4) as usize; // 2 for borders, 2 for padding
 
-        // Update scroll state dimensions
-        self.help_scroll_state.update_dimensions(help_items.len(), content_height);
-
-        // Create scrollable column with all items (spacing=0 for dense packing)
-        let mut column_builder = ColumnBuilder::new();
-        for item in help_items {
-            column_builder = column_builder.add(item, LayoutConstraint::Length(1));
+        // Count total help items for scroll state
+        // 2 (title + blank) + global section + current app section + other apps sections
+        let mut total_items = 2; // title + blank
+        if !global_bindings.is_empty() {
+            total_items += 2 + global_bindings.len(); // section header + items + blank
         }
-        let help_column = column_builder.spacing(0).build();
+        total_items += 2 + current_app_data.2.len(); // section header + items + blank
+        for (_, _, app_bindings) in &other_apps {
+            total_items += 1 + app_bindings.len() + 1; // section header + items + blank
+        }
+        total_items += 2; // blank + footer
 
-        let help_content = Element::scrollable(
-            FocusId::new("help_scroll"),
-            help_column,
-            &self.help_scroll_state,
-        ).build();
+        self.help_scroll_state.update_dimensions(total_items, content_height);
 
-        // Wrap in panel and center
-        let help_modal = Element::panel(
-            Element::container(help_content)
-                .padding(1)
-                .build()
-        )
-        .title("Help")
-        .build();
-
+        // Render the modal
         use crate::tui::{Renderer, InteractionRegistry};
         use crate::tui::renderer::{FocusRegistry, DropdownRegistry};
         let mut registry: InteractionRegistry<()> = InteractionRegistry::new();
@@ -451,8 +370,8 @@ impl MultiAppRuntime {
         Renderer::render(frame, theme, &mut registry, &mut focus_registry, &mut dropdown_registry, None, &help_modal, modal_area);
     }
 
-    /// Poll async commands for all apps
-    fn render_quit_confirm(&self, frame: &mut Frame, area: ratatui::layout::Rect, theme: &Theme) {
+    /// Render quit confirmation modal
+    fn render_quit_confirm(&mut self, frame: &mut Frame, area: ratatui::layout::Rect, theme: &Theme) {
         use ratatui::widgets::Block;
         use ratatui::style::Style;
 
@@ -461,9 +380,22 @@ impl MultiAppRuntime {
             .style(Style::default().bg(theme.surface0));
         frame.render_widget(dim_block, area);
 
-        // Create simple confirmation modal
+        // Build quit confirmation modal using builder
+        let quit_modal = ConfirmationModal::new("Quit Application")
+            .message("Are you sure you want to quit?")
+            .confirm_text("Yes")
+            .cancel_text("No")
+            .confirm_hotkey("Y")
+            .cancel_hotkey("N/Esc")
+            .on_confirm(QuitConfirmMsg::Confirm)
+            .on_cancel(QuitConfirmMsg::Cancel)
+            .width(50)
+            .height(10)
+            .build(theme);
+
+        // Calculate modal position
         let modal_width = 50;
-        let modal_height = 8;
+        let modal_height = 10;
         let modal_area = ratatui::layout::Rect {
             x: area.x + (area.width.saturating_sub(modal_width)) / 2,
             y: area.y + (area.height.saturating_sub(modal_height)) / 2,
@@ -471,46 +403,13 @@ impl MultiAppRuntime {
             height: modal_height,
         };
 
-        let message_content = ColumnBuilder::<()>::new()
-            .add(
-                Element::styled_text(Line::from(vec![
-                    Span::styled("Quit Application", Style::default().fg(theme.red).bold())
-                ])).build(),
-                LayoutConstraint::Length(1),
-            )
-            .add(Element::text(""), LayoutConstraint::Length(1))
-            .add(
-                Element::text("Are you sure you want to quit?"),
-                LayoutConstraint::Length(1),
-            )
-            .add(Element::text(""), LayoutConstraint::Length(1))
-            .add(
-                Element::styled_text(Line::from(vec![
-                    Span::styled("[Y/Enter]", Style::default().fg(theme.green)),
-                    Span::raw(" Yes  "),
-                    Span::styled("[N/Esc]", Style::default().fg(theme.red)),
-                    Span::raw(" No"),
-                ])).build(),
-                LayoutConstraint::Length(1),
-            )
-            .spacing(0)
-            .build();
-
-        let quit_modal = Element::panel(
-            Element::container(message_content)
-                .padding(1)
-                .build()
-        )
-        .build();
-
-        // Render using element system
-        let mut registry = crate::tui::renderer::InteractionRegistry::new();
+        // Render modal and capture interactions in quit_registry
         let mut focus_registry = crate::tui::renderer::FocusRegistry::new();
         let mut dropdown_registry = crate::tui::renderer::DropdownRegistry::new();
         crate::tui::Renderer::render(
             frame,
             theme,
-            &mut registry,
+            &mut self.quit_registry,
             &mut focus_registry,
             &mut dropdown_registry,
             None,
