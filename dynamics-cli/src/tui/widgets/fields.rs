@@ -116,14 +116,40 @@ impl SelectField {
 
     /// Handle select event and update selected value
     pub fn handle_event<Msg>(&mut self, event: SelectEvent, options: &[String]) -> Command<Msg> {
+        use crossterm::event::KeyCode;
+
         match event {
             SelectEvent::Navigate(key) => {
-                self.state.handle_event(event);
+                if !self.state.is_open() {
+                    // Closed: Enter/Space toggles open
+                    match key {
+                        KeyCode::Enter | KeyCode::Char(' ') => {
+                            self.state.toggle();
+                        }
+                        _ => {}
+                    }
+                } else {
+                    // Open: handle navigation
+                    match key {
+                        KeyCode::Up => self.state.navigate_prev(),
+                        KeyCode::Down => self.state.navigate_next(),
+                        KeyCode::Enter => {
+                            // Select highlighted and close
+                            self.state.select_highlighted();
+                            let idx = self.state.selected();
+                            if idx < options.len() {
+                                self.selected_option = Some(options[idx].clone());
+                            }
+                        }
+                        KeyCode::Esc => {
+                            self.state.close();
+                        }
+                        _ => {}
+                    }
+                }
             }
             SelectEvent::Select(idx) => {
-                self.state.handle_event(event);
-                // Index 0 might be a placeholder, actual options start at 1
-                // This depends on how the caller sets up options
+                self.state.select(idx);
                 if idx < options.len() {
                     self.selected_option = Some(options[idx].clone());
                 }
