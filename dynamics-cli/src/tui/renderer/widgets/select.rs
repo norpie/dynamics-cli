@@ -24,8 +24,8 @@ pub fn select_on_key<Msg: Clone + Send + 'static>(
                     }
                 }
                 _ => {
-                    // Unhandled key - no-op via WidgetEvent (will be ignored)
-                    DispatchTarget::WidgetEvent(Box::new(SelectEvent::Navigate(key)))
+                    // Unhandled key - pass through to global subscriptions
+                    DispatchTarget::PassThrough
                 }
             }
         } else {
@@ -39,8 +39,8 @@ pub fn select_on_key<Msg: Clone + Send + 'static>(
                     }
                 }
                 _ => {
-                    // Unhandled key
-                    DispatchTarget::WidgetEvent(Box::new(SelectEvent::Navigate(key)))
+                    // Unhandled key - pass through to global subscriptions
+                    DispatchTarget::PassThrough
                 }
             }
         }
@@ -61,8 +61,8 @@ pub fn select_on_key_event<Msg: Clone + Send + 'static>(
                     DispatchTarget::AppMsg(on_event(SelectEvent::Navigate(key)))
                 }
                 _ => {
-                    // Unhandled key
-                    DispatchTarget::WidgetEvent(Box::new(SelectEvent::Navigate(key)))
+                    // Unhandled key - pass through to global subscriptions
+                    DispatchTarget::PassThrough
                 }
             }
         } else {
@@ -72,8 +72,8 @@ pub fn select_on_key_event<Msg: Clone + Send + 'static>(
                     DispatchTarget::AppMsg(on_event(SelectEvent::Navigate(key)))
                 }
                 _ => {
-                    // Unhandled key
-                    DispatchTarget::WidgetEvent(Box::new(SelectEvent::Navigate(key)))
+                    // Unhandled key - pass through to global subscriptions
+                    DispatchTarget::PassThrough
                 }
             }
         }

@@ -9,12 +9,16 @@ use crate::tui::element::FocusId;
 /// This enum allows the runtime to distinguish between:
 /// - Widget events that should be auto-dispatched to Field types via AppState
 /// - App messages that should go directly to the update function
+/// - Unhandled keys that should pass through to global subscriptions
 pub enum DispatchTarget<Msg> {
     /// Widget event - runtime tries auto-dispatch via AppState::dispatch_widget_event
     WidgetEvent(Box<dyn Any + Send>),
 
     /// App message - goes directly to update() as before
     AppMsg(Msg),
+
+    /// Pass through to global subscriptions without blurring focus
+    PassThrough,
 }
 
 /// Commands represent side effects that apps want to perform.

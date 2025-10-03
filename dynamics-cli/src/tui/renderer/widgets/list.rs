@@ -31,8 +31,8 @@ pub fn list_on_key<Msg: Clone + Send + 'static>(
             }
         }
         _ => {
-            // Unhandled key
-            DispatchTarget::WidgetEvent(Box::new(ListEvent::Navigate(key)))
+            // Unhandled key - pass through to global subscriptions without blurring
+            DispatchTarget::PassThrough
         }
     })
 }

@@ -13,14 +13,13 @@ pub fn button_on_key<Msg: Clone + Send + 'static>(on_press: Option<Msg>) -> Box<
             if let Some(msg) = on_press.clone() {
                 DispatchTarget::AppMsg(msg)
             } else {
-                // Button has no callback - this shouldn't happen in practice
-                // Just return a dummy WidgetEvent that will be ignored
-                DispatchTarget::WidgetEvent(Box::new(()))
+                // Button has no callback - pass through to global subscriptions
+                DispatchTarget::PassThrough
             }
         }
         _ => {
-            // Unhandled key - return dummy WidgetEvent
-            DispatchTarget::WidgetEvent(Box::new(()))
+            // Unhandled key - pass through to global subscriptions
+            DispatchTarget::PassThrough
         }
     })
 }

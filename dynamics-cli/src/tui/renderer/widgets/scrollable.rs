@@ -14,8 +14,8 @@ pub fn scrollable_on_key<Msg: Clone + Send + 'static>(
         // Scrollable doesn't emit scroll messages directly via keyboard
         // The app should handle Up/Down/PageUp/PageDown in subscriptions
         // and call ScrollableState methods directly
-        // This handler is here for focus management - return dummy WidgetEvent
-        DispatchTarget::WidgetEvent(Box::new(()))
+        // Pass through to global subscriptions
+        DispatchTarget::PassThrough
     })
 }
 

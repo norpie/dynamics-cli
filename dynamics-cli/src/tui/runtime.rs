@@ -233,9 +233,14 @@ impl<A: App> Runtime<A> {
         }
 
         // Execute messages
+        let had_messages = !messages.is_empty();
         for msg in messages {
             let command = A::update(&mut self.state, msg);
             self.execute_command(command)?;
+        }
+        // Refresh subscriptions after timer events
+        if had_messages {
+            self.update_subscriptions();
         }
 
         Ok(())
@@ -261,10 +266,15 @@ impl<A: App> Runtime<A> {
 
         // Remove completed futures (in reverse order to maintain indices)
         completed.sort_by(|a, b| b.0.cmp(&a.0));
+        let had_completions = !completed.is_empty();
         for (i, msg) in completed {
             self.pending_async.remove(i);
             let command = A::update(&mut self.state, msg);
             self.execute_command(command)?;
+        }
+        // Refresh subscriptions after async completions
+        if had_completions {
+            self.update_subscriptions();
         }
 
         // Poll parallel coordination tasks
@@ -314,6 +324,8 @@ impl<A: App> Runtime<A> {
                             self.execute_command(command)?;
                         }
                     }
+                    // Refresh subscriptions after parallel task completions
+                    self.update_subscriptions();
 
                     // DON'T set navigation target here!
                     // LoadingScreen will handle navigation after showing completion status
@@ -336,9 +348,11 @@ impl<A: App> Runtime<A> {
         self.timers.clear();
 
         let subscriptions = A::subscriptions(&self.state);
+        log::debug!("✓ Runtime - updating subscriptions, count: {}", subscriptions.len());
         for sub in subscriptions {
             match sub {
-                Subscription::Keyboard { key, msg, description: _ } => {
+                Subscription::Keyboard { key, msg, description } => {
+                    log::debug!("  Registering keyboard subscription: {:?} -> {}", key, description);
                     // description is used for help menus, not for runtime lookup
                     self.key_subscriptions.insert(key, msg);
                 }
@@ -394,18 +408,29 @@ impl<A: App> Runtime<A> {
                     DispatchTarget::AppMsg(msg) => {
                         // Direct to update()
                         let command = A::update(&mut self.state, msg);
-                        return self.execute_command(command);
+                        let result = self.execute_command(command)?;
+                        self.update_subscriptions();
+                        return Ok(result);
+                    }
+                    DispatchTarget::PassThrough => {
+                        // Widget didn't handle this key - pass through to global subscriptions
+                        // Don't return early, fall through to subscription check below
                     }
                 }
             }
         }
 
-        // No focused element handled it, check global subscriptions
+        // No focused element handled it (or it returned PassThrough), check global subscriptions
         if let Some(msg) = self.key_subscriptions.get(&key_event.code).cloned() {
+            log::debug!("✓ Runtime - global subscription matched key {:?}", key_event.code);
             let command = A::update(&mut self.state, msg);
-            return self.execute_command(command);
+            let result = self.execute_command(command)?;
+            // Refresh subscriptions after state change (subscriptions may depend on state)
+            self.update_subscriptions();
+            return Ok(result);
         }
 
+        log::debug!("✗ Runtime - no subscription for key {:?}", key_event.code);
         Ok(true)
     }
 
@@ -433,7 +458,10 @@ impl<A: App> Runtime<A> {
                 // STEP 2: Handle click action
                 if let Some(msg) = self.registry.find_click(pos.0, pos.1) {
                     let command = A::update(&mut self.state, msg);
-                    return self.execute_command(command);
+                    let result = self.execute_command(command)?;
+                    // Refresh subscriptions after state change
+                    self.update_subscriptions();
+                    return Ok(result);
                 }
             }
             MouseEventKind::Moved => {
@@ -483,7 +511,12 @@ impl<A: App> Runtime<A> {
                                 }
                                 DispatchTarget::AppMsg(msg) => {
                                     let command = A::update(&mut self.state, msg);
-                                    return self.execute_command(command);
+                                    let result = self.execute_command(command)?;
+                                    self.update_subscriptions();
+                                    return Ok(result);
+                                }
+                                DispatchTarget::PassThrough => {
+                                    // Scroll wheel on unfocused widget - ignore
                                 }
                             }
                         }
@@ -509,7 +542,12 @@ impl<A: App> Runtime<A> {
                                 }
                                 DispatchTarget::AppMsg(msg) => {
                                     let command = A::update(&mut self.state, msg);
-                                    return self.execute_command(command);
+                                    let result = self.execute_command(command)?;
+                                    self.update_subscriptions();
+                                    return Ok(result);
+                                }
+                                DispatchTarget::PassThrough => {
+                                    // Scroll wheel on unfocused widget - ignore
                                 }
                             }
                         }
@@ -535,9 +573,14 @@ impl<A: App> Runtime<A> {
         };
 
         // Now execute the messages
+        let had_messages = !messages.is_empty();
         for msg in messages {
             let command = A::update(&mut self.state, msg);
             self.execute_command(command)?;
+        }
+        // Refresh subscriptions after pub/sub events
+        if had_messages {
+            self.update_subscriptions();
         }
         Ok(())
     }

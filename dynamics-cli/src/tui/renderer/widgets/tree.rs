@@ -39,8 +39,8 @@ pub fn tree_on_key<Msg: Clone + Send + 'static>(
             }
         }
         _ => {
-            // Unhandled key
-            DispatchTarget::WidgetEvent(Box::new(TreeEvent::Navigate(key)))
+            // Unhandled key - pass through to global subscriptions
+            DispatchTarget::PassThrough
         }
     })
 }
@@ -60,8 +60,8 @@ pub fn tree_on_key_event<Msg: Clone + Send + 'static>(
             DispatchTarget::AppMsg(on_event(TreeEvent::Toggle))
         }
         _ => {
-            // Unhandled key
-            DispatchTarget::WidgetEvent(Box::new(TreeEvent::Navigate(key)))
+            // Unhandled key - pass through to global subscriptions
+            DispatchTarget::PassThrough
         }
     })
 }
