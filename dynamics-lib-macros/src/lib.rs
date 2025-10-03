@@ -1,6 +1,7 @@
 use proc_macro::TokenStream;
 
 mod validate;
+mod resource_handlers;
 mod utils;
 
 /// Derive macro for validation framework
@@ -21,6 +22,26 @@ pub fn derive_validate(input: TokenStream) -> TokenStream {
     validate::derive(input)
 }
 
+/// Derive macro for Resource field handlers
+///
+/// Generates helper methods for loading and handling Resource fields.
+///
+/// # Example
+/// ```rust
+/// #[derive(ResourceHandlers)]
+/// struct State {
+///     #[resource(loader = "fetch_data")]
+///     data: Resource<Vec<String>>,
+/// }
+///
+/// // Generates:
+/// // - fn load_data(&mut self) -> Command<Msg>
+/// // - fn handle_data_loaded(&mut self, result: Result<Vec<String>, String>) -> Command<Msg>
+/// ```
+#[proc_macro_derive(ResourceHandlers, attributes(resource))]
+pub fn derive_resource_handlers(input: TokenStream) -> TokenStream {
+    resource_handlers::derive(input)
+}
+
 // Future proc macros:
 // - #[derive(App)] - Widget auto-routing
-// - Field type generators

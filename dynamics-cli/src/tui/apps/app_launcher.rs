@@ -61,6 +61,11 @@ impl Default for State {
                     description: "Autocomplete widget demo - fuzzy-matched input".to_string(),
                 },
                 AppInfo {
+                    id: AppId::ExampleResourceMacro,
+                    name: "Resource Macro Demo".to_string(),
+                    description: "ResourceHandlers macro - automated async state".to_string(),
+                },
+                AppInfo {
                     id: AppId::MigrationEnvironment,
                     name: "Migration Environments".to_string(),
                     description: "Migration environment selection".to_string(),

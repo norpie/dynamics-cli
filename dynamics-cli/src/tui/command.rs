@@ -72,6 +72,7 @@ pub enum AppId {
     Example5,
     Example6,
     Example7,
+    ExampleResourceMacro,
     LoadingScreen,
     ErrorScreen,
     MigrationEnvironment,
