@@ -587,34 +587,34 @@ impl App for MigrationComparisonSelectApp {
             .title("Name")
             .build();
 
-            // Source entity label and autocomplete
-            let source_label = Element::styled_text(Line::from(vec![
-                Span::styled("Source Entity", Style::default().fg(theme.text)),
-            ])).build();
-
-            let source_autocomplete = Element::autocomplete(
-                "create-source-autocomplete",
-                state.source_entities.as_ref().ok().cloned().unwrap_or_default(),
-                state.create_form.source_entity.value().to_string(),
-                &mut state.create_form.source_entity.state,
+            // Source entity autocomplete with panel
+            let source_autocomplete = Element::panel(
+                Element::autocomplete(
+                    "create-source-autocomplete",
+                    state.source_entities.as_ref().ok().cloned().unwrap_or_default(),
+                    state.create_form.source_entity.value().to_string(),
+                    &mut state.create_form.source_entity.state,
+                )
+                .placeholder("Type source entity name...")
+                .on_event(Msg::CreateFormSourceEvent)
+                .build()
             )
-            .placeholder("Type source entity name...")
-            .on_event(Msg::CreateFormSourceEvent)
+            .title("Source Entity")
             .build();
 
-            // Target entity label and autocomplete
-            let target_label = Element::styled_text(Line::from(vec![
-                Span::styled("Target Entity", Style::default().fg(theme.text)),
-            ])).build();
-
-            let target_autocomplete = Element::autocomplete(
-                "create-target-autocomplete",
-                state.target_entities.as_ref().ok().cloned().unwrap_or_default(),
-                state.create_form.target_entity.value().to_string(),
-                &mut state.create_form.target_entity.state,
+            // Target entity autocomplete with panel
+            let target_autocomplete = Element::panel(
+                Element::autocomplete(
+                    "create-target-autocomplete",
+                    state.target_entities.as_ref().ok().cloned().unwrap_or_default(),
+                    state.create_form.target_entity.value().to_string(),
+                    &mut state.create_form.target_entity.state,
+                )
+                .placeholder("Type target entity name...")
+                .on_event(Msg::CreateFormTargetEvent)
+                .build()
             )
-            .placeholder("Type target entity name...")
-            .on_event(Msg::CreateFormTargetEvent)
+            .title("Target Entity")
             .build();
 
             // Buttons
@@ -628,10 +628,8 @@ impl App for MigrationComparisonSelectApp {
                 col![
                     name_input => Length(3),
                     spacer!() => Length(1),
-                    source_label => Length(1),
                     source_autocomplete => Length(3),
                     spacer!() => Length(1),
-                    target_label => Length(1),
                     target_autocomplete => Length(3),
                     spacer!() => Length(1),
                     error_display!(state.create_form.validation_error, theme) => Length(2),
@@ -641,10 +639,8 @@ impl App for MigrationComparisonSelectApp {
                 col![
                     name_input => Length(3),
                     spacer!() => Length(1),
-                    source_label => Length(1),
                     source_autocomplete => Length(3),
                     spacer!() => Length(1),
-                    target_label => Length(1),
                     target_autocomplete => Length(3),
                     spacer!() => Length(1),
                     buttons => Length(3),
@@ -658,7 +654,7 @@ impl App for MigrationComparisonSelectApp {
             )
             .title("Create New Comparison")
             .width(80)
-            .height(if state.create_form.validation_error.is_some() { 25 } else { 23 })
+            .height(if state.create_form.validation_error.is_some() { 23 } else { 21 })
             .build();
 
             LayeredView::new(main_ui).with_app_modal(modal_content, crate::tui::Alignment::Center)

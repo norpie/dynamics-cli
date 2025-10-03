@@ -529,9 +529,9 @@ impl App for MigrationEnvironmentApp {
                 col![
                     name_input => Length(3),
                     spacer!() => Length(1),
-                    source_select => Length(10),
+                    source_select => Length(3),
                     spacer!() => Length(1),
-                    target_select => Length(10),
+                    target_select => Length(3),
                     spacer!() => Length(1),
                     crate::error_display!(state.create_form.validation_error, theme) => Length(2),
                     buttons => Length(3),
@@ -540,9 +540,9 @@ impl App for MigrationEnvironmentApp {
                 col![
                     name_input => Length(3),
                     spacer!() => Length(1),
-                    source_select => Length(10),
+                    source_select => Length(3),
                     spacer!() => Length(1),
-                    target_select => Length(10),
+                    target_select => Length(3),
                     spacer!() => Length(1),
                     buttons => Length(3),
                 ]
@@ -555,7 +555,7 @@ impl App for MigrationEnvironmentApp {
             )
             .title("Create New Migration")
             .width(80)
-            .height(if state.create_form.validation_error.is_some() { 37 } else { 35 })
+            .height(if state.create_form.validation_error.is_some() { 23 } else { 21 })
             .build();
 
             LayeredView::new(main_ui).with_app_modal(modal_content, crate::tui::Alignment::Center)

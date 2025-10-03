@@ -1,4 +1,4 @@
-use ratatui::{Frame, style::Style, widgets::{Block, Borders, Paragraph}, layout::Rect};
+use ratatui::{Frame, style::Style, widgets::Paragraph, layout::Rect};
 use crossterm::event::KeyCode;
 use crate::tui::{Element, Theme};
 use crate::tui::element::FocusId;
@@ -120,22 +120,6 @@ pub fn render_select<Msg: Clone + Send + 'static>(
 
     let is_focused = focused_id == Some(id);
 
-    // Select should only use 3 lines (border + content + border), not the full allocated area
-    let select_height = 3;
-    let select_area = Rect {
-        x: area.x,
-        y: area.y,
-        width: area.width,
-        height: select_height.min(area.height),
-    };
-
-    // Determine border color
-    let border_color = if is_focused && !inside_panel {
-        theme.lavender
-    } else {
-        theme.overlay0
-    };
-
     // Get selected option text
     let selected_text = if selected < options.len() {
         &options[selected]
@@ -143,26 +127,18 @@ pub fn render_select<Msg: Clone + Send + 'static>(
         ""
     };
 
-    // Render closed state: Panel with selected value + arrow
+    // Render borderless: selected value + arrow (like TextInput)
     let arrow = if is_open { " ▲" } else { " ▼" };
-    let display_text = format!("{}{}", selected_text, arrow);
+    let display_text = format!(" {}{}", selected_text, arrow);  // Add left padding
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(border_color))
-        .style(Style::default().bg(theme.base));
-
-    let inner_area = block.inner(select_area);
-    frame.render_widget(block, select_area);
-
-    // Render selected text
+    // Render text without border
     let text_widget = Paragraph::new(display_text)
         .style(Style::default().fg(theme.text));
-    frame.render_widget(text_widget, inner_area);
+    frame.render_widget(text_widget, area);
 
     // Register click handler for toggle
     if let Some(toggle_msg) = on_toggle {
-        registry.register_click(select_area, toggle_msg.clone());
+        registry.register_click(area, toggle_msg.clone());
     }
 
     // If open, register dropdown for overlay rendering (rendered after main UI)
@@ -174,7 +150,7 @@ pub fn render_select<Msg: Clone + Send + 'static>(
         };
 
         dropdown_registry.register(DropdownInfo {
-            select_area,
+            select_area: area,
             options: options.to_vec(),
             selected: Some(selected),
             highlight,

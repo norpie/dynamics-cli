@@ -1,4 +1,4 @@
-use ratatui::{Frame, style::{Style, Stylize}, widgets::{Block, Borders, Paragraph}, layout::Rect};
+use ratatui::{Frame, style::{Style, Stylize}, widgets::Paragraph, layout::Rect};
 use crossterm::event::KeyCode;
 use crate::tui::{Element, Theme};
 use crate::tui::element::FocusId;
@@ -109,33 +109,8 @@ pub fn render_autocomplete<Msg: Clone + Send + 'static>(
 
     let is_focused = focused_id == Some(id);
 
-    // Autocomplete uses 3 lines (border + content + border)
-    let input_height = 3;
-    let input_area = Rect {
-        x: area.x,
-        y: area.y,
-        width: area.width,
-        height: input_height.min(area.height),
-    };
-
-    // Determine border color
-    let border_color = if is_focused && !inside_panel {
-        theme.lavender
-    } else {
-        theme.overlay0
-    };
-
-    // Render input field
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(border_color))
-        .style(Style::default().bg(theme.base));
-
-    let inner_area = block.inner(input_area);
-    frame.render_widget(block, input_area);
-
     // Calculate visible width
-    let visible_width = inner_area.width.saturating_sub(2) as usize;
+    let visible_width = area.width.saturating_sub(2) as usize;
 
     // Build display text
     let display_text = if current_input.is_empty() && !is_focused {
@@ -164,8 +139,9 @@ pub fn render_autocomplete<Msg: Clone + Send + 'static>(
         Style::default().fg(theme.text)
     };
 
+    // Render text without border (like TextInput/Select)
     let text_widget = Paragraph::new(display_text).style(text_style);
-    frame.render_widget(text_widget, inner_area);
+    frame.render_widget(text_widget, area);
 
     // If open, register dropdown for overlay rendering
     if is_open && !filtered_options.is_empty() {
@@ -176,7 +152,7 @@ pub fn render_autocomplete<Msg: Clone + Send + 'static>(
         };
 
         dropdown_registry.register(DropdownInfo {
-            select_area: input_area,
+            select_area: area,
             options: filtered_options.to_vec(),
             selected: None,  // No checkmark for autocomplete
             highlight,

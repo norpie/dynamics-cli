@@ -400,8 +400,8 @@ impl<Msg> Element<Msg> {
             Element::TextInput { .. } => LayoutConstraint::Length(1),
             Element::Tree { .. } => LayoutConstraint::Fill(1),
             Element::Scrollable { .. } => LayoutConstraint::Fill(1),
-            Element::Select { .. } => LayoutConstraint::Length(3),  // Closed: 3 lines (border + content + border)
-            Element::Autocomplete { .. } => LayoutConstraint::Length(3),  // Input: 3 lines (border + content + border)
+            Element::Select { .. } => LayoutConstraint::Length(1),  // Borderless like TextInput
+            Element::Autocomplete { .. } => LayoutConstraint::Length(1),  // Borderless like TextInput
         }
     }
 
