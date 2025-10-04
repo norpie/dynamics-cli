@@ -17,7 +17,7 @@ use ratatui::{
 };
 use std::collections::HashMap;
 use crate::{col, row, use_constraints};
-use super::{Msg, Side, ExamplesState};
+use super::{Msg, Side, ExamplesState, ActiveTab};
 
 pub struct EntityComparisonApp;
 
@@ -29,6 +29,9 @@ pub struct State {
     target_env: String,
     source_entity: String,
     target_entity: String,
+
+    // Active tab
+    active_tab: ActiveTab,
 
     // Metadata (from API)
     source_metadata: Resource<EntityMetadata>,
@@ -82,6 +85,7 @@ impl App for EntityComparisonApp {
             target_env: params.target_env,
             source_entity: params.source_entity,
             target_entity: params.target_entity,
+            active_tab: ActiveTab::default(),
             source_metadata: Resource::Loading,
             target_metadata: Resource::Loading,
             field_mappings: HashMap::new(),
@@ -100,6 +104,12 @@ impl App for EntityComparisonApp {
     fn update(state: &mut Self::State, msg: Self::Msg) -> Command<Self::Msg> {
         match msg {
             Msg::Back => Command::navigate_to(AppId::MigrationComparisonSelect),
+            Msg::SwitchTab(n) => {
+                if let Some(tab) = ActiveTab::from_number(n) {
+                    state.active_tab = tab;
+                }
+                Command::None
+            }
         }
     }
 
@@ -134,6 +144,12 @@ impl App for EntityComparisonApp {
             Subscription::keyboard(KeyCode::Esc, "Back to comparison list", Msg::Back),
             Subscription::keyboard(KeyCode::Char('b'), "Back to comparison list", Msg::Back),
             Subscription::keyboard(KeyCode::Char('B'), "Back to comparison list", Msg::Back),
+
+            // Tab switching
+            Subscription::keyboard(KeyCode::Char('1'), "Switch to Fields", Msg::SwitchTab(1)),
+            Subscription::keyboard(KeyCode::Char('2'), "Switch to Relationships", Msg::SwitchTab(2)),
+            Subscription::keyboard(KeyCode::Char('3'), "Switch to Views", Msg::SwitchTab(3)),
+            Subscription::keyboard(KeyCode::Char('4'), "Switch to Forms", Msg::SwitchTab(4)),
         ]
     }
 
@@ -142,21 +158,34 @@ impl App for EntityComparisonApp {
     }
 
     fn status(state: &Self::State, theme: &Theme) -> Option<Line<'static>> {
-        Some(Line::from(vec![
-            Span::styled(
-                format!("Migration: {}", state.migration_name),
-                Style::default().fg(theme.text),
-            ),
-            Span::styled(" | ", Style::default().fg(theme.overlay1)),
-            Span::styled(
-                format!("{} → {}", state.source_env, state.target_env),
-                Style::default().fg(theme.subtext1),
-            ),
-            Span::styled(" | ", Style::default().fg(theme.overlay1)),
-            Span::styled(
-                format!("{} ↔ {}", state.source_entity, state.target_entity),
-                Style::default().fg(theme.blue),
-            ),
-        ]))
+        // Build tab indicator with active tab highlighted
+        let tabs = [
+            ActiveTab::Fields,
+            ActiveTab::Relationships,
+            ActiveTab::Views,
+            ActiveTab::Forms,
+        ];
+
+        let mut spans = vec![];
+
+        for (i, tab) in tabs.iter().enumerate() {
+            if i > 0 {
+                spans.push(Span::styled(" ", Style::default()));
+            }
+
+            let is_active = *tab == state.active_tab;
+            let label = format!("[{}] {}", tab.number(), tab.label());
+
+            spans.push(Span::styled(
+                label,
+                if is_active {
+                    Style::default().fg(theme.lavender).italic()
+                } else {
+                    Style::default().fg(theme.subtext1)
+                },
+            ));
+        }
+
+        Some(Line::from(spans))
     }
 }

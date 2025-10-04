@@ -3,6 +3,49 @@
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
+/// Active tab in the comparison view
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ActiveTab {
+    #[default]
+    Fields,
+    Relationships,
+    Views,
+    Forms,
+}
+
+impl ActiveTab {
+    /// Get tab label for display
+    pub fn label(&self) -> &'static str {
+        match self {
+            ActiveTab::Fields => "Fields",
+            ActiveTab::Relationships => "Relationships",
+            ActiveTab::Views => "Views",
+            ActiveTab::Forms => "Forms",
+        }
+    }
+
+    /// Get tab number (1-indexed for keyboard shortcuts)
+    pub fn number(&self) -> usize {
+        match self {
+            ActiveTab::Fields => 1,
+            ActiveTab::Relationships => 2,
+            ActiveTab::Views => 3,
+            ActiveTab::Forms => 4,
+        }
+    }
+
+    /// Switch to tab by number (1-indexed)
+    pub fn from_number(n: usize) -> Option<Self> {
+        match n {
+            1 => Some(ActiveTab::Fields),
+            2 => Some(ActiveTab::Relationships),
+            3 => Some(ActiveTab::Views),
+            4 => Some(ActiveTab::Forms),
+            _ => None,
+        }
+    }
+}
+
 /// Which side of the comparison is focused
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Side {
