@@ -44,4 +44,25 @@ impl RuntimeConfig {
             focus_mode: mode,
         }
     }
+
+    /// Load runtime config from the options system
+    pub async fn load_from_options() -> anyhow::Result<Self> {
+        let config = crate::global_config();
+
+        // Load focus mode from options (defaults to Hover if not found)
+        let focus_mode_str = config.options.get_string("tui.focus_mode").await
+            .unwrap_or_else(|_| "hover".to_string());
+
+        let focus_mode = match focus_mode_str.as_str() {
+            "click" => FocusMode::Click,
+            "hover" => FocusMode::Hover,
+            "hover_when_unfocused" => FocusMode::HoverWhenUnfocused,
+            _ => FocusMode::default(),
+        };
+
+        Ok(Self {
+            theme: Theme::new(ThemeVariant::default()), // Theme will be loaded from options later
+            focus_mode,
+        })
+    }
 }

@@ -84,6 +84,7 @@ pub enum AppId {
     AppLauncher,
     LoadingScreen,
     ErrorScreen,
+    Settings,
     MigrationEnvironment,
     MigrationComparisonSelect,
 }

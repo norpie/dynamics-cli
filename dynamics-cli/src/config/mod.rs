@@ -5,9 +5,11 @@
 //! - Environment configurations (host + credential reference)
 //! - Token caching per environment
 //! - Legacy configuration features (entity mappings, migrations, etc.)
+//! - Options system for type-safe key-value settings
 
 use anyhow::{Context, Result};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 pub mod db;
 pub mod models;
@@ -15,6 +17,7 @@ pub mod repository;
 pub mod migrations;
 pub mod migration;
 pub mod compat;
+pub mod options;
 
 pub use models::*;
 pub use repository::migrations::{SavedMigration, SavedComparison};
@@ -25,6 +28,9 @@ use crate::api::models::{Environment as ApiEnvironment, CredentialSet as ApiCred
 pub struct Config {
     pub(crate) pool: sqlx::SqlitePool,
     config_path: PathBuf,
+
+    /// Options system for type-safe settings
+    pub options: options::Options,
 }
 
 impl Config {
@@ -71,9 +77,13 @@ impl Config {
         // Run migrations
         db::run_migrations(&pool).await?;
 
+        // Initialize options with the global registry
+        let options = options::Options::new(pool.clone(), crate::options_registry());
+
         let config = Self {
             pool,
             config_path: db_path,
+            options,
         };
 
         // Print migration message only if migration actually happened
@@ -89,9 +99,15 @@ impl Config {
         let pool = db::connect_memory().await?;
         db::run_migrations(&pool).await?;
 
+        // Create a test registry for isolated testing
+        let test_registry = Arc::new(options::OptionsRegistry::new());
+        options::registrations::register_all(&test_registry)?;
+        let options = options::Options::new(pool.clone(), test_registry);
+
         Ok(Self {
             pool,
             config_path: PathBuf::from(":memory:"),
+            options,
         })
     }
 

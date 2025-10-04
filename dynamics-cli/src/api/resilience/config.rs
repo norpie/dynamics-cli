@@ -136,6 +136,73 @@ impl ResilienceConfig {
             },
         }
     }
+
+    /// Load resilience config from the options system
+    pub async fn load_from_options() -> anyhow::Result<Self> {
+        let config = crate::global_config();
+
+        // Load retry options
+        let retry_enabled = config.options.get_bool("api.retry.enabled").await
+            .unwrap_or(true);
+        let max_attempts = config.options.get_uint("api.retry.max_attempts").await
+            .unwrap_or(3) as u32;
+        let base_delay_ms = config.options.get_uint("api.retry.base_delay_ms").await
+            .unwrap_or(500);
+        let max_delay_ms = config.options.get_uint("api.retry.max_delay_ms").await
+            .unwrap_or(30000);
+        let backoff_multiplier = config.options.get_float("api.retry.backoff_multiplier").await
+            .unwrap_or(2.0);
+        let jitter = config.options.get_bool("api.retry.jitter").await
+            .unwrap_or(true);
+
+        // Load rate limit options
+        let rate_limit_enabled = config.options.get_bool("api.rate_limit.enabled").await
+            .unwrap_or(true);
+        let requests_per_minute = config.options.get_uint("api.rate_limit.requests_per_minute").await
+            .unwrap_or(90) as u32;
+        let burst_capacity = config.options.get_uint("api.rate_limit.burst_capacity").await
+            .unwrap_or(10) as u32;
+
+        // Load monitoring options
+        let correlation_ids = config.options.get_bool("api.monitoring.correlation_ids").await
+            .unwrap_or(true);
+        let request_logging = config.options.get_bool("api.monitoring.request_logging").await
+            .unwrap_or(true);
+        let performance_metrics = config.options.get_bool("api.monitoring.performance_metrics").await
+            .unwrap_or(true);
+        let log_level_str = config.options.get_string("api.monitoring.log_level").await
+            .unwrap_or_else(|_| "info".to_string());
+
+        let log_level = match log_level_str.as_str() {
+            "error" => LogLevel::Error,
+            "warn" => LogLevel::Warn,
+            "info" => LogLevel::Info,
+            "debug" => LogLevel::Debug,
+            "trace" => LogLevel::Trace,
+            _ => LogLevel::Info,
+        };
+
+        Ok(Self {
+            retry: RetryConfig {
+                max_attempts: if retry_enabled { max_attempts } else { 1 },
+                base_delay: Duration::from_millis(base_delay_ms),
+                max_delay: Duration::from_millis(max_delay_ms),
+                backoff_multiplier,
+                jitter,
+            },
+            rate_limit: RateLimitConfig {
+                requests_per_minute,
+                burst_capacity,
+                enabled: rate_limit_enabled,
+            },
+            monitoring: MonitoringConfig {
+                correlation_ids,
+                request_logging,
+                performance_metrics,
+                log_level,
+            },
+        })
+    }
 }
 
 /// Builder for ResilienceConfig

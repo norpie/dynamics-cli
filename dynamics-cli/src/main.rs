@@ -4,6 +4,7 @@ use anyhow::Result;
 use clap::Parser;
 use log::{debug, info};
 use once_cell::sync::OnceCell;
+use std::sync::Arc;
 
 mod api;
 mod auth;
@@ -29,6 +30,14 @@ static CONFIG: OnceCell<config::Config> = OnceCell::new();
 /// Get a reference to the global Config
 pub fn global_config() -> &'static config::Config {
     CONFIG.get().expect("Config not initialized")
+}
+
+// Global Options Registry (wrapped in Arc for sharing)
+static OPTIONS_REGISTRY: OnceCell<Arc<config::options::OptionsRegistry>> = OnceCell::new();
+
+/// Get a reference to the global OptionsRegistry Arc
+pub fn options_registry() -> Arc<config::options::OptionsRegistry> {
+    OPTIONS_REGISTRY.get().expect("OptionsRegistry not initialized").clone()
 }
 
 use cli::Cli;
@@ -65,11 +74,19 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     info!("Starting dynamics-cli");
 
+    // Initialize global OptionsRegistry first (needed by Config)
+    let registry = config::options::OptionsRegistry::new();
+    config::options::registrations::register_all(&registry)?;
+    let registry_arc = Arc::new(registry);
+    let count = registry_arc.count();
+    OPTIONS_REGISTRY.set(registry_arc).map_err(|_| anyhow::anyhow!("Failed to initialize global OptionsRegistry"))?;
+    debug!("Initialized options registry with {} options", count);
+
     // Initialize global Config once
     let config = config::Config::load().await?;
     CONFIG.set(config).map_err(|_| anyhow::anyhow!("Failed to initialize global Config"))?;
 
-    // Initialize global ClientManager once (contains config internally)
+    // Initialize global ClientManager once
     let client_manager = api::ClientManager::new().await?;
     CLIENT_MANAGER.set(client_manager).map_err(|_| anyhow::anyhow!("Failed to initialize global ClientManager"))?;
 
