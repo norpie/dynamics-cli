@@ -1,5 +1,15 @@
 # Migration App TODO
 
+## Infrastructure (Setup)
+- [x] Create entity comparison app module structure
+- [x] Set up API metadata models (FieldMetadata, EntityMetadata, etc.)
+- [x] Set up app state models (Side, ActiveTab, ExamplesState, MatchInfo, etc.)
+- [x] Create TreeItem implementations (FieldNode, RelationshipNode, ViewNode, FormNode)
+- [x] Implement tab system (Fields, Relationships, Views, Forms)
+- [x] Add tab switching with 1-4 keyboard shortcuts
+- [x] Create tab indicator in status bar
+- [x] Add separator between title and status in header
+
 ## Features to Implement in Tree Component Context
 
 ### **Field Value Display from Examples**
@@ -8,8 +18,8 @@
 - [ ] Handle missing data gracefully (`[no data]`, `[no value]`, `[null]`, `[empty]`)
 
 ### **Match Status Indicators**
-- [ ] Show mapping type badge/icon: `[Exact]`, `[Prefix]`, `[Manual]`
-- [ ] Color code by match type
+- [x] Show mapping type badge/icon: `[Exact]`, `[Prefix]`, `[Manual]` (placeholder in FieldNode)
+- [ ] Color code by match type (TODO: needs proper styling implementation)
 - [ ] Display match score
 
 ### **Hide Matched Filtering**
