@@ -1,4 +1,11 @@
-//! Metadata parsing utilities for Dynamics 365
+//! Metadata parsing and models for Dynamics 365
+
+pub mod models;
+
+pub use models::{
+    EntityMetadata, FieldMetadata, FieldType, FormMetadata, RelationshipMetadata,
+    RelationshipType, ViewMetadata,
+};
 
 use anyhow::Result;
 use roxmltree::Document;
@@ -27,4 +34,11 @@ pub fn parse_entity_list(metadata_xml: &str) -> Result<Vec<String>> {
 
     log::info!("Successfully parsed {} entities from metadata", entities.len());
     Ok(entities)
+}
+
+/// Parse full entity metadata from XML
+/// TODO: Implement full metadata parsing
+pub fn parse_entity_metadata(_metadata_xml: &str, _entity_name: &str) -> Result<EntityMetadata> {
+    // Placeholder - will implement actual XML parsing later
+    Ok(EntityMetadata::default())
 }

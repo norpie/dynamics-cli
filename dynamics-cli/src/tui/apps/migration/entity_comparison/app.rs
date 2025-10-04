@@ -5,29 +5,47 @@ use crate::tui::{
     subscription::Subscription,
     state::theme::Theme,
     renderer::LayeredView,
+    Resource,
+    widgets::TreeState,
 };
+use crate::api::EntityMetadata;
 use crossterm::event::KeyCode;
 use ratatui::{
     prelude::Stylize,
     style::Style,
     text::{Line, Span},
 };
+use std::collections::HashMap;
 use crate::{col, row, use_constraints};
+use super::{Msg, Side, ExamplesState};
 
 pub struct EntityComparisonApp;
 
 #[derive(Clone, Default)]
 pub struct State {
+    // Context
     migration_name: String,
     source_env: String,
     target_env: String,
     source_entity: String,
     target_entity: String,
-}
 
-#[derive(Clone)]
-pub enum Msg {
-    Back,
+    // Metadata (from API)
+    source_metadata: Resource<EntityMetadata>,
+    target_metadata: Resource<EntityMetadata>,
+
+    // Mapping state
+    field_mappings: HashMap<String, String>,  // source -> target
+    prefix_mappings: HashMap<String, String>, // source_prefix -> target_prefix
+    hide_matched: bool,
+
+    // Tree UI state
+    source_tree_state: TreeState,
+    target_tree_state: TreeState,
+    focused_side: Side,
+
+    // Examples
+    examples: ExamplesState,
 }
 
 pub struct EntityComparisonParams {
@@ -64,8 +82,18 @@ impl App for EntityComparisonApp {
             target_env: params.target_env,
             source_entity: params.source_entity,
             target_entity: params.target_entity,
+            source_metadata: Resource::Loading,
+            target_metadata: Resource::Loading,
+            field_mappings: HashMap::new(),
+            prefix_mappings: HashMap::new(),
+            hide_matched: false,
+            source_tree_state: TreeState::new(),
+            target_tree_state: TreeState::new(),
+            focused_side: Side::Source,
+            examples: ExamplesState::new(),
         };
 
+        // TODO: Load metadata from API
         (state, Command::None)
     }
 

@@ -23,3 +23,8 @@ pub use models::{Environment, CredentialSet, TokenInfo};
 pub use operations::{Operation, OperationResult, Operations};
 pub use query::{Query, QueryBuilder, QueryResult, Filter, FilterValue, OrderBy};
 pub use resilience::{RetryPolicy, RetryConfig, ResilienceConfig, RateLimitConfig, MonitoringConfig, LogLevel, RateLimiterStats, RateLimiter, RetryableError, ApiLogger, OperationContext, OperationMetrics, MetricsCollector, MetricsSnapshot, OperationTypeMetrics, EntityMetrics, GlobalMetrics};
+pub use metadata::{
+    parse_entity_list, parse_entity_metadata,
+    EntityMetadata, FieldMetadata, FieldType, FormMetadata, RelationshipMetadata,
+    RelationshipType, ViewMetadata,
+};

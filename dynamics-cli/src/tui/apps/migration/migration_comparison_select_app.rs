@@ -298,7 +298,7 @@ impl App for MigrationComparisonSelectApp {
                     if let Some(comparison) = state.comparisons.get(selected_idx) {
                         log::info!("Opening comparison: {} -> {}",
                             comparison.source_entity, comparison.target_entity);
-                        let params = super::EntityComparisonParams {
+                        let params = super::entity_comparison::EntityComparisonParams {
                             migration_name: state.migration_name.clone().unwrap_or_default(),
                             source_env: state.source_env.clone().unwrap_or_default(),
                             target_env: state.target_env.clone().unwrap_or_default(),
