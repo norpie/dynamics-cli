@@ -56,7 +56,7 @@ impl KeyBinding {
     fn format_key_code(code: KeyCode) -> String {
         match code {
             KeyCode::Char(' ') => "Space".to_string(),
-            KeyCode::Char(c) => c.to_uppercase().to_string(),
+            KeyCode::Char(c) => c.to_string(),
             KeyCode::F(n) => format!("F{}", n),
             KeyCode::Enter => "Enter".to_string(),
             KeyCode::Esc => "Esc".to_string(),
