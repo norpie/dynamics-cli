@@ -1,6 +1,7 @@
 #![allow(warnings)]
 
 use anyhow::Result;
+use arc_swap::ArcSwap;
 use clap::Parser;
 use log::{debug, info};
 use once_cell::sync::OnceCell;
@@ -38,6 +39,32 @@ static OPTIONS_REGISTRY: OnceCell<Arc<config::options::OptionsRegistry>> = OnceC
 /// Get a reference to the global OptionsRegistry Arc
 pub fn options_registry() -> Arc<config::options::OptionsRegistry> {
     OPTIONS_REGISTRY.get().expect("OptionsRegistry not initialized").clone()
+}
+
+// Global RuntimeConfig instance (using ArcSwap for lock-free atomic updates)
+static RUNTIME_CONFIG: OnceCell<ArcSwap<tui::state::RuntimeConfig>> = OnceCell::new();
+
+/// Get a clone of the current RuntimeConfig Arc
+pub fn global_runtime_config() -> Arc<tui::state::RuntimeConfig> {
+    RUNTIME_CONFIG
+        .get()
+        .expect("RuntimeConfig not initialized")
+        .load_full()
+}
+
+/// Initialize the global RuntimeConfig (called once at startup)
+pub fn init_runtime_config(config: tui::state::RuntimeConfig) {
+    RUNTIME_CONFIG
+        .set(ArcSwap::from_pointee(config))
+        .expect("RuntimeConfig already initialized");
+}
+
+/// Reload the global RuntimeConfig (called when settings change)
+pub fn reload_runtime_config(config: tui::state::RuntimeConfig) {
+    RUNTIME_CONFIG
+        .get()
+        .expect("RuntimeConfig not initialized")
+        .store(Arc::new(config));
 }
 
 use cli::Cli;
@@ -85,6 +112,11 @@ async fn main() -> Result<()> {
     // Initialize global Config once
     let config = config::Config::load().await?;
     CONFIG.set(config).map_err(|_| anyhow::anyhow!("Failed to initialize global Config"))?;
+
+    // Initialize global RuntimeConfig from options
+    let runtime_config = tui::state::RuntimeConfig::load_from_options().await?;
+    init_runtime_config(runtime_config);
+    debug!("Initialized runtime config from options");
 
     // Initialize global ClientManager once
     let client_manager = api::ClientManager::new().await?;

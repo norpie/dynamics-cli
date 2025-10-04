@@ -311,7 +311,8 @@ impl MultiAppRuntime {
     }
 
     pub fn render(&mut self, frame: &mut Frame) {
-        let theme = Theme::new(ThemeVariant::default());
+        let config = crate::global_runtime_config();
+        let theme = &config.theme;
         let full_area = frame.size();
 
         // Calculate header area (3 lines) and app content area

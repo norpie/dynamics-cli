@@ -45,9 +45,6 @@ pub struct Runtime<A: App> {
     /// Current app state
     state: A::State,
 
-    /// Runtime configuration (theme, focus mode, etc.)
-    config: RuntimeConfig,
-
     /// Interaction registry for mouse events
     registry: InteractionRegistry<A::Msg>,
 
@@ -97,11 +94,9 @@ pub struct Runtime<A: App> {
 impl<A: App> Runtime<A> {
     pub fn new() -> Self {
         let (state, init_command) = A::init();
-        let config = RuntimeConfig::default();
 
         let mut runtime = Self {
             state,
-            config,
             registry: InteractionRegistry::new(),
             focus_registry: FocusRegistry::new(),
             dropdown_registry: DropdownRegistry::new(),
@@ -158,7 +153,8 @@ impl<A: App> Runtime<A> {
 
     /// Get the app's status (optional, dynamic)
     pub fn get_status(&self) -> Option<ratatui::text::Line<'static>> {
-        A::status(&self.state, &self.config.theme)
+        let config = crate::global_runtime_config();
+        A::status(&self.state, &config.theme)
     }
 
     /// Get a reference to the app's state
@@ -473,7 +469,8 @@ impl<A: App> Runtime<A> {
             }
             MouseEventKind::Moved => {
                 // Handle focus-on-hover based on config
-                match self.config.focus_mode {
+                let config = crate::global_runtime_config();
+                match config.focus_mode {
                     FocusMode::Click => {
                         // Do nothing - focus only changes on click
                     }
@@ -771,13 +768,14 @@ impl<A: App> Runtime<A> {
         self.registry.set_hover_pos(self.last_hover_pos);
 
         // Get the layered view from the app
-        let layered_view = A::view(&mut self.state, &self.config.theme);
+        let config = crate::global_runtime_config();
+        let layered_view = A::view(&mut self.state, &config.theme);
 
         log::debug!("Runtime: rendering layers");
         // Render using the new layered API
         Renderer::render_layers(
             frame,
-            &self.config.theme,
+            &config.theme,
             &mut self.registry,
             &mut self.focus_registry,
             self.focused_id.as_ref(),

@@ -71,6 +71,9 @@ pub enum Msg {
     // Toggle boolean
     ToggleBool(String),
     BoolToggled(Result<(), String>),
+
+    // Runtime config reload
+    ConfigReloaded(Result<(), String>),
 }
 
 impl Default for State {
@@ -410,22 +413,33 @@ impl App for SettingsApp {
             }
 
             Msg::BoolToggled(Ok(())) => {
-                // Reload values
-                Command::perform(
-                    async {
-                        let config = crate::global_config();
-                        let mut values = std::collections::HashMap::new();
+                // Reload values and runtime config
+                Command::batch(vec![
+                    Command::perform(
+                        async {
+                            let config = crate::global_config();
+                            let mut values = std::collections::HashMap::new();
 
-                        for def in crate::options_registry().list_all() {
-                            if let Ok(value) = config.options.get(&def.key).await {
-                                values.insert(def.key.clone(), value);
+                            for def in crate::options_registry().list_all() {
+                                if let Ok(value) = config.options.get(&def.key).await {
+                                    values.insert(def.key.clone(), value);
+                                }
                             }
-                        }
 
-                        Ok(values)
-                    },
-                    Msg::ValuesLoaded,
-                )
+                            Ok(values)
+                        },
+                        Msg::ValuesLoaded,
+                    ),
+                    Command::perform(
+                        async {
+                            let new_config = crate::tui::state::RuntimeConfig::load_from_options().await
+                                .map_err(|e| e.to_string())?;
+                            crate::reload_runtime_config(new_config);
+                            Ok(())
+                        },
+                        Msg::ConfigReloaded,
+                    ),
+                ])
             }
 
             Msg::BoolToggled(Err(e)) => {
@@ -612,27 +626,49 @@ impl App for SettingsApp {
 
             Msg::ValueSaved(Ok(())) => {
                 state.error = None;
-                // Reload values
-                Command::perform(
-                    async {
-                        let config = crate::global_config();
-                        let mut values = std::collections::HashMap::new();
+                // Reload values and runtime config
+                Command::batch(vec![
+                    Command::perform(
+                        async {
+                            let config = crate::global_config();
+                            let mut values = std::collections::HashMap::new();
 
-                        for def in crate::options_registry().list_all() {
-                            if let Ok(value) = config.options.get(&def.key).await {
-                                values.insert(def.key.clone(), value);
+                            for def in crate::options_registry().list_all() {
+                                if let Ok(value) = config.options.get(&def.key).await {
+                                    values.insert(def.key.clone(), value);
+                                }
                             }
-                        }
 
-                        Ok(values)
-                    },
-                    Msg::ValuesLoaded,
-                )
+                            Ok(values)
+                        },
+                        Msg::ValuesLoaded,
+                    ),
+                    Command::perform(
+                        async {
+                            let new_config = crate::tui::state::RuntimeConfig::load_from_options().await
+                                .map_err(|e| e.to_string())?;
+                            crate::reload_runtime_config(new_config);
+                            Ok(())
+                        },
+                        Msg::ConfigReloaded,
+                    ),
+                ])
             }
 
             Msg::ValueSaved(Err(e)) => {
                 state.error = Some(e);
                 state.editing = None;
+                Command::None
+            }
+
+            Msg::ConfigReloaded(Ok(())) => {
+                log::debug!("Runtime config reloaded successfully");
+                Command::None
+            }
+
+            Msg::ConfigReloaded(Err(e)) => {
+                log::error!("Failed to reload runtime config: {}", e);
+                state.error = Some(format!("Failed to reload config: {}", e));
                 Command::None
             }
         }
