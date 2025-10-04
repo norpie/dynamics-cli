@@ -35,6 +35,7 @@ pub trait AppRuntime {
     fn poll_timers(&mut self) -> Result<()>;
     fn poll_async(&mut self) -> Pin<Box<dyn Future<Output = Result<()>> + '_>>;
     fn take_navigation(&mut self) -> Option<AppId>;
+    fn take_start_app(&mut self) -> Option<(AppId, Box<dyn Any + Send>)>;
     fn take_publishes(&mut self) -> Vec<(String, Value)>;
     fn handle_publish(&mut self, topic: &str, data: Value) -> Result<()>;
     fn focus_next(&mut self) -> Result<()>;
@@ -96,6 +97,9 @@ pub struct Runtime<A: App> {
     /// Pending publish events to broadcast globally
     pending_publishes: Vec<(String, serde_json::Value)>,
 
+    /// Pending app start with params (app_id, params)
+    pending_start_app: Option<(AppId, Box<dyn Any + Send>)>,
+
     /// Active parallel task coordinator
     parallel_coordinator: Option<ParallelTaskCoordinator<A::Msg>>,
 
@@ -128,6 +132,7 @@ impl<A: App> Runtime<A> {
             pending_async: Vec::new(),
             pending_parallel: Vec::new(),
             pending_publishes: Vec::new(),
+            pending_start_app: None,
             parallel_coordinator: None,
             explicitly_unfocused: false,
             previous_layer_count: 1,  // Start with 1 (base layer)
@@ -145,6 +150,11 @@ impl<A: App> Runtime<A> {
     /// Take the pending navigation target (if any)
     pub fn take_navigation(&mut self) -> Option<AppId> {
         self.navigation_target.take()
+    }
+
+    /// Take pending start app request (if any)
+    pub fn take_start_app(&mut self) -> Option<(AppId, Box<dyn Any + Send>)> {
+        self.pending_start_app.take()
     }
 
     /// Take pending publish events
@@ -634,17 +644,8 @@ impl<A: App> Runtime<A> {
             }
 
             Command::StartApp { app_id, params } => {
-                // Publish special event for MultiAppRuntime to handle
-                let encoded = serde_json::to_value(&app_id).unwrap_or(Value::Null);
-                self.pending_publishes.push((
-                    format!("__lifecycle:start_app:{:?}", app_id),
-                    serde_json::json!({
-                        "app_id": encoded,
-                        "params_type": std::any::type_name_of_val(&*params),
-                    })
-                ));
-                // Also store params in a way MultiAppRuntime can retrieve
-                // For now, we'll use NavigateTo and MultiAppRuntime will handle the special event
+                // Store the app_id and params for MultiAppRuntime to pick up
+                self.pending_start_app = Some((app_id, params));
                 self.navigation_target = Some(app_id);
                 Ok(true)
             }
@@ -706,16 +707,18 @@ impl<A: App> Runtime<A> {
                 let task_names: Vec<String> = tasks.iter().map(|t| t.description.clone()).collect();
                 let total_tasks = tasks.len();
 
-                let loading_data = serde_json::json!({
-                    "tasks": task_names,
-                    "title": config.title.clone().unwrap_or_else(|| "Loading".to_string()),
-                    "target": format!("{:?}", config.on_complete.unwrap_or(AppId::AppLauncher)),
-                    "auto_complete": false, // We control completion manually
-                });
-
-                // Navigate to loading screen
+                // Start LoadingScreen with typed params
+                use crate::tui::apps::screens::LoadingScreenParams;
+                self.pending_start_app = Some((
+                    AppId::LoadingScreen,
+                    Box::new(LoadingScreenParams {
+                        tasks: task_names.clone(),
+                        target: config.on_complete,
+                        caller: None,
+                        cancellable: false,
+                    })
+                ));
                 self.navigation_target = Some(AppId::LoadingScreen);
-                self.pending_publishes.push(("loading:init".to_string(), loading_data));
 
                 // Initialize shared state for task results
                 let results = Arc::new(Mutex::new((0..total_tasks).map(|_| None).collect::<Vec<_>>()));
@@ -950,6 +953,10 @@ where
 
     fn take_navigation(&mut self) -> Option<AppId> {
         Runtime::take_navigation(self)
+    }
+
+    fn take_start_app(&mut self) -> Option<(AppId, Box<dyn Any + Send>)> {
+        Runtime::take_start_app(self)
     }
 
     fn take_publishes(&mut self) -> Vec<(String, Value)> {

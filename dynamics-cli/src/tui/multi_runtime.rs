@@ -798,12 +798,65 @@ impl MultiAppRuntime {
 
     /// Check if any navigation commands were issued
     fn check_navigation(&mut self) -> Result<bool> {
+        // Check if start_app was requested (takes priority over navigation)
+        let start_app_request = if let Some(runtime) = self.runtimes.get_mut(&self.active_app) {
+            runtime.take_start_app()
+        } else {
+            None
+        };
+
         // Check if navigation was requested from active app
         let nav_target = if let Some(runtime) = self.runtimes.get_mut(&self.active_app) {
             runtime.take_navigation()
         } else {
             None
         };
+
+        // Handle start_app first (it includes params)
+        if let Some((target, params)) = start_app_request {
+            // Suspend current app if it has a Sleep policy
+            if let Some(current_runtime) = self.runtimes.get(&self.active_app) {
+                let policy = self.factories.get(&self.active_app)
+                    .map(|f| f.quit_policy())
+                    .unwrap_or(crate::tui::QuitPolicy::Sleep);
+
+                match policy {
+                    crate::tui::QuitPolicy::Sleep => {
+                        // Keep app in background
+                        self.lifecycles.insert(self.active_app, AppLifecycle::Background);
+                        if let Some(runtime) = self.runtimes.get_mut(&self.active_app) {
+                            runtime.on_suspend().ok();
+                        }
+                    }
+                    crate::tui::QuitPolicy::QuitOnExit => {
+                        // Remove app immediately
+                        if let Some(mut runtime) = self.runtimes.remove(&self.active_app) {
+                            runtime.on_destroy().ok();
+                        }
+                        self.lifecycles.insert(self.active_app, AppLifecycle::Dead);
+                    }
+                    crate::tui::QuitPolicy::QuitOnIdle(_) => {
+                        // For now, treat like Sleep
+                        self.lifecycles.insert(self.active_app, AppLifecycle::Background);
+                        if let Some(runtime) = self.runtimes.get_mut(&self.active_app) {
+                            runtime.on_suspend().ok();
+                        }
+                    }
+                }
+            }
+
+            // Always destroy existing instance and create fresh with new params
+            if let Some(mut runtime) = self.runtimes.remove(&target) {
+                runtime.on_destroy().ok();
+            }
+            self.lifecycles.insert(target, AppLifecycle::Dead);
+
+            // Create target app with provided params
+            self.ensure_app_exists(target, params)?;
+
+            self.active_app = target;
+            return Ok(true); // Navigation happened
+        }
 
         if let Some(target) = nav_target {
             // Suspend current app if it has a Sleep policy
