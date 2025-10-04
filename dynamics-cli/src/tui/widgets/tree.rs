@@ -37,6 +37,7 @@ pub struct TreeState {
     selected: Option<String>,        // Selected node ID
     scroll_offset: usize,
     scroll_off: usize,               // Scrolloff distance (vim-like)
+    viewport_height: Option<usize>,  // Last known viewport height from renderer
 
     // Cached metadata for O(1) lookups (Approach 4 - Smart State)
     node_parents: HashMap<String, String>,   // child_id → parent_id
@@ -58,12 +59,18 @@ impl TreeState {
             expanded: HashSet::new(),
             selected: None,
             scroll_offset: 0,
-            scroll_off: 3,
+            scroll_off: 5,
+            viewport_height: None,
             node_parents: HashMap::new(),
             node_depths: HashMap::new(),
             visible_order: vec![],
             cache_valid: false,
         }
+    }
+
+    /// Set the viewport height (called by renderer with actual area height)
+    pub fn set_viewport_height(&mut self, height: usize) {
+        self.viewport_height = Some(height);
     }
 
     /// Create a new TreeState with first node selected
@@ -135,7 +142,24 @@ impl TreeState {
         if let Some(current) = &self.selected {
             if let Some(pos) = self.visible_order.iter().position(|id| id == current) {
                 if pos + 1 < self.visible_order.len() {
-                    self.selected = Some(self.visible_order[pos + 1].clone());
+                    let new_pos = pos + 1;
+                    self.selected = Some(self.visible_order[new_pos].clone());
+
+                    // Scroll down incrementally to maintain scrolloff from bottom
+                    // Use actual viewport height if available, otherwise don't adjust scroll
+                    if let Some(viewport_height) = self.viewport_height {
+                        let item_count = self.visible_order.len();
+
+                        // Don't scroll if all items fit
+                        if item_count > viewport_height {
+                            let max_offset = item_count.saturating_sub(viewport_height);
+                            let scroll_trigger = self.scroll_offset + viewport_height - self.scroll_off;
+
+                            if new_pos >= scroll_trigger && self.scroll_offset < max_offset {
+                                self.scroll_offset += 1;
+                            }
+                        }
+                    }
                 }
             }
         } else if !self.visible_order.is_empty() {
@@ -150,6 +174,10 @@ impl TreeState {
             if let Some(pos) = self.visible_order.iter().position(|id| id == current) {
                 if pos > 0 {
                     self.selected = Some(self.visible_order[pos - 1].clone());
+                    // Adjust scroll if needed (scrolloff logic) - same as List widget
+                    if (pos as isize - self.scroll_offset as isize) <= self.scroll_off as isize {
+                        self.scroll_offset = self.scroll_offset.saturating_sub(1);
+                    }
                 }
             }
         } else if !self.visible_order.is_empty() {
@@ -209,6 +237,12 @@ impl TreeState {
             if let Some(sel_idx) = self.visible_order.iter().position(|id| id == selected) {
                 let item_count = self.visible_order.len();
 
+                // Don't scroll if all items fit on screen
+                if item_count <= visible_height {
+                    self.scroll_offset = 0;
+                    return;
+                }
+
                 // Calculate ideal scroll range to keep selection visible with scrolloff
                 let min_scroll = sel_idx.saturating_sub(visible_height.saturating_sub(self.scroll_off + 1));
                 let max_scroll = sel_idx.saturating_sub(self.scroll_off);
@@ -219,7 +253,7 @@ impl TreeState {
                     self.scroll_offset = max_scroll;
                 }
 
-                // Clamp to valid range
+                // Final clamp to valid range (prevents empty lines at bottom)
                 let max_offset = item_count.saturating_sub(visible_height);
                 self.scroll_offset = self.scroll_offset.min(max_offset);
             }

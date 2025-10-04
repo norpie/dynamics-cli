@@ -356,6 +356,28 @@ impl App for EntityComparisonApp {
                 tree_state.handle_event(event);
                 Command::None
             }
+            Msg::SourceViewportHeight(height) => {
+                // Renderer calls this with actual viewport height
+                let tree_state = match state.active_tab {
+                    ActiveTab::Fields => &mut state.source_fields_tree,
+                    ActiveTab::Relationships => &mut state.source_relationships_tree,
+                    ActiveTab::Views => &mut state.source_views_tree,
+                    ActiveTab::Forms => &mut state.source_forms_tree,
+                };
+                tree_state.set_viewport_height(height);
+                Command::None
+            }
+            Msg::TargetViewportHeight(height) => {
+                // Renderer calls this with actual viewport height
+                let tree_state = match state.active_tab {
+                    ActiveTab::Fields => &mut state.target_fields_tree,
+                    ActiveTab::Relationships => &mut state.target_relationships_tree,
+                    ActiveTab::Views => &mut state.target_views_tree,
+                    ActiveTab::Forms => &mut state.target_forms_tree,
+                };
+                tree_state.set_viewport_height(height);
+                Command::None
+            }
             Msg::Refresh => {
                 // Re-fetch metadata for both entities
                 state.source_metadata = Resource::Loading;
@@ -540,19 +562,21 @@ fn render_main_layout(state: &mut State, theme: &Theme) -> Element<Msg> {
         ActiveTab::Forms => (&mut state.source_forms_tree, &mut state.target_forms_tree),
     };
 
-    // Source panel with tree
+    // Source panel with tree - renderer will call on_render with actual area.height
     let source_panel = Element::panel(
         Element::tree("source_tree", &source_items, source_tree_state, theme)
             .on_event(Msg::SourceTreeEvent)
+            .on_render(Msg::SourceViewportHeight)
             .build()
     )
     .title(format!("Source: {}", source_entity_name))
     .build();
 
-    // Target panel with tree
+    // Target panel with tree - renderer will call on_render with actual area.height
     let target_panel = Element::panel(
         Element::tree("target_tree", &target_items, target_tree_state, theme)
             .on_event(Msg::TargetTreeEvent)
+            .on_render(Msg::TargetViewportHeight)
             .build()
     )
     .title(format!("Target: {}", target_entity_name))

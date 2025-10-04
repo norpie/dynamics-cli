@@ -19,6 +19,8 @@ pub enum Msg {
     Refresh,
     SourceTreeEvent(crate::tui::widgets::TreeEvent),
     TargetTreeEvent(crate::tui::widgets::TreeEvent),
+    SourceViewportHeight(usize),  // Called by renderer with actual area.height
+    TargetViewportHeight(usize),  // Called by renderer with actual area.height
 }
 
 #[derive(Clone)]

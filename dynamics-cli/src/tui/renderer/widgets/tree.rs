@@ -85,10 +85,15 @@ pub fn render_tree<Msg: Clone + Send + 'static>(
     on_event: &Option<fn(TreeEvent) -> Msg>,
     on_focus: &Option<Msg>,
     on_blur: &Option<Msg>,
+    on_render: &Option<fn(usize) -> Msg>,
     area: Rect,
     inside_panel: bool,
     render_fn: impl Fn(&mut Frame, &Theme, &mut InteractionRegistry<Msg>, &mut FocusRegistry<Msg>, &mut DropdownRegistry<Msg>, Option<&FocusId>, &Element<Msg>, Rect, bool),
 ) {
+    // Call on_render with actual viewport height from renderer
+    if let Some(render_fn) = on_render {
+        registry.add_render_message(render_fn(area.height as usize));
+    }
     // Register in focus registry - prefer on_event if available
     let on_key_handler = if let Some(event_fn) = on_event {
         tree_on_key_event(*event_fn)

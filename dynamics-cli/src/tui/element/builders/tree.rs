@@ -15,6 +15,7 @@ pub struct TreeBuilder<Msg> {
     pub(crate) on_event: Option<fn(TreeEvent) -> Msg>,
     pub(crate) on_focus: Option<Msg>,
     pub(crate) on_blur: Option<Msg>,
+    pub(crate) on_render: Option<fn(usize) -> Msg>,
 }
 
 impl<Msg> TreeBuilder<Msg> {
@@ -48,6 +49,11 @@ impl<Msg> TreeBuilder<Msg> {
         self
     }
 
+    pub fn on_render(mut self, msg: fn(usize) -> Msg) -> Self {
+        self.on_render = Some(msg);
+        self
+    }
+
     pub fn build(self) -> Element<Msg> {
         Element::Tree {
             id: self.id,
@@ -61,6 +67,7 @@ impl<Msg> TreeBuilder<Msg> {
             on_event: self.on_event,
             on_focus: self.on_focus,
             on_blur: self.on_blur,
+            on_render: self.on_render,
         }
     }
 }

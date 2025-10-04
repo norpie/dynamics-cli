@@ -175,6 +175,7 @@ pub enum Element<Msg> {
         on_event: Option<fn(crate::tui::widgets::TreeEvent) -> Msg>,  // Unified event pattern
         on_focus: Option<Msg>,
         on_blur: Option<Msg>,
+        on_render: Option<fn(usize) -> Msg>,  // Called with actual viewport height from renderer
     },
 
     /// Scrollable wrapper for any element
@@ -489,6 +490,7 @@ impl<Msg> Element<Msg> {
             on_event: None,
             on_focus: None,
             on_blur: None,
+            on_render: None,
         }
     }
 

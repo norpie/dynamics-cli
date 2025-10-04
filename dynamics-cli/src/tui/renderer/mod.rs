@@ -364,8 +364,9 @@ impl Renderer {
                 on_event,
                 on_focus,
                 on_blur,
+                on_render,
             } => {
-                render_tree(frame, theme, registry, focus_registry, dropdown_registry, focused_id, id, items, node_ids, selected, *scroll_offset, on_select, on_toggle, on_navigate, on_event, on_focus, on_blur, area, inside_panel, Self::render_element);
+                render_tree(frame, theme, registry, focus_registry, dropdown_registry, focused_id, id, items, node_ids, selected, *scroll_offset, on_select, on_toggle, on_navigate, on_event, on_focus, on_blur, on_render, area, inside_panel, Self::render_element);
             }
 
             Element::Scrollable {

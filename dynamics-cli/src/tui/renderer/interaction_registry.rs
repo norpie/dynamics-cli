@@ -8,6 +8,8 @@ pub struct InteractionRegistry<Msg> {
     hover_exit_handlers: Vec<(Rect, Msg)>,
     /// Current hover position (set by runtime before each render)
     current_hover_pos: Option<(u16, u16)>,
+    /// Messages to dispatch immediately after render (e.g., from on_render callbacks)
+    render_messages: Vec<Msg>,
 }
 
 impl<Msg: Clone> InteractionRegistry<Msg> {
@@ -17,6 +19,7 @@ impl<Msg: Clone> InteractionRegistry<Msg> {
             hover_handlers: Vec::new(),
             hover_exit_handlers: Vec::new(),
             current_hover_pos: None,
+            render_messages: Vec::new(),
         }
     }
 
@@ -81,6 +84,17 @@ impl<Msg: Clone> InteractionRegistry<Msg> {
         self.hover_handlers.clear();
         self.hover_exit_handlers.clear();
         self.current_hover_pos = None;
+        self.render_messages.clear();
+    }
+
+    /// Add a message to be dispatched after render completes
+    pub fn add_render_message(&mut self, msg: Msg) {
+        self.render_messages.push(msg);
+    }
+
+    /// Take all render messages (consumes the vec)
+    pub fn take_render_messages(&mut self) -> Vec<Msg> {
+        std::mem::take(&mut self.render_messages)
     }
 
     fn point_in_rect(&self, x: u16, y: u16, rect: Rect) -> bool {

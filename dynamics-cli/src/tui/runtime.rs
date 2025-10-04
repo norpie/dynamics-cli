@@ -908,6 +908,19 @@ impl<A: App> Runtime<A> {
         // Save validated/restored focus to the active layer for next frame
         log::debug!("Runtime: saving focus {:?} to active layer", self.focused_id);
         self.focus_registry.save_layer_focus(self.focused_id.clone());
+
+        // Process any render messages (e.g., from on_render callbacks)
+        let render_messages = self.registry.take_render_messages();
+        if !render_messages.is_empty() {
+            log::debug!("Runtime: processing {} render messages", render_messages.len());
+            for msg in render_messages {
+                let command = A::update(&mut self.state, msg);
+                if let Err(e) = self.execute_command(command) {
+                    log::error!("Runtime: error executing render message command: {}", e);
+                }
+            }
+        }
+
         log::debug!("=== Runtime::render_to_area END ===\n");
     }
 }
