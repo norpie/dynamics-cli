@@ -229,28 +229,30 @@ impl Renderer {
                 focus_registry.push_layer(topmost_layer_idx);
             }
 
+            // Use a shared dropdown registry for the second pass
+            let mut topmost_dropdown_registry = DropdownRegistry::new();
+
             match layer {
                 RenderLayer::App { element } => {
-                    let mut app_dropdown_registry = DropdownRegistry::new();
-                    Self::render_element(frame, theme, registry, focus_registry, &mut app_dropdown_registry, focused_id, element, app_area, false);
+                    Self::render_element(frame, theme, registry, focus_registry, &mut topmost_dropdown_registry, focused_id, element, app_area, false);
                 }
                 RenderLayer::AppModal { element, alignment } => {
                     let modal_area = calculate_layer_position(element, *alignment, app_area, Self::estimate_element_size);
-                    let mut modal_dropdown_registry = DropdownRegistry::new();
-                    Self::render_element(frame, theme, registry, focus_registry, &mut modal_dropdown_registry, focused_id, element, modal_area, false);
+                    Self::render_element(frame, theme, registry, focus_registry, &mut topmost_dropdown_registry, focused_id, element, modal_area, false);
                 }
                 RenderLayer::GlobalUI { element } => {
                     if let Some(ui_area) = global_ui_area {
-                        let mut global_ui_dropdown_registry = DropdownRegistry::new();
-                        Self::render_element(frame, theme, registry, focus_registry, &mut global_ui_dropdown_registry, focused_id, element, ui_area, false);
+                        Self::render_element(frame, theme, registry, focus_registry, &mut topmost_dropdown_registry, focused_id, element, ui_area, false);
                     }
                 }
                 RenderLayer::GlobalModal { element, alignment } => {
                     let modal_area = calculate_layer_position(element, *alignment, frame.size(), Self::estimate_element_size);
-                    let mut global_modal_dropdown_registry = DropdownRegistry::new();
-                    Self::render_element(frame, theme, registry, focus_registry, &mut global_modal_dropdown_registry, focused_id, element, modal_area, false);
+                    Self::render_element(frame, theme, registry, focus_registry, &mut topmost_dropdown_registry, focused_id, element, modal_area, false);
                 }
             }
+
+            // Render dropdowns AFTER re-rendering content (so they appear on top)
+            Self::render_dropdowns(frame, theme, registry, &topmost_dropdown_registry);
 
             // Keep the layer pushed so focusables remain in active layer
         }
@@ -611,8 +613,9 @@ impl Renderer {
             // First, clear the area to remove any bleed-through
             frame.render_widget(Clear, dropdown_area);
 
-            // Then render a solid background fill
-            let background = Paragraph::new("")
+            // Then render solid background fill (Paragraph with content fills reliably)
+            let fill_lines: Vec<String> = (0..dropdown_height).map(|_| " ".repeat(dropdown.select_area.width as usize)).collect();
+            let background = Paragraph::new(fill_lines.join("\n"))
                 .style(Style::default().bg(theme.base));
             frame.render_widget(background, dropdown_area);
 
@@ -647,8 +650,10 @@ impl Renderer {
                     ("  ", theme.text, theme.base)
                 };
 
-                // Render the option text with background
-                let option_display = format!("{}{}", prefix, option_text);
+                // Render the option text with background, padded to fill width
+                let text_content = format!("{}{}", prefix, option_text);
+                let padding_needed = line_area.width.saturating_sub(text_content.len() as u16);
+                let option_display = format!("{}{}", text_content, " ".repeat(padding_needed as usize));
                 let option_widget = Paragraph::new(option_display)
                     .style(Style::default().fg(fg_color).bg(bg_color));
                 frame.render_widget(option_widget, line_area);
