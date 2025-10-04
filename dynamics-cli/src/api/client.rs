@@ -502,8 +502,90 @@ impl DynamicsClient {
         }
     }
 
-    /// Fetch entity field definitions from EntityDefinitions endpoint
+    /// Fetch entity field definitions from $metadata endpoint (includes navigation properties like _value fields)
     pub async fn fetch_entity_fields(&self, entity_name: &str) -> anyhow::Result<Vec<super::metadata::FieldMetadata>> {
+        use roxmltree::Document;
+
+        let metadata_xml = self.fetch_metadata().await?;
+        let doc = Document::parse(&metadata_xml)
+            .map_err(|e| anyhow::anyhow!("Failed to parse metadata XML: {}", e))?;
+
+        // Find the EntityType element for our entity
+        let entity_type = doc
+            .descendants()
+            .find(|node| {
+                node.has_tag_name("EntityType")
+                    && node.attribute("Name")
+                        .is_some_and(|name| name.eq_ignore_ascii_case(entity_name))
+            })
+            .ok_or_else(|| anyhow::anyhow!("Entity '{}' not found in metadata", entity_name))?;
+
+        let mut fields = Vec::new();
+
+        // Parse Property elements (actual attributes)
+        for property in entity_type.children().filter(|n| n.has_tag_name("Property")) {
+            if let Some(field_name) = property.attribute("Name") {
+                let field_type_str = property.attribute("Type").unwrap_or("unknown");
+                let nullable = property.attribute("Nullable").map(|v| v == "true").unwrap_or(true);
+                let is_required = !nullable;
+
+                let field_type = Self::parse_field_type(field_type_str, None);
+
+                fields.push(super::metadata::FieldMetadata {
+                    logical_name: field_name.to_string(),
+                    display_name: None,
+                    field_type,
+                    is_required,
+                    is_primary_key: false, // TODO: detect from Key element
+                    max_length: None,
+                    related_entity: None,
+                });
+            }
+        }
+
+        // Parse NavigationProperty elements (relationships like _value fields)
+        for nav_prop in entity_type.children().filter(|n| n.has_tag_name("NavigationProperty")) {
+            if let Some(field_name) = nav_prop.attribute("Name") {
+                let field_type_str = nav_prop.attribute("Type").unwrap_or("unknown");
+
+                // Extract target entity from navigation property type
+                // Format: "Collection(Microsoft.Dynamics.CRM.account)" or "Microsoft.Dynamics.CRM.account"
+                let related_entity = field_type_str
+                    .strip_prefix("Collection(Microsoft.Dynamics.CRM.")
+                    .and_then(|s| s.strip_suffix(")"))
+                    .or_else(|| field_type_str.strip_prefix("Microsoft.Dynamics.CRM."))
+                    .map(|s| s.to_string());
+
+                // Navigation properties are lookups/relationships
+                fields.push(super::metadata::FieldMetadata {
+                    logical_name: field_name.to_string(),
+                    display_name: None,
+                    field_type: super::metadata::FieldType::Lookup,
+                    is_required: false,
+                    is_primary_key: false,
+                    max_length: None,
+                    related_entity,
+                });
+            }
+        }
+
+        Ok(fields)
+    }
+
+    fn parse_field_type(type_str: &str, targets: Option<&Vec<serde_json::Value>>) -> super::metadata::FieldType {
+        match type_str {
+            "Edm.String" => super::metadata::FieldType::String,
+            "Edm.Int32" => super::metadata::FieldType::Integer,
+            "Edm.Decimal" | "Edm.Double" => super::metadata::FieldType::Decimal,
+            "Edm.Boolean" => super::metadata::FieldType::Boolean,
+            "Edm.DateTime" | "Edm.DateTimeOffset" => super::metadata::FieldType::DateTime,
+            "Edm.Guid" => super::metadata::FieldType::UniqueIdentifier,
+            other => super::metadata::FieldType::Other(other.to_string()),
+        }
+    }
+
+    /// Fetch entity field definitions from EntityDefinitions endpoint (attributes only, no navigation properties)
+    pub async fn fetch_entity_fields_alt(&self, entity_name: &str) -> anyhow::Result<Vec<super::metadata::FieldMetadata>> {
         let url = format!(
             "{}/{}/EntityDefinitions(LogicalName='{}')/Attributes",
             self.base_url,
