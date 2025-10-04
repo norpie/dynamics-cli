@@ -2,8 +2,17 @@
 
 use crate::tui::{Element, Theme, widgets::TreeItem};
 use crate::api::{FieldMetadata, RelationshipMetadata, ViewMetadata, FormMetadata};
-use ratatui::{style::Style, text::{Line, Span}};
+use ratatui::{style::Style, text::{Line, Span}, prelude::Stylize};
 use super::models::{MatchInfo, MatchType};
+
+/// Truncate a value string to a maximum length for display
+fn truncate_value(value: &str, max_len: usize) -> String {
+    if value.len() <= max_len {
+        value.to_string()
+    } else {
+        format!("{}...", &value[..max_len.saturating_sub(3)])
+    }
+}
 
 /// Field node in the tree
 #[derive(Clone)]
@@ -35,37 +44,74 @@ impl TreeItem for FieldNode {
         is_selected: bool,
         _is_expanded: bool,
     ) -> Element<Self::Msg> {
-        // TODO: Implement rich field rendering with:
-        // - Match status badge
-        // - Example value display
-        // - Color coding by match status
-        // - Field type information
-
         let indent = "  ".repeat(depth);
-        let field_name = &self.metadata.logical_name;
+        let mut spans = Vec::new();
 
-        let mut text = format!("{}{}", indent, field_name);
+        // Indent
+        if depth > 0 {
+            spans.push(Span::raw(indent));
+        }
 
-        // Add match badge if present
+        // Field name - colored by match state
+        let field_name_color = if let Some(match_info) = &self.match_info {
+            match match_info.match_type {
+                MatchType::Exact => theme.green,      // Full match
+                MatchType::Prefix => theme.yellow,    // Prefix match
+                MatchType::Manual => theme.yellow,    // Manual mapping
+            }
+        } else {
+            theme.red  // No match
+        };
+
+        let field_name_style = if is_selected {
+            Style::default().fg(theme.lavender).bold()
+        } else {
+            Style::default().fg(field_name_color)
+        };
+
+        spans.push(Span::styled(
+            self.metadata.logical_name.clone(),
+            field_name_style,
+        ));
+
+        // Required indicator (red asterisk)
+        if self.metadata.is_required {
+            spans.push(Span::styled(" *", Style::default().fg(theme.red)));
+        }
+
+        // Mapping arrow and target field (if mapped)
         if let Some(match_info) = &self.match_info {
-            text.push_str(" ");
-            text.push_str(match_info.match_type.label());
+            spans.push(Span::styled(" → ", Style::default().fg(theme.overlay1)));
+            spans.push(Span::styled(
+                match_info.target_field.clone(),
+                Style::default().fg(theme.blue),
+            ));
         }
 
-        // Add example value if present
+        // Field type in angle brackets
+        spans.push(Span::styled(
+            format!(" <{:?}>", self.metadata.field_type),
+            Style::default().fg(theme.overlay1),
+        ));
+
+        // Mapping source badge (if mapped)
+        if let Some(match_info) = &self.match_info {
+            spans.push(Span::styled(
+                format!(" {}", match_info.match_type.label()),
+                Style::default().fg(theme.overlay1),
+            ));
+        }
+
+        // Example value (if present)
         if let Some(example) = &self.example_value {
-            text.push_str(" = ");
-            text.push_str(example);
+            spans.push(Span::styled(" | ", Style::default().fg(theme.overlay1)));
+            spans.push(Span::styled(
+                truncate_value(example, 60),
+                Style::default().fg(theme.sky),
+            ));
         }
 
-        Element::styled_text(Line::from(Span::styled(
-            text,
-            if is_selected {
-                Style::default().fg(theme.lavender)
-            } else {
-                Style::default().fg(theme.text)
-            },
-        ))).build()
+        Element::styled_text(Line::from(spans)).build()
     }
 }
 
