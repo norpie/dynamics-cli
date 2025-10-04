@@ -12,4 +12,16 @@ pub enum Msg {
     ConfirmBack,
     CancelBack,
     SwitchTab(usize), // 1-indexed tab number
+    ParallelDataLoaded(usize, Result<FetchedData, String>),
+    Refresh,
+}
+
+#[derive(Clone)]
+pub enum FetchedData {
+    SourceFields(Vec<crate::api::metadata::FieldMetadata>),
+    SourceForms(Vec<crate::api::metadata::FormMetadata>),
+    SourceViews(Vec<crate::api::metadata::ViewMetadata>),
+    TargetFields(Vec<crate::api::metadata::FieldMetadata>),
+    TargetForms(Vec<crate::api::metadata::FormMetadata>),
+    TargetViews(Vec<crate::api::metadata::ViewMetadata>),
 }

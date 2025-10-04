@@ -276,4 +276,37 @@ impl Config {
     pub async fn delete_entity_cache(&self, environment_name: &str) -> Result<()> {
         repository::entity_cache::delete(&self.pool, environment_name).await
     }
+
+    // Entity metadata cache methods
+    pub async fn get_entity_metadata_cache(
+        &self,
+        environment_name: &str,
+        entity_name: &str,
+        max_age_hours: i64,
+    ) -> Result<Option<crate::api::EntityMetadata>> {
+        if let Some((metadata, cached_at)) = repository::entity_metadata_cache::get(&self.pool, environment_name, entity_name).await? {
+            let age = chrono::Utc::now().signed_duration_since(cached_at);
+            if age.num_hours() < max_age_hours {
+                return Ok(Some(metadata));
+            }
+        }
+        Ok(None)
+    }
+
+    pub async fn set_entity_metadata_cache(
+        &self,
+        environment_name: &str,
+        entity_name: &str,
+        metadata: &crate::api::EntityMetadata,
+    ) -> Result<()> {
+        repository::entity_metadata_cache::set(&self.pool, environment_name, entity_name, metadata).await
+    }
+
+    pub async fn delete_entity_metadata_cache(&self, environment_name: &str, entity_name: &str) -> Result<()> {
+        repository::entity_metadata_cache::delete(&self.pool, environment_name, entity_name).await
+    }
+
+    pub async fn delete_all_entity_metadata_cache(&self, environment_name: &str) -> Result<()> {
+        repository::entity_metadata_cache::delete_all_for_environment(&self.pool, environment_name).await
+    }
 }
