@@ -683,8 +683,10 @@ impl<A: App> Runtime<A> {
             }
 
             Command::SetFocus(id) => {
+                log::debug!("Command::SetFocus({:?}) - current focus: {:?}", id, self.focused_id);
                 // Send blur to currently focused element (if any)
                 if let Some(old_id) = self.focused_id.take() {
+                    log::debug!("  Blurring old focus: {:?}", old_id);
                     if let Some(focusable) = self.focus_registry.find_in_active_layer(&old_id) {
                         if let Some(on_blur) = focusable.on_blur.clone() {
                             let cmd = A::update(&mut self.state, on_blur);
@@ -694,6 +696,7 @@ impl<A: App> Runtime<A> {
                 }
 
                 // Set new focus
+                log::debug!("  Setting new focus: {:?}", id);
                 self.focused_id = Some(id.clone());
 
                 // Send focus message to new element
@@ -729,8 +732,14 @@ impl<A: App> Runtime<A> {
 
     /// Render the app to a specific area
     pub fn render_to_area(&mut self, frame: &mut Frame, area: ratatui::layout::Rect) {
+        log::debug!("=== Runtime::render_to_area START - current focus: {:?} ===", self.focused_id);
+
+        // Sync runtime's focus to active layer BEFORE clear() to prevent stale state preservation
+        self.focus_registry.save_layer_focus(self.focused_id.clone());
+
         // Clear registries for this frame
         self.registry.clear();
+        log::debug!("Runtime: calling focus_registry.clear()");
         self.focus_registry.clear();
         self.dropdown_registry.clear();
 
@@ -740,6 +749,7 @@ impl<A: App> Runtime<A> {
         // Get the layered view from the app
         let layered_view = A::view(&mut self.state, &self.config.theme);
 
+        log::debug!("Runtime: rendering layers");
         // Render using the new layered API
         Renderer::render_layers(
             frame,
@@ -752,13 +762,36 @@ impl<A: App> Runtime<A> {
             None, // No global UI area in single-app runtime
         );
 
+        log::debug!("Runtime: validating focus");
         // Check if focused element still exists in the tree
         if let Some(focused_id) = &self.focused_id {
             if !self.focus_registry.contains(focused_id) {
-                // Element removed while focused, clear focus
+                log::debug!("Runtime: focused element {:?} no longer exists, clearing and attempting restore", focused_id);
+                // Clear stale focus first
                 self.focused_id = None;
+
+                // Try to restore from layer stack (only valid IDs)
+                self.focused_id = self.focus_registry.restore_focus_from_layers();
+                log::debug!("Runtime: focus after restoration: {:?}", self.focused_id);
+            } else {
+                log::debug!("Runtime: focused element {:?} still exists", focused_id);
+            }
+        } else {
+            // No focus currently - try to restore from layer stack if there are focusables
+            log::debug!("Runtime: no current focus, attempting restore from layers");
+            let restored = self.focus_registry.restore_focus_from_layers();
+            if restored.is_some() {
+                log::debug!("Runtime: restored focus from layers: {:?}", restored);
+                self.focused_id = restored;
+            } else {
+                log::debug!("Runtime: no focus to restore");
             }
         }
+
+        // Save validated/restored focus to the active layer for next frame
+        log::debug!("Runtime: saving focus {:?} to active layer", self.focused_id);
+        self.focus_registry.save_layer_focus(self.focused_id.clone());
+        log::debug!("=== Runtime::render_to_area END ===\n");
     }
 }
 

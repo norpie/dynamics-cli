@@ -84,8 +84,11 @@ pub fn render_stack<Msg: Clone + Send + 'static>(
     render_fn: impl Fn(&mut Frame, &Theme, &mut InteractionRegistry<Msg>, &mut FocusRegistry<Msg>, &mut DropdownRegistry<Msg>, Option<&FocusId>, &Element<Msg>, Rect, bool),
     estimate_fn: impl Fn(&Element<Msg>, Rect) -> (u16, u16),
 ) {
+    log::debug!("Stack::render_stack - rendering {} layers", layers.len());
+
     // Render all layers visually
     for (layer_idx, layer) in layers.iter().enumerate() {
+        log::debug!("  Stack: rendering layer {}", layer_idx);
         // Render dim overlay if requested
         if layer.dim_below {
             render_dim_overlay(frame, theme, area);
@@ -104,11 +107,14 @@ pub fn render_stack<Msg: Clone + Send + 'static>(
         focus_registry.pop_layer();
     }
 
+    log::debug!("Stack: all layers rendered visually, now clearing registries to re-render topmost only");
     // Clear all interactions and focus, then re-render topmost layer to register only its interactions/focus
     registry.clear();
+    log::debug!("Stack: calling focus_registry.clear() to reset for topmost layer");
     focus_registry.clear();
     if let Some(last_layer) = layers.last() {
         let layer_idx = layers.len() - 1;
+        log::debug!("Stack: re-rendering topmost layer {} for interaction/focus registration", layer_idx);
         let layer_area = calculate_layer_position(&last_layer.element, last_layer.alignment, area, &estimate_fn);
 
         // Re-push the topmost layer context
@@ -118,10 +124,10 @@ pub fn render_stack<Msg: Clone + Send + 'static>(
 
         // Debug: Log focus registry state
         if let Some(layer) = focus_registry.active_layer() {
-            log::debug!("Focus registry layer {} has {} focusables",
+            log::debug!("Stack: focus registry after re-render - layer {} has {} focusables",
                        layer.layer_index, layer.focusables.len());
             for focusable in &layer.focusables {
-                log::debug!("  Focusable: {:?} at {:?}", focusable.id, focusable.rect);
+                log::debug!("    Focusable: {:?} at {:?}", focusable.id, focusable.rect);
             }
         }
     }

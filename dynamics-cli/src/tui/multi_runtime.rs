@@ -523,10 +523,30 @@ impl MultiAppRuntime {
         use crate::tui::renderer::DropdownRegistry;
         let mut dropdown_registry: DropdownRegistry<GlobalMsg> = DropdownRegistry::new();
 
+        // Sync runtime's focus to active layer BEFORE clearing registries
+        self.global_focus_registry.save_layer_focus(self.global_focused_id.clone());
+
         // Clear and render to global registries
         self.global_interaction_registry = crate::tui::InteractionRegistry::new();
         self.global_focus_registry = crate::tui::renderer::FocusRegistry::new();
         Renderer::render(frame, theme, &mut self.global_interaction_registry, &mut self.global_focus_registry, &mut dropdown_registry, self.global_focused_id.as_ref(), &modal, modal_area);
+
+        // Check if focused element still exists in the tree
+        if let Some(focused_id) = &self.global_focused_id {
+            if !self.global_focus_registry.contains(focused_id) {
+                // Clear stale focus first
+                self.global_focused_id = None;
+
+                // Try to restore from layer stack (only valid IDs)
+                self.global_focused_id = self.global_focus_registry.restore_focus_from_layers();
+            }
+        } else {
+            // No focus currently - try to restore from layer stack if there are focusables
+            self.global_focused_id = self.global_focus_registry.restore_focus_from_layers();
+        }
+
+        // Save validated/restored focus to the active layer for next frame
+        self.global_focus_registry.save_layer_focus(self.global_focused_id.clone());
     }
 
     /// Render quit confirmation modal
@@ -609,10 +629,30 @@ impl MultiAppRuntime {
         use crate::tui::renderer::DropdownRegistry;
         let mut dropdown_registry: DropdownRegistry<GlobalMsg> = DropdownRegistry::new();
 
+        // Sync runtime's focus to active layer BEFORE clearing registries
+        self.global_focus_registry.save_layer_focus(self.global_focused_id.clone());
+
         // Clear and render to global registries
         self.global_interaction_registry = crate::tui::InteractionRegistry::new();
         self.global_focus_registry = crate::tui::renderer::FocusRegistry::new();
         Renderer::render(frame, theme, &mut self.global_interaction_registry, &mut self.global_focus_registry, &mut dropdown_registry, self.global_focused_id.as_ref(), &quit_modal, modal_area);
+
+        // Check if focused element still exists in the tree
+        if let Some(focused_id) = &self.global_focused_id {
+            if !self.global_focus_registry.contains(focused_id) {
+                // Clear stale focus first
+                self.global_focused_id = None;
+
+                // Try to restore from layer stack (only valid IDs)
+                self.global_focused_id = self.global_focus_registry.restore_focus_from_layers();
+            }
+        } else {
+            // No focus currently - try to restore from layer stack if there are focusables
+            self.global_focused_id = self.global_focus_registry.restore_focus_from_layers();
+        }
+
+        // Save validated/restored focus to the active layer for next frame
+        self.global_focus_registry.save_layer_focus(self.global_focused_id.clone());
     }
 
     pub async fn poll_async(&mut self) -> Result<()> {

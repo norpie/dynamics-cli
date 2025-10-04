@@ -120,17 +120,23 @@ impl Renderer {
         // Check if there's a global modal (hides everything)
         let has_global_modal = layers.iter().any(|l| matches!(l, RenderLayer::GlobalModal { .. }));
 
-        // Render layers in order
+        // First pass: Render all layers visually with proper focus layer tracking
+        let mut layer_idx = 0;
         for layer in layers {
+            log::debug!("Renderer::render_layers - rendering layer {}", layer_idx);
             match layer {
                 RenderLayer::App { element } => {
-                    // Always render app content first
+                    // Layer 0: App content
                     let mut app_dropdown_registry = DropdownRegistry::new();
                     Self::render_element(frame, theme, registry, focus_registry, &mut app_dropdown_registry, focused_id, element, app_area, false);
                     Self::render_dropdowns(frame, theme, registry, &app_dropdown_registry);
                 }
 
                 RenderLayer::AppModal { element, alignment } => {
+                    // Layer 1+: Modal content (push new focus layer)
+                    layer_idx += 1;
+                    focus_registry.push_layer(layer_idx);
+
                     // Dim app area
                     render_dim_overlay(frame, theme, app_area);
 
@@ -144,6 +150,9 @@ impl Renderer {
                     let mut modal_dropdown_registry = DropdownRegistry::new();
                     Self::render_element(frame, theme, registry, focus_registry, &mut modal_dropdown_registry, focused_id, element, modal_area, false);
                     Self::render_dropdowns(frame, theme, registry, &modal_dropdown_registry);
+
+                    // Pop back to parent layer
+                    focus_registry.pop_layer();
                 }
 
                 RenderLayer::GlobalUI { element } => {
@@ -158,6 +167,10 @@ impl Renderer {
                 }
 
                 RenderLayer::GlobalModal { element, alignment } => {
+                    // Layer 1+: Global modal (push new focus layer)
+                    layer_idx += 1;
+                    focus_registry.push_layer(layer_idx);
+
                     // Dim entire screen
                     render_dim_overlay(frame, theme, frame.size());
 
@@ -171,8 +184,75 @@ impl Renderer {
                     let mut global_modal_dropdown_registry = DropdownRegistry::new();
                     Self::render_element(frame, theme, registry, focus_registry, &mut global_modal_dropdown_registry, focused_id, element, modal_area, false);
                     Self::render_dropdowns(frame, theme, registry, &global_modal_dropdown_registry);
+
+                    // Pop back to parent layer
+                    focus_registry.pop_layer();
                 }
             }
+        }
+
+        // Second pass: Clear registries and re-render only the topmost interactive layer
+        // This ensures only the topmost layer can receive interactions
+        log::debug!("Renderer::render_layers - clearing registries for topmost layer registration");
+        registry.clear();
+        focus_registry.clear();
+
+        // Find the topmost interactive layer and re-render it
+        layer_idx = 0;
+        let mut topmost_layer_idx = 0;
+        let mut topmost_layer: Option<&RenderLayer<Msg>> = None;
+
+        for layer in layers {
+            match layer {
+                RenderLayer::App { .. } => {
+                    topmost_layer = Some(layer);
+                    topmost_layer_idx = 0;
+                }
+                RenderLayer::AppModal { .. } | RenderLayer::GlobalModal { .. } => {
+                    layer_idx += 1;
+                    topmost_layer = Some(layer);
+                    topmost_layer_idx = layer_idx;
+                }
+                RenderLayer::GlobalUI { .. } => {
+                    if !has_global_modal {
+                        topmost_layer = Some(layer);
+                        // GlobalUI doesn't get its own layer index
+                    }
+                }
+            }
+        }
+
+        // Re-render the topmost layer for interaction/focus registration
+        if let Some(layer) = topmost_layer {
+            log::debug!("Renderer::render_layers - re-rendering topmost layer {} for registration", topmost_layer_idx);
+            if topmost_layer_idx > 0 {
+                focus_registry.push_layer(topmost_layer_idx);
+            }
+
+            match layer {
+                RenderLayer::App { element } => {
+                    let mut app_dropdown_registry = DropdownRegistry::new();
+                    Self::render_element(frame, theme, registry, focus_registry, &mut app_dropdown_registry, focused_id, element, app_area, false);
+                }
+                RenderLayer::AppModal { element, alignment } => {
+                    let modal_area = calculate_layer_position(element, *alignment, app_area, Self::estimate_element_size);
+                    let mut modal_dropdown_registry = DropdownRegistry::new();
+                    Self::render_element(frame, theme, registry, focus_registry, &mut modal_dropdown_registry, focused_id, element, modal_area, false);
+                }
+                RenderLayer::GlobalUI { element } => {
+                    if let Some(ui_area) = global_ui_area {
+                        let mut global_ui_dropdown_registry = DropdownRegistry::new();
+                        Self::render_element(frame, theme, registry, focus_registry, &mut global_ui_dropdown_registry, focused_id, element, ui_area, false);
+                    }
+                }
+                RenderLayer::GlobalModal { element, alignment } => {
+                    let modal_area = calculate_layer_position(element, *alignment, frame.size(), Self::estimate_element_size);
+                    let mut global_modal_dropdown_registry = DropdownRegistry::new();
+                    Self::render_element(frame, theme, registry, focus_registry, &mut global_modal_dropdown_registry, focused_id, element, modal_area, false);
+                }
+            }
+
+            // Keep the layer pushed so focusables remain in active layer
         }
     }
 
