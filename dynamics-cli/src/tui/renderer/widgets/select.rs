@@ -14,7 +14,7 @@ pub fn select_on_key<Msg: Clone + Send + 'static>(
 ) -> Box<dyn Fn(KeyCode) -> DispatchTarget<Msg> + Send> {
     Box::new(move |key| {
         if !is_open {
-            // Closed: Enter/Space toggles dropdown
+            // Closed: Enter/Space toggles dropdown, Esc passes through for unfocus
             match key {
                 KeyCode::Enter | KeyCode::Char(' ') => {
                     if let Some(msg) = on_toggle.clone() {
@@ -22,6 +22,10 @@ pub fn select_on_key<Msg: Clone + Send + 'static>(
                     } else {
                         DispatchTarget::WidgetEvent(Box::new(SelectEvent::Navigate(key)))
                     }
+                }
+                KeyCode::Esc => {
+                    // Let runtime handle unfocus/modal close
+                    DispatchTarget::PassThrough
                 }
                 _ => {
                     // Unhandled key - pass through to global subscriptions
@@ -54,11 +58,14 @@ pub fn select_on_key_event<Msg: Clone + Send + 'static>(
 ) -> Box<dyn Fn(KeyCode) -> DispatchTarget<Msg> + Send> {
     Box::new(move |key| {
         if !is_open {
-            // Closed: Enter/Space toggles dropdown (but we don't have toggle in SelectEvent)
-            // We'll handle this via Navigate event
+            // Closed: Enter/Space toggles dropdown, Esc passes through for unfocus
             match key {
                 KeyCode::Enter | KeyCode::Char(' ') => {
                     DispatchTarget::AppMsg(on_event(SelectEvent::Navigate(key)))
+                }
+                KeyCode::Esc => {
+                    // Let runtime handle unfocus/modal close
+                    DispatchTarget::PassThrough
                 }
                 _ => {
                     // Unhandled key - pass through to global subscriptions

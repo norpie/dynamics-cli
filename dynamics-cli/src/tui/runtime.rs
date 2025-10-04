@@ -777,15 +777,12 @@ impl<A: App> Runtime<A> {
                 log::debug!("Runtime: focused element {:?} still exists", focused_id);
             }
         } else {
-            // No focus currently - try to restore from layer stack if there are focusables
-            log::debug!("Runtime: no current focus, attempting restore from layers");
-            let restored = self.focus_registry.restore_focus_from_layers();
-            if restored.is_some() {
-                log::debug!("Runtime: restored focus from layers: {:?}", restored);
-                self.focused_id = restored;
-            } else {
-                log::debug!("Runtime: no focus to restore");
-            }
+            // No focus currently - DON'T auto-restore
+            // User may have explicitly unfocused via Escape, and we want the second Escape
+            // to reach global subscriptions (e.g., to close modals)
+            // Focus is only restored when the focused element disappears (handled above),
+            // or when apps explicitly set focus via Command::SetFocus
+            log::debug!("Runtime: no current focus, leaving unfocused (no auto-restore)");
         }
 
         // Save validated/restored focus to the active layer for next frame

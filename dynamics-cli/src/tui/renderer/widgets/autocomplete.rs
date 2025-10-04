@@ -33,11 +33,16 @@ pub fn autocomplete_on_key<Msg: Clone + Send + 'static>(
                 }
             }
         } else {
-            // Dropdown closed: all keys go to input
-            if let Some(f) = on_input {
-                DispatchTarget::AppMsg(f(key))
-            } else {
-                DispatchTarget::WidgetEvent(Box::new(AutocompleteEvent::Input(key)))
+            // Dropdown closed: Escape passes through for unfocus, others go to input
+            match key {
+                KeyCode::Esc => DispatchTarget::PassThrough,
+                _ => {
+                    if let Some(f) = on_input {
+                        DispatchTarget::AppMsg(f(key))
+                    } else {
+                        DispatchTarget::WidgetEvent(Box::new(AutocompleteEvent::Input(key)))
+                    }
+                }
             }
         }
     })
@@ -61,8 +66,11 @@ pub fn autocomplete_on_key_event<Msg: Clone + Send + 'static>(
                 }
             }
         } else {
-            // Dropdown closed: all keys go to input
-            DispatchTarget::AppMsg(on_event(AutocompleteEvent::Input(key)))
+            // Dropdown closed: Escape passes through for unfocus, others go to input
+            match key {
+                KeyCode::Esc => DispatchTarget::PassThrough,
+                _ => DispatchTarget::AppMsg(on_event(AutocompleteEvent::Input(key))),
+            }
         }
     })
 }
