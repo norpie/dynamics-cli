@@ -3,18 +3,45 @@ use crate::tui::{Element, Theme};
 use crate::tui::element::FocusId;
 use crate::tui::renderer::{InteractionRegistry, FocusRegistry, DropdownRegistry};
 
-/// Check if an element or its descendants contain a focusable with the given ID
-pub fn element_contains_focus<Msg>(element: &Element<Msg>, focused_id: &FocusId) -> bool {
+/// Check if an element or its descendants contain a focused widget (excluding buttons) with the given ID
+/// This is used for panel focus styling - all focusable widgets except buttons trigger panel focus borders
+pub fn element_contains_focused_non_button<Msg>(element: &Element<Msg>, focused_id: &FocusId) -> bool {
     match element {
-        Element::Button { id, .. } | Element::List { id, .. } | Element::TextInput { id, .. } | Element::Tree { id, .. } | Element::Scrollable { id, .. } | Element::Select { id, .. } | Element::Autocomplete { id, .. } => id == focused_id,
+        // Check all focusable widgets EXCEPT buttons
+        Element::TextInput { id, .. } | Element::Select { id, .. } | Element::Autocomplete { id, .. }
+        | Element::List { id, .. } | Element::Tree { id, .. } | Element::Scrollable { id, .. } => id == focused_id,
+        // Recurse through containers
         Element::Column { items, .. } | Element::Row { items, .. } => {
-            items.iter().any(|(_, child)| element_contains_focus(child, focused_id))
+            items.iter().any(|(_, child)| element_contains_focused_non_button(child, focused_id))
         }
         Element::Container { child, .. } | Element::Panel { child, .. } => {
-            element_contains_focus(child, focused_id)
+            element_contains_focused_non_button(child, focused_id)
         }
         Element::Stack { layers } => {
-            layers.iter().any(|layer| element_contains_focus(&layer.element, focused_id))
+            layers.iter().any(|layer| element_contains_focused_non_button(&layer.element, focused_id))
+        }
+        // Don't trigger panel focus for buttons
+        Element::Button { .. } => false,
+        _ => false,
+    }
+}
+
+/// Check if an element tree contains a Panel that itself contains a focused widget (excluding buttons)
+/// This is used to determine if a panel should delegate focus styling to a nested panel
+pub fn element_contains_focused_non_button_panel<Msg>(element: &Element<Msg>, focused_id: &FocusId) -> bool {
+    match element {
+        Element::Panel { child, .. } => {
+            // This is a panel - check if it contains a focused non-button widget
+            element_contains_focused_non_button(child, focused_id)
+        }
+        Element::Column { items, .. } | Element::Row { items, .. } => {
+            items.iter().any(|(_, child)| element_contains_focused_non_button_panel(child, focused_id))
+        }
+        Element::Container { child, .. } => {
+            element_contains_focused_non_button_panel(child, focused_id)
+        }
+        Element::Stack { layers } => {
+            layers.iter().any(|layer| element_contains_focused_non_button_panel(&layer.element, focused_id))
         }
         _ => false,
     }
@@ -34,13 +61,23 @@ pub fn render_panel<Msg: Clone + Send + 'static>(
     inside_panel: bool,
     render_fn: impl Fn(&mut Frame, &Theme, &mut InteractionRegistry<Msg>, &mut FocusRegistry<Msg>, &mut DropdownRegistry<Msg>, Option<&FocusId>, &Element<Msg>, Rect, bool),
 ) {
-    // Check if the child (or any descendant) contains the focused element
-    let child_has_focus = focused_id
-        .map(|fid| element_contains_focus(child, fid))
+    // Check if the child (or any descendant) contains a focused widget (excluding buttons)
+    // All focusable widgets except buttons trigger panel focus styling
+    let child_has_focused_widget = focused_id
+        .map(|fid| element_contains_focused_non_button(child, fid))
         .unwrap_or(false);
 
-    // Use focus color for panel border if child is focused
-    let border_color = if child_has_focus {
+    // Check if any descendant Panel contains a focused widget (excluding buttons)
+    // If so, delegate focus styling to that inner panel
+    let has_nested_focused_panel = focused_id
+        .map(|fid| element_contains_focused_non_button_panel(child, fid))
+        .unwrap_or(false);
+
+    // Use focus color for panel border ONLY if:
+    // 1. Child contains a focused widget (TextInput, Select, Autocomplete, List, Tree, Scrollable), AND
+    // 2. No descendant Panel contains a focused widget (this is the innermost panel)
+    // Note: Buttons do NOT trigger panel focus styling
+    let border_color = if child_has_focused_widget && !has_nested_focused_panel {
         theme.lavender
     } else {
         theme.overlay0

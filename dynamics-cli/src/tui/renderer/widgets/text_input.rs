@@ -21,6 +21,7 @@ pub fn text_input_on_key<Msg: Clone + Send + 'static>(
                 DispatchTarget::WidgetEvent(Box::new(TextInputEvent::Submit))
             }
         }
+        KeyCode::Esc => DispatchTarget::PassThrough,  // Let runtime handle unfocus/modal close
         _ => {
             // All other keys go to on_change for app to handle via TextInputState
             if let Some(f) = on_change {
@@ -39,6 +40,7 @@ pub fn text_input_on_key_event<Msg: Clone + Send + 'static>(
 ) -> Box<dyn Fn(KeyCode) -> DispatchTarget<Msg> + Send> {
     Box::new(move |key| match key {
         KeyCode::Enter => DispatchTarget::AppMsg(on_event(TextInputEvent::Submit)),
+        KeyCode::Esc => DispatchTarget::PassThrough,  // Let runtime handle unfocus/modal close
         _ => DispatchTarget::AppMsg(on_event(TextInputEvent::Changed(key))),
     })
 }

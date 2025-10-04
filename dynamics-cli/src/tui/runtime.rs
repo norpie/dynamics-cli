@@ -398,10 +398,10 @@ impl<A: App> Runtime<A> {
                     }
                     DispatchTarget::PassThrough => {
                         // Widget didn't handle this key
-                        // Special handling for Escape: unfocus element
+                        // Special case for Esc: progressive unfocus
                         if key_event.code == KeyCode::Esc {
+                            // Always unfocus when Esc is pressed and widget returns PassThrough
                             let focused_id = self.focused_id.take().unwrap();
-                            // Send blur message to focused element
                             if let Some(focusable) = self.focus_registry.find_in_active_layer(&focused_id) {
                                 if let Some(on_blur) = focusable.on_blur.clone() {
                                     let command = A::update(&mut self.state, on_blur);
@@ -411,12 +411,10 @@ impl<A: App> Runtime<A> {
                             // Focus cleared, Escape consumed
                             return Ok(true);
                         }
-                        // Not Escape, fall through to global subscriptions
+                        // Fall through to global subscriptions for other keys
                     }
                 }
             }
-        } else if key_event.code == KeyCode::Esc {
-            // Nothing focused, Escape does nothing (fall through to app subscriptions)
         }
 
         // No focused element handled it (or it returned PassThrough), check global subscriptions
