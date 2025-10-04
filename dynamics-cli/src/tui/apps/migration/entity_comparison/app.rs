@@ -19,7 +19,7 @@ use ratatui::{
 };
 use std::collections::HashMap;
 use crate::{col, row, use_constraints};
-use super::{Msg, Side, ExamplesState, ActiveTab};
+use super::{Msg, Side, ExamplesState, ActiveTab, FetchType, fetch_with_cache, extract_relationships};
 
 pub struct EntityComparisonApp;
 
@@ -378,47 +378,11 @@ impl App for EntityComparisonApp {
     }
 
     fn view(state: &mut Self::State, theme: &Theme) -> LayeredView<Self::Msg> {
-        use_constraints!();
-
-        // Source panel with tree
-        let source_items: Vec<super::tree_items::FieldNode> = vec![];
-        let source_panel = Element::panel(
-            Element::tree("source_tree", &source_items, &mut state.source_tree_state, theme)
-                .build()
-        )
-        .title(format!("Source: {}", state.source_entity))
-        .build();
-
-        // Target panel with tree
-        let target_items: Vec<super::tree_items::FieldNode> = vec![];
-        let target_panel = Element::panel(
-            Element::tree("target_tree", &target_items, &mut state.target_tree_state, theme)
-                .build()
-        )
-        .title(format!("Target: {}", state.target_entity))
-        .build();
-
-        // Side-by-side layout
-        let main_ui = row![
-            source_panel => Fill(1),
-            target_panel => Fill(1),
-        ];
-
+        let main_ui = render_main_layout(state, theme);
         let mut view = LayeredView::new(main_ui);
 
-        // Add confirmation modal if showing
         if state.show_back_confirmation {
-            let modal = ConfirmationModal::new("Go Back?")
-                .message("Are you sure you want to go back to the comparison list?")
-                .confirm_text("Yes")
-                .cancel_text("No")
-                .on_confirm(Msg::ConfirmBack)
-                .on_cancel(Msg::CancelBack)
-                .width(60)
-                .height(10)
-                .build(theme);
-
-            view = view.with_app_modal(modal, LayerAlignment::Center);
+            view = view.with_app_modal(render_back_confirmation_modal(theme), LayerAlignment::Center);
         }
 
         view
@@ -489,86 +453,44 @@ impl App for EntityComparisonApp {
     }
 }
 
-/// Type of data to fetch
-enum FetchType {
-    SourceFields,
-    SourceForms,
-    SourceViews,
-    TargetFields,
-    TargetForms,
-    TargetViews,
+/// Render the main side-by-side layout with source and target trees
+fn render_main_layout(state: &mut State, theme: &Theme) -> Element<Msg> {
+    use_constraints!();
+
+    // Source panel with tree
+    let source_items: Vec<super::tree_items::FieldNode> = vec![];
+    let source_panel = Element::panel(
+        Element::tree("source_tree", &source_items, &mut state.source_tree_state, theme)
+            .build()
+    )
+    .title(format!("Source: {}", state.source_entity))
+    .build();
+
+    // Target panel with tree
+    let target_items: Vec<super::tree_items::FieldNode> = vec![];
+    let target_panel = Element::panel(
+        Element::tree("target_tree", &target_items, &mut state.target_tree_state, theme)
+            .build()
+    )
+    .title(format!("Target: {}", state.target_entity))
+    .build();
+
+    // Side-by-side layout
+    row![
+        source_panel => Fill(1),
+        target_panel => Fill(1),
+    ]
 }
 
-/// Fetch specific metadata type with optional 12-hour caching
-async fn fetch_with_cache(
-    environment_name: &str,
-    entity_name: &str,
-    fetch_type: FetchType,
-    use_cache: bool,
-) -> Result<super::FetchedData, String> {
-    let config = crate::global_config();
-    let manager = crate::client_manager();
-
-    // Check cache first (12 hours) - use full metadata cache, only if use_cache is true
-    if use_cache {
-        let cached_metadata = config.get_entity_metadata_cache(environment_name, entity_name, 12).await
-            .ok()
-            .flatten();
-
-        // If we have cached metadata, extract the requested type
-        if let Some(cached) = cached_metadata {
-            return match fetch_type {
-                FetchType::SourceFields => Ok(super::FetchedData::SourceFields(cached.fields)),
-                FetchType::SourceForms => Ok(super::FetchedData::SourceForms(cached.forms)),
-                FetchType::SourceViews => Ok(super::FetchedData::SourceViews(cached.views)),
-                FetchType::TargetFields => Ok(super::FetchedData::TargetFields(cached.fields)),
-                FetchType::TargetForms => Ok(super::FetchedData::TargetForms(cached.forms)),
-                FetchType::TargetViews => Ok(super::FetchedData::TargetViews(cached.views)),
-            };
-        }
-    }
-
-    // Fetch from API
-    let client = manager.get_client(environment_name).await
-        .map_err(|e| e.to_string())?;
-
-    match fetch_type {
-        FetchType::SourceFields => {
-            let fields = client.fetch_entity_fields(entity_name).await.map_err(|e| e.to_string())?;
-            Ok(super::FetchedData::SourceFields(fields))
-        }
-        FetchType::SourceForms => {
-            let forms = client.fetch_entity_forms(entity_name).await.map_err(|e| e.to_string())?;
-            Ok(super::FetchedData::SourceForms(forms))
-        }
-        FetchType::SourceViews => {
-            let views = client.fetch_entity_views(entity_name).await.map_err(|e| e.to_string())?;
-            Ok(super::FetchedData::SourceViews(views))
-        }
-        FetchType::TargetFields => {
-            let fields = client.fetch_entity_fields(entity_name).await.map_err(|e| e.to_string())?;
-            Ok(super::FetchedData::TargetFields(fields))
-        }
-        FetchType::TargetForms => {
-            let forms = client.fetch_entity_forms(entity_name).await.map_err(|e| e.to_string())?;
-            Ok(super::FetchedData::TargetForms(forms))
-        }
-        FetchType::TargetViews => {
-            let views = client.fetch_entity_views(entity_name).await.map_err(|e| e.to_string())?;
-            Ok(super::FetchedData::TargetViews(views))
-        }
-    }
-}
-
-/// Extract relationships from field list
-fn extract_relationships(fields: &[crate::api::metadata::FieldMetadata]) -> Vec<crate::api::metadata::RelationshipMetadata> {
-    fields.iter()
-        .filter(|f| matches!(f.field_type, crate::api::metadata::FieldType::Lookup))
-        .map(|f| crate::api::metadata::RelationshipMetadata {
-            name: f.logical_name.clone(),
-            relationship_type: crate::api::metadata::RelationshipType::ManyToOne,
-            related_entity: f.related_entity.clone().unwrap_or_default(),
-            related_attribute: f.logical_name.clone(),
-        })
-        .collect()
+/// Render the back confirmation modal
+fn render_back_confirmation_modal(theme: &Theme) -> Element<Msg> {
+    ConfirmationModal::new("Go Back?")
+        .message("Are you sure you want to go back to the comparison list?")
+        .confirm_text("Yes")
+        .cancel_text("No")
+        .on_confirm(Msg::ConfirmBack)
+        .on_cancel(Msg::CancelBack)
+        .width(60)
+        .height(10)
+        .build(theme)
 }

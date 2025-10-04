@@ -1,9 +1,11 @@
 mod app;
 mod models;
 mod tree_items;
+mod fetch;
 
 pub use app::{EntityComparisonApp, EntityComparisonParams, State as EntityComparisonState};
 pub use models::*;
+pub use fetch::{FetchType, fetch_with_cache, extract_relationships};
 
 // Internal message type for the app
 #[derive(Clone)]
