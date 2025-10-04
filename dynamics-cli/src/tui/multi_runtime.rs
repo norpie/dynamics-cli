@@ -591,12 +591,12 @@ impl MultiAppRuntime {
         )
         .title("Confirmation")
         .width(50)
-        .height(10)
+        .height(11)
         .build();
 
         // Calculate modal position
         let modal_width = 50;
-        let modal_height = 10;
+        let modal_height = 11;
         let modal_area = ratatui::layout::Rect {
             x: area.x + (area.width.saturating_sub(modal_width)) / 2,
             y: area.y + (area.height.saturating_sub(modal_height)) / 2,
