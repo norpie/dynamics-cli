@@ -271,6 +271,8 @@ impl App for MigrationComparisonSelectApp {
                         state.list_state = ListState::new();
                         if !state.comparisons.is_empty() {
                             state.list_state.select(Some(0));
+                            // Focus the list after loading comparisons
+                            return Command::set_focus(FocusId::new("comparison-list"));
                         }
                     }
                     Err(e) => {

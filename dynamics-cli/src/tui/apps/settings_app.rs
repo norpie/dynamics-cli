@@ -191,7 +191,7 @@ impl App for SettingsApp {
                 },
                 Msg::ValuesLoaded,
             ),
-            Command::set_focus(FocusId::new("option-list")),
+            Command::set_focus(FocusId::new("namespace-list")),
         ]);
 
         (state, cmd)
@@ -207,6 +207,9 @@ impl App for SettingsApp {
                     // Load options for this namespace
                     let registry = crate::options_registry();
                     state.current_options = registry.list_namespace(&state.namespaces[idx]);
+
+                    // Focus the options list after selecting a category
+                    return Command::set_focus(FocusId::new("option-list"));
                 }
                 Command::None
             }
