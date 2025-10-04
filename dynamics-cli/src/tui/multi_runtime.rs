@@ -440,10 +440,10 @@ impl MultiAppRuntime {
     fn render_header(&self, frame: &mut Frame, area: ratatui::layout::Rect, title: &str, status: Option<Line<'static>>, theme: &Theme) {
         // Build title line with optional status
         let title_line = if let Some(status_line) = status {
-            // Combine title and status
+            // Combine title and status with separator
             let mut spans = vec![
                 Span::styled(String::from(title), Style::default().fg(theme.blue).bold()),
-                Span::raw(" "),
+                Span::styled(" │ ", Style::default().fg(theme.overlay1)),
             ];
             spans.extend(status_line.spans);
             Line::from(spans)
