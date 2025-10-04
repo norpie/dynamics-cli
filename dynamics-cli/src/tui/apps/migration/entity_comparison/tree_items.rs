@@ -5,6 +5,61 @@ use crate::api::{FieldMetadata, RelationshipMetadata, ViewMetadata, FormMetadata
 use ratatui::{style::Style, text::{Line, Span}, prelude::Stylize};
 use super::models::{MatchInfo, MatchType};
 
+/// Unified tree item that can represent any metadata type
+#[derive(Clone)]
+pub enum ComparisonTreeItem {
+    Field(FieldNode),
+    Relationship(RelationshipNode),
+    View(ViewNode),
+    Form(FormNode),
+}
+
+impl TreeItem for ComparisonTreeItem {
+    type Msg = super::Msg;
+
+    fn id(&self) -> String {
+        match self {
+            Self::Field(node) => node.id(),
+            Self::Relationship(node) => node.id(),
+            Self::View(node) => node.id(),
+            Self::Form(node) => node.id(),
+        }
+    }
+
+    fn has_children(&self) -> bool {
+        match self {
+            Self::Field(node) => node.has_children(),
+            Self::Relationship(node) => node.has_children(),
+            Self::View(node) => node.has_children(),
+            Self::Form(node) => node.has_children(),
+        }
+    }
+
+    fn children(&self) -> Vec<Self> {
+        match self {
+            Self::Field(node) => node.children().into_iter().map(Self::Field).collect(),
+            Self::Relationship(node) => node.children().into_iter().map(Self::Relationship).collect(),
+            Self::View(node) => node.children().into_iter().map(Self::View).collect(),
+            Self::Form(node) => node.children().into_iter().map(Self::Form).collect(),
+        }
+    }
+
+    fn to_element(
+        &self,
+        theme: &Theme,
+        depth: usize,
+        is_selected: bool,
+        is_expanded: bool,
+    ) -> Element<Self::Msg> {
+        match self {
+            Self::Field(node) => node.to_element(theme, depth, is_selected, is_expanded),
+            Self::Relationship(node) => node.to_element(theme, depth, is_selected, is_expanded),
+            Self::View(node) => node.to_element(theme, depth, is_selected, is_expanded),
+            Self::Form(node) => node.to_element(theme, depth, is_selected, is_expanded),
+        }
+    }
+}
+
 /// Truncate a value string to a maximum length for display
 fn truncate_value(value: &str, max_len: usize) -> String {
     if value.len() <= max_len {
@@ -121,6 +176,7 @@ impl TreeItem for FieldNode {
 #[derive(Clone)]
 pub struct RelationshipNode {
     pub metadata: RelationshipMetadata,
+    pub match_info: Option<MatchInfo>,
 }
 
 impl TreeItem for RelationshipNode {
@@ -145,19 +201,54 @@ impl TreeItem for RelationshipNode {
         is_selected: bool,
         _is_expanded: bool,
     ) -> Element<Self::Msg> {
-        // TODO: Implement relationship rendering
-
         let indent = "  ".repeat(depth);
-        let text = format!("{}{}", indent, self.metadata.name);
+        let mut spans = Vec::new();
 
-        let mut builder = Element::styled_text(Line::from(Span::styled(
-            text,
-            if is_selected {
-                Style::default().fg(theme.lavender)
-            } else {
-                Style::default().fg(theme.text)
-            },
-        )));
+        // Indent
+        if depth > 0 {
+            spans.push(Span::styled(indent, Style::default()));
+        }
+
+        // Relationship name - colored by match state
+        let rel_name_color = if let Some(match_info) = &self.match_info {
+            match match_info.match_type {
+                MatchType::Exact => theme.green,      // Full match
+                MatchType::Prefix => theme.yellow,    // Prefix match
+                MatchType::Manual => theme.yellow,    // Manual mapping
+            }
+        } else {
+            theme.red  // No match
+        };
+
+        spans.push(Span::styled(
+            self.metadata.name.clone(),
+            Style::default().fg(rel_name_color),
+        ));
+
+        // Mapping arrow and target relationship (if mapped)
+        if let Some(match_info) = &self.match_info {
+            spans.push(Span::styled(" → ", Style::default().fg(theme.overlay1)));
+            spans.push(Span::styled(
+                match_info.target_field.clone(),
+                Style::default().fg(theme.blue),
+            ));
+        }
+
+        // Related entity in angle brackets
+        spans.push(Span::styled(
+            format!(" <{}>", self.metadata.related_entity),
+            Style::default().fg(theme.overlay1),
+        ));
+
+        // Mapping source badge (if mapped)
+        if let Some(match_info) = &self.match_info {
+            spans.push(Span::styled(
+                format!(" {}", match_info.match_type.label()),
+                Style::default().fg(theme.overlay1),
+            ));
+        }
+
+        let mut builder = Element::styled_text(Line::from(spans));
 
         if is_selected {
             builder = builder.background(Style::default().bg(theme.surface0));
