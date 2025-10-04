@@ -17,6 +17,8 @@ pub enum Msg {
     SwitchTab(usize), // 1-indexed tab number
     ParallelDataLoaded(usize, Result<FetchedData, String>),
     Refresh,
+    SourceTreeEvent(crate::tui::widgets::TreeEvent),
+    TargetTreeEvent(crate::tui::widgets::TreeEvent),
 }
 
 #[derive(Clone)]

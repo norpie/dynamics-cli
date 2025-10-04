@@ -125,14 +125,14 @@ impl App for EntityComparisonApp {
             field_mappings: HashMap::new(),
             prefix_mappings: HashMap::new(),
             hide_matched: false,
-            source_fields_tree: TreeState::new(),
-            source_relationships_tree: TreeState::new(),
-            source_views_tree: TreeState::new(),
-            source_forms_tree: TreeState::new(),
-            target_fields_tree: TreeState::new(),
-            target_relationships_tree: TreeState::new(),
-            target_views_tree: TreeState::new(),
-            target_forms_tree: TreeState::new(),
+            source_fields_tree: TreeState::with_selection(),
+            source_relationships_tree: TreeState::with_selection(),
+            source_views_tree: TreeState::with_selection(),
+            source_forms_tree: TreeState::with_selection(),
+            target_fields_tree: TreeState::with_selection(),
+            target_relationships_tree: TreeState::with_selection(),
+            target_views_tree: TreeState::with_selection(),
+            target_forms_tree: TreeState::with_selection(),
             focused_side: Side::Source,
             examples: ExamplesState::new(),
             show_back_confirmation: false,
@@ -334,6 +334,28 @@ impl App for EntityComparisonApp {
 
                 Command::None
             }
+            Msg::SourceTreeEvent(event) => {
+                // Handle source tree navigation/interaction
+                let tree_state = match state.active_tab {
+                    ActiveTab::Fields => &mut state.source_fields_tree,
+                    ActiveTab::Relationships => &mut state.source_relationships_tree,
+                    ActiveTab::Views => &mut state.source_views_tree,
+                    ActiveTab::Forms => &mut state.source_forms_tree,
+                };
+                tree_state.handle_event(event);
+                Command::None
+            }
+            Msg::TargetTreeEvent(event) => {
+                // Handle target tree navigation/interaction
+                let tree_state = match state.active_tab {
+                    ActiveTab::Fields => &mut state.target_fields_tree,
+                    ActiveTab::Relationships => &mut state.target_relationships_tree,
+                    ActiveTab::Views => &mut state.target_views_tree,
+                    ActiveTab::Forms => &mut state.target_forms_tree,
+                };
+                tree_state.handle_event(event);
+                Command::None
+            }
             Msg::Refresh => {
                 // Re-fetch metadata for both entities
                 state.source_metadata = Resource::Loading;
@@ -521,6 +543,7 @@ fn render_main_layout(state: &mut State, theme: &Theme) -> Element<Msg> {
     // Source panel with tree
     let source_panel = Element::panel(
         Element::tree("source_tree", &source_items, source_tree_state, theme)
+            .on_event(Msg::SourceTreeEvent)
             .build()
     )
     .title(format!("Source: {}", source_entity_name))
@@ -529,6 +552,7 @@ fn render_main_layout(state: &mut State, theme: &Theme) -> Element<Msg> {
     // Target panel with tree
     let target_panel = Element::panel(
         Element::tree("target_tree", &target_items, target_tree_state, theme)
+            .on_event(Msg::TargetTreeEvent)
             .build()
     )
     .title(format!("Target: {}", target_entity_name))
