@@ -8,9 +8,26 @@ use crate::tui::element::ColumnBuilder;
 
 pub struct LoadingScreen;
 
+pub struct LoadingScreenParams {
+    pub tasks: Vec<String>,
+    pub target: Option<AppId>,
+    pub caller: Option<AppId>,
+    pub cancellable: bool,
+}
+
+impl Default for LoadingScreenParams {
+    fn default() -> Self {
+        Self {
+            tasks: Vec::new(),
+            target: None,
+            caller: None,
+            cancellable: false,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub enum Msg {
-    Initialize(Value),
     TaskProgress(Value),
     Tick,
     Cancel,
@@ -38,7 +55,6 @@ pub struct State {
     cancellable: bool,
     spinner_state: usize,
     countdown_ticks: Option<usize>, // Number of ticks remaining before navigation (80ms per tick)
-    initialized: bool, // Prevents stale events from affecting state before Initialize runs
 }
 
 const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -48,123 +64,36 @@ impl crate::tui::AppState for State {}
 impl App for LoadingScreen {
     type State = State;
     type Msg = Msg;
+    type InitParams = LoadingScreenParams;
+
+    fn init(params: LoadingScreenParams) -> (State, Command<Msg>) {
+        let mut state = State::default();
+
+        state.tasks = params.tasks
+            .iter()
+            .map(|name| LoadingTask {
+                name: name.clone(),
+                status: TaskStatus::Pending,
+            })
+            .collect();
+
+        state.target_app = params.target;
+        state.caller_app = params.caller;
+        state.cancellable = params.cancellable;
+
+        (state, Command::None)
+    }
+
+    fn quit_policy() -> crate::tui::QuitPolicy {
+        crate::tui::QuitPolicy::QuitOnExit
+    }
 
     fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         match msg {
-            Msg::Initialize(data) => {
-                log::info!("✓ LoadingScreen::Initialize - received loading:init event");
-                use rand::Rng;
-
-                // IMPORTANT: Reset ALL state from previous runs
-                // This prevents old countdown/state from interfering with new loads
-                *state = State::default();
-
-                // Parse initialization data
-                let task_names: Vec<String> = if let Some(tasks_json) = data.get("tasks").and_then(|v| v.as_array()) {
-                    tasks_json
-                        .iter()
-                        .filter_map(|v| v.as_str())
-                        .map(|s| s.to_string())
-                        .collect()
-                } else {
-                    Vec::new()
-                };
-
-                state.tasks = task_names
-                    .iter()
-                    .map(|name| LoadingTask {
-                        name: name.clone(),
-                        status: TaskStatus::Pending,
-                    })
-                    .collect();
-
-                state.target_app = data
-                    .get("target")
-                    .and_then(|v| v.as_str())
-                    .and_then(|s| match s {
-                        "AppLauncher" => Some(AppId::AppLauncher),
-                        "LoadingScreen" => Some(AppId::LoadingScreen),
-                        "ErrorScreen" => Some(AppId::ErrorScreen),
-                        "MigrationEnvironment" => Some(AppId::MigrationEnvironment),
-                        "MigrationComparisonSelect" => Some(AppId::MigrationComparisonSelect),
-                        _ => {
-                            log::warn!("Unknown target app in loading:init: '{}'", s);
-                            None
-                        }
-                    });
-
-                state.caller_app = data
-                    .get("caller")
-                    .and_then(|v| v.as_str())
-                    .and_then(|s| match s {
-                        "AppLauncher" => Some(AppId::AppLauncher),
-                        "LoadingScreen" => Some(AppId::LoadingScreen),
-                        "ErrorScreen" => Some(AppId::ErrorScreen),
-                        "MigrationEnvironment" => Some(AppId::MigrationEnvironment),
-                        "MigrationComparisonSelect" => Some(AppId::MigrationComparisonSelect),
-                        _ => {
-                            log::warn!("Unknown caller app in loading:init: '{}'", s);
-                            None
-                        }
-                    });
-
-                state.cancellable = data.get("cancellable").and_then(|v| v.as_bool()).unwrap_or(false);
-
-                // Check if tasks should auto-complete (default: true)
-                // Set to false if you want to control task progress externally
-                let auto_complete = data.get("auto_complete")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(true);
-
-                let mut commands = Vec::new();
-
-                if auto_complete {
-                    // Spawn async work for each task with random delays
-                    let mut rng = rand::thread_rng();
-
-                    for task_name in task_names {
-                        let delay_secs = rng.gen_range(1..=5);
-                        let task_name_clone = task_name.clone();
-
-                        commands.push(Command::perform(
-                            async move {
-                                tokio::time::sleep(tokio::time::Duration::from_secs(delay_secs)).await;
-
-                                // Mark task as completed
-                                serde_json::json!({
-                                    "task": task_name_clone,
-                                    "status": "Completed",
-                                })
-                            },
-                            |data| Msg::TaskProgress(data),
-                        ));
-
-                        // Also immediately send InProgress status
-                        commands.push(Command::Publish {
-                            topic: "loading:progress".to_string(),
-                            data: serde_json::json!({
-                                "task": task_name,
-                                "status": "InProgress",
-                            }),
-                        });
-                    }
-                }
-
-                // Mark as initialized AFTER all setup is complete
-                state.initialized = true;
-
-                Command::Batch(commands)
-            }
-
             Msg::TaskProgress(data) => {
                 log::info!("✓ LoadingScreen::TaskProgress - received loading:progress event");
                 log::debug!("  Event data: {:?}", data);
 
-                // Ignore stale events from previous loads
-                if !state.initialized {
-                    log::warn!("✗ LoadingScreen - ignoring TaskProgress because not initialized");
-                    return Command::None;
-                }
                 let task_name = data.get("task").and_then(|v| v.as_str()).unwrap_or("");
                 let status_str = data.get("status").and_then(|v| v.as_str()).unwrap_or("");
 
@@ -203,24 +132,24 @@ impl App for LoadingScreen {
             Msg::Tick => {
                 state.spinner_state = (state.spinner_state + 1) % SPINNER_FRAMES.len();
 
-                // Handle countdown only if initialized
-                if state.initialized {
-                    if let Some(remaining) = state.countdown_ticks {
-                        if remaining <= 1 {
-                            // Only navigate if we have tasks (prevents stale countdown from navigating)
-                            if !state.tasks.is_empty() {
-                                if let Some(target) = state.target_app {
-                                    log::info!("✓ LoadingScreen - countdown complete, navigating to {:?}", target);
-                                    return Command::navigate_to(target);
-                                } else {
-                                    log::warn!("✗ LoadingScreen - countdown complete but target_app is None!");
-                                }
+                if let Some(remaining) = state.countdown_ticks {
+                    if remaining <= 1 {
+                        // Only navigate if we have tasks (prevents stale countdown from navigating)
+                        if !state.tasks.is_empty() {
+                            if let Some(target) = state.target_app {
+                                log::info!("✓ LoadingScreen - countdown complete, navigating to {:?}", target);
+                                return Command::batch(vec![
+                                    Command::navigate_to(target),
+                                    Command::quit_self(), // Clean up after navigation
+                                ]);
                             } else {
-                                log::warn!("✗ LoadingScreen - countdown complete but tasks is empty!");
+                                log::warn!("✗ LoadingScreen - countdown complete but target_app is None!");
                             }
                         } else {
-                            state.countdown_ticks = Some(remaining - 1);
+                            log::warn!("✗ LoadingScreen - countdown complete but tasks is empty!");
                         }
+                    } else {
+                        state.countdown_ticks = Some(remaining - 1);
                     }
                 }
 
@@ -317,7 +246,6 @@ impl App for LoadingScreen {
 
     fn subscriptions(_state: &State) -> Vec<Subscription<Msg>> {
         vec![
-            Subscription::subscribe("loading:init", |data| Some(Msg::Initialize(data))),
             Subscription::subscribe("loading:progress", |data| Some(Msg::TaskProgress(data))),
             Subscription::timer(std::time::Duration::from_millis(80), Msg::Tick),
             Subscription::keyboard(KeyCode::Esc, "Cancel loading", Msg::Cancel),

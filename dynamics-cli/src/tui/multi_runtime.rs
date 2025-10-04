@@ -6,7 +6,8 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use anyhow::Result;
 use std::collections::HashMap;
 
-use crate::tui::{AppId, Runtime, AppRuntime, apps::{AppLauncher, LoadingScreen, ErrorScreen, SettingsApp, migration::{MigrationEnvironmentApp, MigrationComparisonSelectApp}}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App, ModalState, KeyBinding};
+use crate::tui::{AppId, Runtime, AppRuntime, apps::{AppLauncher, LoadingScreen, ErrorScreen, SettingsApp, migration::{MigrationEnvironmentApp, MigrationComparisonSelectApp}}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App, ModalState, KeyBinding, AppLifecycle};
+use crate::tui::runtime::AppFactory;
 use crate::tui::element::{ColumnBuilder, RowBuilder, FocusId};
 use crate::tui::widgets::ScrollableState;
 
@@ -48,8 +49,14 @@ enum GlobalMsg {
 
 /// Manages multiple app runtimes and handles navigation between them
 pub struct MultiAppRuntime {
-    /// All registered app runtimes, stored as trait objects for type erasure
+    /// App factories for lazy creation
+    factories: HashMap<AppId, Box<dyn AppFactory>>,
+
+    /// Active app instances (lazily created)
     runtimes: HashMap<AppId, Box<dyn AppRuntime>>,
+
+    /// Lifecycle state for each app
+    lifecycles: HashMap<AppId, AppLifecycle>,
 
     /// Currently active app
     active_app: AppId,
@@ -67,18 +74,26 @@ pub struct MultiAppRuntime {
 
 impl MultiAppRuntime {
     pub fn new() -> Self {
-        let mut runtimes: HashMap<AppId, Box<dyn AppRuntime>> = HashMap::new();
+        let mut factories: HashMap<AppId, Box<dyn AppFactory>> = HashMap::new();
+        let mut lifecycles = HashMap::new();
 
-        // Register all apps here - this is the ONLY place you need to add new apps!
-        runtimes.insert(AppId::AppLauncher, Box::new(Runtime::<AppLauncher>::new()));
-        runtimes.insert(AppId::LoadingScreen, Box::new(Runtime::<LoadingScreen>::new()));
-        runtimes.insert(AppId::ErrorScreen, Box::new(Runtime::<ErrorScreen>::new()));
-        runtimes.insert(AppId::Settings, Box::new(Runtime::<SettingsApp>::new()));
-        runtimes.insert(AppId::MigrationEnvironment, Box::new(Runtime::<MigrationEnvironmentApp>::new()));
-        runtimes.insert(AppId::MigrationComparisonSelect, Box::new(Runtime::<MigrationComparisonSelectApp>::new()));
+        // Register all app factories here - this is the ONLY place you need to add new apps!
+        factories.insert(AppId::AppLauncher, Box::new(std::marker::PhantomData::<AppLauncher>));
+        factories.insert(AppId::LoadingScreen, Box::new(std::marker::PhantomData::<LoadingScreen>));
+        factories.insert(AppId::ErrorScreen, Box::new(std::marker::PhantomData::<ErrorScreen>));
+        factories.insert(AppId::Settings, Box::new(std::marker::PhantomData::<SettingsApp>));
+        factories.insert(AppId::MigrationEnvironment, Box::new(std::marker::PhantomData::<MigrationEnvironmentApp>));
+        factories.insert(AppId::MigrationComparisonSelect, Box::new(std::marker::PhantomData::<MigrationComparisonSelectApp>));
 
-        Self {
-            runtimes,
+        // Mark all apps as NotCreated initially
+        for app_id in factories.keys() {
+            lifecycles.insert(*app_id, AppLifecycle::NotCreated);
+        }
+
+        let mut runtime = Self {
+            factories,
+            runtimes: HashMap::new(),
+            lifecycles,
             active_app: AppId::AppLauncher,
             help_modal: ModalState::Closed,
             help_scroll_state: ScrollableState::new(),
@@ -86,7 +101,34 @@ impl MultiAppRuntime {
             global_interaction_registry: crate::tui::InteractionRegistry::new(),
             global_focus_registry: crate::tui::renderer::FocusRegistry::new(),
             global_focused_id: None,
+        };
+
+        // Eagerly create the AppLauncher since it's the starting app
+        runtime.ensure_app_exists(AppId::AppLauncher, Box::new(())).ok();
+
+        runtime
+    }
+
+    /// Ensure an app exists (create it if not already created)
+    fn ensure_app_exists(&mut self, app_id: AppId, params: Box<dyn std::any::Any + Send>) -> Result<()> {
+        // If app already exists and is running or background, do nothing
+        if matches!(self.lifecycles.get(&app_id), Some(AppLifecycle::Running) | Some(AppLifecycle::Background)) {
+            return Ok(());
         }
+
+        // Get the factory for this app
+        let factory = self.factories.get(&app_id)
+            .ok_or_else(|| anyhow::anyhow!("No factory registered for app {:?}", app_id))?;
+
+        // Create the app instance
+        let runtime = factory.create(params)?;
+
+        // Store the runtime and mark as running
+        self.runtimes.insert(app_id, runtime);
+        self.lifecycles.insert(app_id, AppLifecycle::Running);
+
+        log::info!("Created app {:?}", app_id);
+        Ok(())
     }
 
     pub fn request_quit(&mut self) {
@@ -757,13 +799,55 @@ impl MultiAppRuntime {
     /// Check if any navigation commands were issued
     fn check_navigation(&mut self) -> Result<bool> {
         // Check if navigation was requested from active app
-        let nav_target = self.runtimes.get_mut(&self.active_app)
-            .expect("Active app not found in runtimes")
-            .take_navigation();
+        let nav_target = if let Some(runtime) = self.runtimes.get_mut(&self.active_app) {
+            runtime.take_navigation()
+        } else {
+            None
+        };
 
         if let Some(target) = nav_target {
-            // Don't clear target's navigation - it may have been set by event handlers
-            // during broadcast_events() (e.g., PerformParallel setting LoadingScreen)
+            // Suspend current app if it has a Sleep policy
+            if let Some(current_runtime) = self.runtimes.get(&self.active_app) {
+                let policy = self.factories.get(&self.active_app)
+                    .map(|f| f.quit_policy())
+                    .unwrap_or(crate::tui::QuitPolicy::Sleep);
+
+                match policy {
+                    crate::tui::QuitPolicy::Sleep => {
+                        // Keep app in background
+                        self.lifecycles.insert(self.active_app, AppLifecycle::Background);
+                        if let Some(runtime) = self.runtimes.get_mut(&self.active_app) {
+                            runtime.on_suspend().ok();
+                        }
+                    }
+                    crate::tui::QuitPolicy::QuitOnExit => {
+                        // Remove app immediately
+                        if let Some(mut runtime) = self.runtimes.remove(&self.active_app) {
+                            runtime.on_destroy().ok();
+                        }
+                        self.lifecycles.insert(self.active_app, AppLifecycle::Dead);
+                    }
+                    crate::tui::QuitPolicy::QuitOnIdle(_) => {
+                        // For now, treat like Sleep
+                        self.lifecycles.insert(self.active_app, AppLifecycle::Background);
+                        if let Some(runtime) = self.runtimes.get_mut(&self.active_app) {
+                            runtime.on_suspend().ok();
+                        }
+                    }
+                }
+            }
+
+            // Ensure target app exists (create with default params if needed)
+            self.ensure_app_exists(target, Box::new(())).ok();
+
+            // Resume target app if it was backgrounded
+            if matches!(self.lifecycles.get(&target), Some(AppLifecycle::Background)) {
+                if let Some(runtime) = self.runtimes.get_mut(&target) {
+                    runtime.on_resume().ok();
+                }
+                self.lifecycles.insert(target, AppLifecycle::Running);
+            }
+
             self.active_app = target;
             Ok(true) // Navigation happened
         } else {

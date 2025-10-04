@@ -76,7 +76,6 @@ pub struct MigrationMetadata {
 
 #[derive(Clone)]
 pub enum Msg {
-    Initialize(MigrationMetadata),
     ParallelDataLoaded(usize, Result<Vec<String>, String>),
     ComparisonsLoaded(Result<Vec<SavedComparison>, String>),
     ListNavigate(KeyCode),
@@ -246,81 +245,6 @@ impl App for MigrationComparisonSelectApp {
     fn update(state: &mut Self::State, msg: Self::Msg) -> Command<Self::Msg> {
         log::debug!("MigrationComparisonSelectApp::update() called with message");
         match msg {
-            Msg::Initialize(metadata) => {
-                log::info!("✓ Initialize with migration: {} ({} -> {})",
-                    metadata.migration_name, metadata.source_env, metadata.target_env);
-
-                state.migration_name = Some(metadata.migration_name.clone());
-                state.source_env = Some(metadata.source_env.clone());
-                state.target_env = Some(metadata.target_env.clone());
-                state.source_entities = Resource::Loading;
-                state.target_entities = Resource::Loading;
-
-                // Load entities in parallel with automatic LoadingScreen
-                Command::perform_parallel()
-                    .add_task(
-                        format!("Loading source entities ({})", metadata.source_env),
-                        async move {
-                            use crate::api::metadata::parse_entity_list;
-                            let config = crate::global_config();
-                            let manager = crate::client_manager();
-
-                            match config.get_entity_cache(&metadata.source_env, 24).await {
-                                Ok(Some(cached)) => {
-                                    log::debug!("Using cached entities for source: {}", metadata.source_env);
-                                    Ok::<Vec<String>, String>(cached)
-                                }
-                                _ => {
-                                    log::debug!("Fetching fresh metadata for source: {}", metadata.source_env);
-                                    let client = manager.get_client(&metadata.source_env).await.map_err(|e| e.to_string())?;
-                                    let metadata_xml = client.fetch_metadata().await.map_err(|e| e.to_string())?;
-                                    let entities = parse_entity_list(&metadata_xml).map_err(|e| e.to_string())?;
-
-                                    match config.set_entity_cache(&metadata.source_env, entities.clone()).await {
-                                        Ok(_) => log::info!("Successfully cached {} entities for {}", entities.len(), metadata.source_env),
-                                        Err(e) => log::error!("Failed to cache entities for {}: {}", metadata.source_env, e),
-                                    }
-
-                                    Ok(entities)
-                                }
-                            }
-                        }
-                    )
-                    .add_task(
-                        format!("Loading target entities ({})", metadata.target_env),
-                        async move {
-                            use crate::api::metadata::parse_entity_list;
-                            let config = crate::global_config();
-                            let manager = crate::client_manager();
-
-                            match config.get_entity_cache(&metadata.target_env, 24).await {
-                                Ok(Some(cached)) => {
-                                    log::debug!("Using cached entities for target: {}", metadata.target_env);
-                                    Ok::<Vec<String>, String>(cached)
-                                }
-                                _ => {
-                                    log::debug!("Fetching fresh metadata for target: {}", metadata.target_env);
-                                    let client = manager.get_client(&metadata.target_env).await.map_err(|e| e.to_string())?;
-                                    let metadata_xml = client.fetch_metadata().await.map_err(|e| e.to_string())?;
-                                    let entities = parse_entity_list(&metadata_xml).map_err(|e| e.to_string())?;
-
-                                    match config.set_entity_cache(&metadata.target_env, entities.clone()).await {
-                                        Ok(_) => log::info!("Successfully cached {} entities for {}", entities.len(), metadata.target_env),
-                                        Err(e) => log::error!("Failed to cache entities for {}: {}", metadata.target_env, e),
-                                    }
-
-                                    Ok(entities)
-                                }
-                            }
-                        }
-                    )
-                    .with_title("Loading Migration Data")
-                    .on_complete(AppId::MigrationComparisonSelect)
-                    .build(|task_idx, result| {
-                        let data = result.downcast::<Result<Vec<String>, String>>().unwrap();
-                        Msg::ParallelDataLoaded(task_idx, *data)
-                    })
-            }
             Msg::ParallelDataLoaded(task_idx, result) => {
                 // Store result in appropriate Resource
                 match task_idx {
@@ -747,24 +671,7 @@ impl App for MigrationComparisonSelectApp {
     }
 
     fn subscriptions(state: &Self::State) -> Vec<Subscription<Self::Msg>> {
-        let mut subs = vec![
-            // Listen for migration selection from MigrationEnvironmentApp
-            Subscription::subscribe("migration:selected", |data| {
-                log::info!("✓ Subscription handler called for 'migration:selected' event");
-                log::debug!("  Raw data: {:?}", data);
-                match serde_json::from_value::<MigrationMetadata>(data.clone()) {
-                    Ok(metadata) => {
-                        log::info!("✓ Successfully deserialized migration metadata");
-                        Some(Msg::Initialize(metadata))
-                    }
-                    Err(e) => {
-                        log::error!("✗ Failed to deserialize migration metadata: {}", e);
-                        log::error!("  Data was: {:?}", data);
-                        None
-                    }
-                }
-            }),
-        ];
+        let mut subs = vec![];
 
         if !state.show_create_modal && !state.show_delete_confirm && !state.show_rename_modal {
             subs.push(Subscription::keyboard(KeyCode::Esc, "Back to migration list", Msg::Back));

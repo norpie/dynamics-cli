@@ -3,6 +3,7 @@ use std::pin::Pin;
 use std::any::Any;
 use serde_json::Value;
 use crate::tui::element::FocusId;
+use serde::{Serialize, Deserialize};
 
 /// Target for event dispatch - either widget auto-routing or app message
 ///
@@ -94,7 +95,7 @@ impl Default for ParallelConfig {
 }
 
 /// Unique identifier for each app
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AppId {
     AppLauncher,
     LoadingScreen,

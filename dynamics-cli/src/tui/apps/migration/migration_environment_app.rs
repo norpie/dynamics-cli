@@ -3,6 +3,8 @@ use crate::tui::{App, AppId, Command, Element, Subscription, Theme, FocusId, Res
 use crate::tui::renderer::LayeredView;
 use crate::tui::widgets::list::{ListItem, ListState};
 use crate::tui::widgets::{TextInputField, SelectField, TextInputEvent, SelectEvent};
+use crate::tui::apps::screens::{ErrorScreenParams, LoadingScreenParams};
+use crate::tui::apps::migration::MigrationSelectParams;
 use crate::config::SavedMigration;
 use ratatui::text::{Line, Span};
 use ratatui::style::{Style, Stylize};
@@ -148,25 +150,25 @@ impl App for MigrationEnvironmentApp {
             }
             Msg::MigrationsLoaded(Err(err)) => {
                 log::error!("Failed to load migrations: {}", err);
-                Command::batch(vec![
-                    Command::publish("error:init", serde_json::json!({
-                        "message": format!("Failed to load migrations: {}", err),
-                        "target": "MigrationEnvironment",
-                    })),
-                    Command::navigate_to(AppId::ErrorScreen),
-                ])
+                Command::start_app(
+                    AppId::ErrorScreen,
+                    ErrorScreenParams {
+                        message: format!("Failed to load migrations: {}", err),
+                        target: Some(AppId::MigrationEnvironment),
+                    }
+                )
             }
             Msg::SelectEnvironment(idx) => {
                 if let Some(migration) = state.environments.get(idx) {
-                    // Publish metadata first - comparison app will receive it and start loading
-                    Command::batch(vec![
-                        Command::navigate_to(AppId::MigrationComparisonSelect),
-                        Command::publish("migration:selected", serde_json::json!({
-                            "migration_name": migration.name,
-                            "source_env": migration.source,
-                            "target_env": migration.target,
-                        })),
-                    ])
+                    // Start the comparison select app with typed parameters
+                    Command::start_app(
+                        AppId::MigrationComparisonSelect,
+                        MigrationSelectParams {
+                            migration_name: migration.name.clone(),
+                            source_env: migration.source.clone(),
+                            target_env: migration.target.clone(),
+                        }
+                    )
                 } else {
                     Command::None
                 }
@@ -356,13 +358,13 @@ impl App for MigrationEnvironmentApp {
             Msg::MigrationCreated(Err(err)) => {
                 log::error!("Failed to create migration: {}", err);
                 state.close_create_modal();
-                Command::batch(vec![
-                    Command::publish("error:init", serde_json::json!({
-                        "message": format!("Failed to create migration: {}", err),
-                        "target": "MigrationEnvironment",
-                    })),
-                    Command::navigate_to(AppId::ErrorScreen),
-                ])
+                Command::start_app(
+                    AppId::ErrorScreen,
+                    ErrorScreenParams {
+                        message: format!("Failed to create migration: {}", err),
+                        target: Some(AppId::MigrationEnvironment),
+                    }
+                )
             }
         }
     }

@@ -8,9 +8,22 @@ use crate::tui::element::ColumnBuilder;
 
 pub struct ErrorScreen;
 
+pub struct ErrorScreenParams {
+    pub message: String,
+    pub target: Option<AppId>,
+}
+
+impl Default for ErrorScreenParams {
+    fn default() -> Self {
+        Self {
+            message: "An error occurred".to_string(),
+            target: Some(AppId::AppLauncher),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub enum Msg {
-    Initialize(Value),
     Continue,
 }
 
@@ -25,34 +38,23 @@ impl crate::tui::AppState for State {}
 impl App for ErrorScreen {
     type State = State;
     type Msg = Msg;
+    type InitParams = ErrorScreenParams;
+
+    fn init(params: ErrorScreenParams) -> (State, Command<Msg>) {
+        let state = State {
+            error_message: params.message,
+            target_app: params.target,
+        };
+
+        (state, Command::None)
+    }
+
+    fn quit_policy() -> crate::tui::QuitPolicy {
+        crate::tui::QuitPolicy::QuitOnExit
+    }
 
     fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         match msg {
-            Msg::Initialize(data) => {
-                // Reset ALL state from previous runs
-                *state = State::default();
-
-                // Parse initialization data
-                state.error_message = data.get("message")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("An error occurred")
-                    .to_string();
-
-                state.target_app = data
-                    .get("target")
-                    .and_then(|v| v.as_str())
-                    .and_then(|s| match s {
-                        "AppLauncher" => Some(AppId::AppLauncher),
-                        "LoadingScreen" => Some(AppId::LoadingScreen),
-                        "ErrorScreen" => Some(AppId::ErrorScreen),
-                        "MigrationEnvironment" => Some(AppId::MigrationEnvironment),
-                        "MigrationComparisonSelect" => Some(AppId::MigrationComparisonSelect),
-                        _ => None,
-                    });
-
-                Command::None
-            }
-
             Msg::Continue => {
                 if let Some(target) = state.target_app {
                     Command::navigate_to(target)
@@ -94,7 +96,6 @@ impl App for ErrorScreen {
 
     fn subscriptions(_state: &State) -> Vec<Subscription<Msg>> {
         vec![
-            Subscription::subscribe("error:init", |data| Some(Msg::Initialize(data))),
             Subscription::keyboard(KeyCode::Enter, "Continue", Msg::Continue),
         ]
     }
