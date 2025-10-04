@@ -10,6 +10,7 @@ pub mod state;
 pub mod widgets;
 pub mod resource;
 pub mod modals;
+pub mod lifecycle;
 
 #[macro_use]
 pub mod macros;
@@ -33,3 +34,4 @@ pub use multi_runtime::MultiAppRuntime;
 pub use state::{Theme, ThemeVariant, FocusMode, RuntimeConfig, ModalState};
 pub use widgets::{ListItem, ListState, TextInputState};
 pub use resource::Resource;
+pub use lifecycle::{AppLifecycle, QuitPolicy, KillReason};

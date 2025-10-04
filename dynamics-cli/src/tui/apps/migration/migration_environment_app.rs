@@ -121,8 +121,9 @@ impl crate::tui::AppState for State {}
 impl App for MigrationEnvironmentApp {
     type State = State;
     type Msg = Msg;
+    type InitParams = ();
 
-    fn init() -> (State, Command<Msg>) {
+    fn init(_params: ()) -> (State, Command<Msg>) {
         let state = State::default();
         let cmd = Command::perform(
             async {

@@ -164,8 +164,9 @@ impl ListItem for OptionWithValue {
 impl App for SettingsApp {
     type State = State;
     type Msg = Msg;
+    type InitParams = ();
 
-    fn init() -> (State, Command<Msg>) {
+    fn init(_params: ()) -> (State, Command<Msg>) {
         let mut state = State::default();
 
         // Load namespaces

@@ -73,8 +73,9 @@ impl crate::tui::AppState for State {}
 impl App for AppLauncher {
     type State = State;
     type Msg = Msg;
+    type InitParams = ();
 
-    fn init() -> (State, Command<Msg>) {
+    fn init(_params: ()) -> (State, Command<Msg>) {
         (State::default(), Command::set_focus(FocusId::new("app-list")))
     }
 

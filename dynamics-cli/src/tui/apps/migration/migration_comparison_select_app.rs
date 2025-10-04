@@ -158,9 +158,90 @@ impl State {
     }
 }
 
+pub struct MigrationSelectParams {
+    pub migration_name: String,
+    pub source_env: String,
+    pub target_env: String,
+}
+
+impl Default for MigrationSelectParams {
+    fn default() -> Self {
+        Self {
+            migration_name: String::new(),
+            source_env: String::new(),
+            target_env: String::new(),
+        }
+    }
+}
+
 impl App for MigrationComparisonSelectApp {
     type State = State;
     type Msg = Msg;
+    type InitParams = MigrationSelectParams;
+
+    fn init(params: MigrationSelectParams) -> (State, Command<Msg>) {
+        let mut state = State::default();
+        state.migration_name = Some(params.migration_name.clone());
+        state.source_env = Some(params.source_env.clone());
+        state.target_env = Some(params.target_env.clone());
+        state.source_entities = crate::tui::Resource::Loading;
+        state.target_entities = crate::tui::Resource::Loading;
+
+        // Load entities in parallel with automatic LoadingScreen
+        let cmd = Command::perform_parallel()
+            .add_task(
+                format!("Loading source entities ({})", params.source_env),
+                {
+                    let source_env = params.source_env.clone();
+                    async move {
+                        use crate::api::metadata::parse_entity_list;
+                        let config = crate::global_config();
+                        let manager = crate::client_manager();
+
+                        match config.get_entity_cache(&source_env, 24).await {
+                            Ok(Some(cached)) => Ok::<Vec<String>, String>(cached),
+                            _ => {
+                                let client = manager.get_client(&source_env).await.map_err(|e| e.to_string())?;
+                                let metadata_xml = client.fetch_metadata().await.map_err(|e| e.to_string())?;
+                                let entities = parse_entity_list(&metadata_xml).map_err(|e| e.to_string())?;
+                                let _ = config.set_entity_cache(&source_env, entities.clone()).await;
+                                Ok(entities)
+                            }
+                        }
+                    }
+                }
+            )
+            .add_task(
+                format!("Loading target entities ({})", params.target_env),
+                {
+                    let target_env = params.target_env.clone();
+                    async move {
+                        use crate::api::metadata::parse_entity_list;
+                        let config = crate::global_config();
+                        let manager = crate::client_manager();
+
+                        match config.get_entity_cache(&target_env, 24).await {
+                            Ok(Some(cached)) => Ok::<Vec<String>, String>(cached),
+                            _ => {
+                                let client = manager.get_client(&target_env).await.map_err(|e| e.to_string())?;
+                                let metadata_xml = client.fetch_metadata().await.map_err(|e| e.to_string())?;
+                                let entities = parse_entity_list(&metadata_xml).map_err(|e| e.to_string())?;
+                                let _ = config.set_entity_cache(&target_env, entities.clone()).await;
+                                Ok(entities)
+                            }
+                        }
+                    }
+                }
+            )
+            .with_title("Loading Migration Data")
+            .on_complete(AppId::MigrationComparisonSelect)
+            .build(|task_idx, result| {
+                let data = result.downcast::<Result<Vec<String>, String>>().unwrap();
+                Msg::ParallelDataLoaded(task_idx, *data)
+            });
+
+        (state, cmd)
+    }
 
     fn update(state: &mut Self::State, msg: Self::Msg) -> Command<Self::Msg> {
         log::debug!("MigrationComparisonSelectApp::update() called with message");

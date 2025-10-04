@@ -9,11 +9,20 @@ use std::pin::Pin;
 use std::future::Future;
 use std::any::Any;
 
-use crate::tui::{App, AppId, Command, Renderer, InteractionRegistry, Subscription, AppState, KeyBinding};
+use crate::tui::{App, AppId, Command, Renderer, InteractionRegistry, Subscription, AppState, KeyBinding, QuitPolicy};
 use crate::tui::command::{ParallelConfig, DispatchTarget};
 use crate::tui::renderer::{FocusRegistry, FocusableInfo, DropdownRegistry};
 use crate::tui::element::FocusId;
 use crate::tui::state::{RuntimeConfig, FocusMode};
+
+/// Trait for creating app instances (factory pattern for lazy initialization)
+pub trait AppFactory: Send {
+    /// Create a new app instance with typed parameters
+    fn create(&self, params: Box<dyn Any + Send>) -> Result<Box<dyn AppRuntime>>;
+
+    /// Get the quit policy for this app type
+    fn quit_policy(&self) -> QuitPolicy;
+}
 
 /// Trait for runtime operations, allowing type-erased storage of different Runtime<A> types
 pub trait AppRuntime {
@@ -30,6 +39,12 @@ pub trait AppRuntime {
     fn handle_publish(&mut self, topic: &str, data: Value) -> Result<()>;
     fn focus_next(&mut self) -> Result<()>;
     fn focus_previous(&mut self) -> Result<()>;
+
+    // Lifecycle methods
+    fn can_quit(&self) -> Result<(), String>;
+    fn on_suspend(&mut self) -> Result<()>;
+    fn on_resume(&mut self) -> Result<()>;
+    fn on_destroy(&mut self) -> Result<()>;
 }
 
 /// Tracks the state of a parallel task execution
@@ -93,7 +108,11 @@ pub struct Runtime<A: App> {
 
 impl<A: App> Runtime<A> {
     pub fn new() -> Self {
-        let (state, init_command) = A::init();
+        Self::with_params(A::InitParams::default())
+    }
+
+    pub fn with_params(params: A::InitParams) -> Self {
+        let (state, init_command) = A::init(params);
 
         let mut runtime = Self {
             state,
@@ -614,6 +633,60 @@ impl<A: App> Runtime<A> {
                 Ok(true)
             }
 
+            Command::StartApp { app_id, params } => {
+                // Publish special event for MultiAppRuntime to handle
+                let encoded = serde_json::to_value(&app_id).unwrap_or(Value::Null);
+                self.pending_publishes.push((
+                    format!("__lifecycle:start_app:{:?}", app_id),
+                    serde_json::json!({
+                        "app_id": encoded,
+                        "params_type": std::any::type_name_of_val(&*params),
+                    })
+                ));
+                // Also store params in a way MultiAppRuntime can retrieve
+                // For now, we'll use NavigateTo and MultiAppRuntime will handle the special event
+                self.navigation_target = Some(app_id);
+                Ok(true)
+            }
+
+            Command::WakeApp(app_id) => {
+                // Store navigation target to be picked up by multi-runtime
+                self.navigation_target = Some(app_id);
+                Ok(true)
+            }
+
+            Command::RestartApp { app_id, params } => {
+                // Publish special event for MultiAppRuntime to handle
+                let encoded = serde_json::to_value(&app_id).unwrap_or(Value::Null);
+                self.pending_publishes.push((
+                    format!("__lifecycle:restart_app:{:?}", app_id),
+                    serde_json::json!({
+                        "app_id": encoded,
+                        "params_type": std::any::type_name_of_val(&*params),
+                    })
+                ));
+                self.navigation_target = Some(app_id);
+                Ok(true)
+            }
+
+            Command::QuitSelf => {
+                // Signal to MultiAppRuntime that this app wants to quit
+                self.pending_publishes.push((
+                    "__lifecycle:quit_self".to_string(),
+                    Value::Null,
+                ));
+                Ok(true)
+            }
+
+            Command::SleepSelf => {
+                // Signal to MultiAppRuntime that this app wants to sleep
+                self.pending_publishes.push((
+                    "__lifecycle:sleep_self".to_string(),
+                    Value::Null,
+                ));
+                Ok(true)
+            }
+
             Command::Publish { topic, data } => {
                 // Handle locally first
                 self.handle_publish(&topic, data.clone())?;
@@ -893,5 +966,46 @@ where
 
     fn focus_previous(&mut self) -> Result<()> {
         Runtime::focus_previous(self)
+    }
+
+    fn can_quit(&self) -> Result<(), String> {
+        A::can_quit(&self.state)
+    }
+
+    fn on_suspend(&mut self) -> Result<()> {
+        let command = A::on_suspend(&mut self.state);
+        self.execute_command(command)?;
+        Ok(())
+    }
+
+    fn on_resume(&mut self) -> Result<()> {
+        let command = A::on_resume(&mut self.state);
+        self.execute_command(command)?;
+        Ok(())
+    }
+
+    fn on_destroy(&mut self) -> Result<()> {
+        let command = A::on_destroy(&mut self.state);
+        self.execute_command(command)?;
+        Ok(())
+    }
+}
+
+/// Blanket implementation of AppFactory for Runtime<A>
+impl<A: App + 'static> AppFactory for std::marker::PhantomData<A>
+where
+    A::State: 'static,
+    A::Msg: 'static,
+{
+    fn create(&self, params: Box<dyn Any + Send>) -> Result<Box<dyn AppRuntime>> {
+        // Downcast params to the correct type
+        let typed_params = params.downcast::<A::InitParams>()
+            .map_err(|_| anyhow::anyhow!("Invalid parameter type for app"))?;
+
+        Ok(Box::new(Runtime::<A>::with_params(*typed_params)))
+    }
+
+    fn quit_policy(&self) -> QuitPolicy {
+        A::quit_policy()
     }
 }

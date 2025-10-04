@@ -30,8 +30,23 @@ pub enum Command<Msg> {
     /// Execute multiple commands in sequence
     Batch(Vec<Command<Msg>>),
 
-    /// Navigate to a different app
+    /// Navigate to a different app (wake if sleeping, create if not exists with default params)
     NavigateTo(AppId),
+
+    /// Start app with typed parameters (always create fresh instance)
+    StartApp { app_id: AppId, params: Box<dyn Any + Send> },
+
+    /// Wake background app (error if not already created)
+    WakeApp(AppId),
+
+    /// Destroy and recreate app with new params
+    RestartApp { app_id: AppId, params: Box<dyn Any + Send> },
+
+    /// Request to destroy this app (graceful quit)
+    QuitSelf,
+
+    /// Request to go to background (if not already)
+    SleepSelf,
 
     /// Perform an async operation and send the result as a message
     Perform(Pin<Box<dyn Future<Output = Msg> + Send>>),
@@ -105,6 +120,37 @@ impl<Msg> Command<Msg> {
     /// Helper to navigate to another app
     pub fn navigate_to(app_id: AppId) -> Self {
         Command::NavigateTo(app_id)
+    }
+
+    /// Helper to start an app with typed parameters
+    pub fn start_app<P: Send + 'static>(app_id: AppId, params: P) -> Self {
+        Command::StartApp {
+            app_id,
+            params: Box::new(params),
+        }
+    }
+
+    /// Helper to wake a background app
+    pub fn wake_app(app_id: AppId) -> Self {
+        Command::WakeApp(app_id)
+    }
+
+    /// Helper to restart an app with new parameters
+    pub fn restart_app<P: Send + 'static>(app_id: AppId, params: P) -> Self {
+        Command::RestartApp {
+            app_id,
+            params: Box::new(params),
+        }
+    }
+
+    /// Helper to quit this app
+    pub fn quit_self() -> Self {
+        Command::QuitSelf
+    }
+
+    /// Helper to put this app to sleep
+    pub fn sleep_self() -> Self {
+        Command::SleepSelf
     }
 
     /// Helper to publish an event

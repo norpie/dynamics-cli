@@ -1,4 +1,4 @@
-use crate::tui::{Command, Element, Subscription, Theme, LayeredView};
+use crate::tui::{Command, Element, Subscription, Theme, LayeredView, QuitPolicy};
 use crate::tui::element::FocusId;
 use ratatui::text::Line;
 use std::any::Any;
@@ -26,12 +26,20 @@ pub trait AppState {
 /// - update: pure function that handles messages and returns commands
 /// - view: pure function that renders the current state
 /// - subscriptions: declares what inputs the app wants to receive
+///
+/// New lifecycle features:
+/// - InitParams: typed parameters for app initialization
+/// - Lifecycle hooks: on_suspend, on_resume, on_destroy
+/// - QuitPolicy: control what happens when navigating away
 pub trait App: Sized + Send + 'static {
     /// The app's state type
     type State: Default + Send + AppState;
 
     /// The app's message type
     type Msg: Clone + Send + 'static;
+
+    /// Initialization parameters (use () if app takes no params)
+    type InitParams: Default + Send + 'static;
 
     /// Update the state based on a message and return a command
     fn update(state: &mut Self::State, msg: Self::Msg) -> Command<Self::Msg>;
@@ -51,8 +59,34 @@ pub trait App: Sized + Send + 'static {
         None
     }
 
-    /// Optional: Initialize the app with a command
-    fn init() -> (Self::State, Command<Self::Msg>) {
+    /// Initialize the app with typed parameters
+    fn init(params: Self::InitParams) -> (Self::State, Command<Self::Msg>) {
+        let _ = params; // Suppress unused warning for apps that don't use params
         (Self::State::default(), Command::None)
+    }
+
+    /// Policy for what happens when navigating away from this app
+    fn quit_policy() -> QuitPolicy {
+        QuitPolicy::Sleep
+    }
+
+    /// Check if app can quit (return Err to veto)
+    fn can_quit(_state: &Self::State) -> Result<(), String> {
+        Ok(())
+    }
+
+    /// Called when app goes to background
+    fn on_suspend(_state: &mut Self::State) -> Command<Self::Msg> {
+        Command::None
+    }
+
+    /// Called when app returns to foreground
+    fn on_resume(_state: &mut Self::State) -> Command<Self::Msg> {
+        Command::None
+    }
+
+    /// Called before app is destroyed
+    fn on_destroy(_state: &mut Self::State) -> Command<Self::Msg> {
+        Command::None
     }
 }
