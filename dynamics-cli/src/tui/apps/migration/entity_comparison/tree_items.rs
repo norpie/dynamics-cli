@@ -49,10 +49,10 @@ impl TreeItem for FieldNode {
 
         // Indent
         if depth > 0 {
-            spans.push(Span::raw(indent));
+            spans.push(Span::styled(indent, Style::default()));
         }
 
-        // Field name - colored by match state
+        // Field name - colored by match state (keep color even when selected)
         let field_name_color = if let Some(match_info) = &self.match_info {
             match match_info.match_type {
                 MatchType::Exact => theme.green,      // Full match
@@ -63,11 +63,7 @@ impl TreeItem for FieldNode {
             theme.red  // No match
         };
 
-        let field_name_style = if is_selected {
-            Style::default().fg(theme.lavender).bold()
-        } else {
-            Style::default().fg(field_name_color)
-        };
+        let field_name_style = Style::default().fg(field_name_color);
 
         spans.push(Span::styled(
             self.metadata.logical_name.clone(),
@@ -111,7 +107,13 @@ impl TreeItem for FieldNode {
             ));
         }
 
-        Element::styled_text(Line::from(spans)).build()
+        let mut builder = Element::styled_text(Line::from(spans));
+
+        if is_selected {
+            builder = builder.background(Style::default().bg(theme.surface0));
+        }
+
+        builder.build()
     }
 }
 
@@ -148,14 +150,20 @@ impl TreeItem for RelationshipNode {
         let indent = "  ".repeat(depth);
         let text = format!("{}{}", indent, self.metadata.name);
 
-        Element::styled_text(Line::from(Span::styled(
+        let mut builder = Element::styled_text(Line::from(Span::styled(
             text,
             if is_selected {
                 Style::default().fg(theme.lavender)
             } else {
                 Style::default().fg(theme.text)
             },
-        ))).build()
+        )));
+
+        if is_selected {
+            builder = builder.background(Style::default().bg(theme.surface0));
+        }
+
+        builder.build()
     }
 }
 
@@ -192,14 +200,20 @@ impl TreeItem for ViewNode {
         let indent = "  ".repeat(depth);
         let text = format!("{}{}", indent, self.metadata.name);
 
-        Element::styled_text(Line::from(Span::styled(
+        let mut builder = Element::styled_text(Line::from(Span::styled(
             text,
             if is_selected {
                 Style::default().fg(theme.lavender)
             } else {
                 Style::default().fg(theme.text)
             },
-        ))).build()
+        )));
+
+        if is_selected {
+            builder = builder.background(Style::default().bg(theme.surface0));
+        }
+
+        builder.build()
     }
 }
 
@@ -236,13 +250,19 @@ impl TreeItem for FormNode {
         let indent = "  ".repeat(depth);
         let text = format!("{}{}", indent, self.metadata.name);
 
-        Element::styled_text(Line::from(Span::styled(
+        let mut builder = Element::styled_text(Line::from(Span::styled(
             text,
             if is_selected {
                 Style::default().fg(theme.lavender)
             } else {
                 Style::default().fg(theme.text)
             },
-        ))).build()
+        )));
+
+        if is_selected {
+            builder = builder.background(Style::default().bg(theme.surface0));
+        }
+
+        builder.build()
     }
 }
