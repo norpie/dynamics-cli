@@ -121,9 +121,9 @@ impl App for LoadingScreen {
                 });
 
                 if all_done && state.countdown_ticks.is_none() {
-                    // Start countdown: 1000ms / 80ms per tick = 12.5 ticks, round to 13
                     log::info!("✓ LoadingScreen - all tasks complete, starting countdown");
-                    state.countdown_ticks = Some(13);
+                    // Start countdown: 80ms per tick
+                    state.countdown_ticks = Some(1);
                 }
 
                 Command::None
