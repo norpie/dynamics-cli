@@ -292,9 +292,25 @@ impl App for MigrationComparisonSelectApp {
                 Command::None
             }
             Msg::SelectComparison => {
-                if let Some(_selected_idx) = state.list_state.selected() {
-                    // TODO: Navigate to comparison detail app
-                    log::info!("Selected comparison");
+                log::info!("SelectComparison triggered - list size: {}, selected: {:?}",
+                    state.comparisons.len(), state.list_state.selected());
+                if let Some(selected_idx) = state.list_state.selected() {
+                    if let Some(comparison) = state.comparisons.get(selected_idx) {
+                        log::info!("Opening comparison: {} -> {}",
+                            comparison.source_entity, comparison.target_entity);
+                        let params = super::EntityComparisonParams {
+                            migration_name: state.migration_name.clone().unwrap_or_default(),
+                            source_env: state.source_env.clone().unwrap_or_default(),
+                            target_env: state.target_env.clone().unwrap_or_default(),
+                            source_entity: comparison.source_entity.clone(),
+                            target_entity: comparison.target_entity.clone(),
+                        };
+                        return Command::start_app(AppId::EntityComparison, params);
+                    } else {
+                        log::warn!("Selected index {} out of bounds", selected_idx);
+                    }
+                } else {
+                    log::warn!("No comparison selected");
                 }
                 Command::None
             }
@@ -494,6 +510,7 @@ impl App for MigrationComparisonSelectApp {
                 theme,
             )
             .on_navigate(Msg::ListNavigate)
+            .on_activate(|_| Msg::SelectComparison)
             .build()
         };
 

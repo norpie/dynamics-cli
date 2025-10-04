@@ -103,6 +103,7 @@ pub enum AppId {
     Settings,
     MigrationEnvironment,
     MigrationComparisonSelect,
+    EntityComparison,
 }
 
 impl<Msg> Command<Msg> {
