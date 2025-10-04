@@ -20,6 +20,7 @@ use ratatui::{
 use std::collections::HashMap;
 use crate::{col, row, use_constraints};
 use super::{Msg, Side, ExamplesState, ActiveTab, FetchType, fetch_with_cache, extract_relationships};
+use super::tree_builder::build_tree_items;
 
 pub struct EntityComparisonApp;
 
@@ -44,9 +45,15 @@ pub struct State {
     prefix_mappings: HashMap<String, String>, // source_prefix -> target_prefix
     hide_matched: bool,
 
-    // Tree UI state
-    source_tree_state: TreeState,
-    target_tree_state: TreeState,
+    // Tree UI state - one tree state per tab per side
+    source_fields_tree: TreeState,
+    source_relationships_tree: TreeState,
+    source_views_tree: TreeState,
+    source_forms_tree: TreeState,
+    target_fields_tree: TreeState,
+    target_relationships_tree: TreeState,
+    target_views_tree: TreeState,
+    target_forms_tree: TreeState,
     focused_side: Side,
 
     // Examples
@@ -78,6 +85,28 @@ impl Default for EntityComparisonParams {
 
 impl crate::tui::AppState for State {}
 
+impl State {
+    /// Get the appropriate source tree state for the active tab
+    fn source_tree_for_tab(&mut self) -> &mut TreeState {
+        match self.active_tab {
+            ActiveTab::Fields => &mut self.source_fields_tree,
+            ActiveTab::Relationships => &mut self.source_relationships_tree,
+            ActiveTab::Views => &mut self.source_views_tree,
+            ActiveTab::Forms => &mut self.source_forms_tree,
+        }
+    }
+
+    /// Get the appropriate target tree state for the active tab
+    fn target_tree_for_tab(&mut self) -> &mut TreeState {
+        match self.active_tab {
+            ActiveTab::Fields => &mut self.target_fields_tree,
+            ActiveTab::Relationships => &mut self.target_relationships_tree,
+            ActiveTab::Views => &mut self.target_views_tree,
+            ActiveTab::Forms => &mut self.target_forms_tree,
+        }
+    }
+}
+
 impl App for EntityComparisonApp {
     type State = State;
     type Msg = Msg;
@@ -96,8 +125,14 @@ impl App for EntityComparisonApp {
             field_mappings: HashMap::new(),
             prefix_mappings: HashMap::new(),
             hide_matched: false,
-            source_tree_state: TreeState::new(),
-            target_tree_state: TreeState::new(),
+            source_fields_tree: TreeState::new(),
+            source_relationships_tree: TreeState::new(),
+            source_views_tree: TreeState::new(),
+            source_forms_tree: TreeState::new(),
+            target_fields_tree: TreeState::new(),
+            target_relationships_tree: TreeState::new(),
+            target_views_tree: TreeState::new(),
+            target_forms_tree: TreeState::new(),
             focused_side: Side::Source,
             examples: ExamplesState::new(),
             show_back_confirmation: false,
@@ -457,22 +492,46 @@ impl App for EntityComparisonApp {
 fn render_main_layout(state: &mut State, theme: &Theme) -> Element<Msg> {
     use_constraints!();
 
+    // Build tree items for the active tab from metadata
+    let active_tab = state.active_tab;
+    let source_items = if let Resource::Success(ref metadata) = state.source_metadata {
+        build_tree_items(metadata, active_tab)
+    } else {
+        vec![]
+    };
+
+    let target_items = if let Resource::Success(ref metadata) = state.target_metadata {
+        build_tree_items(metadata, active_tab)
+    } else {
+        vec![]
+    };
+
+    // Cache entity names before borrowing tree states
+    let source_entity_name = state.source_entity.clone();
+    let target_entity_name = state.target_entity.clone();
+
+    // Get the appropriate tree state for the active tab based on which side
+    let (source_tree_state, target_tree_state) = match active_tab {
+        ActiveTab::Fields => (&mut state.source_fields_tree, &mut state.target_fields_tree),
+        ActiveTab::Relationships => (&mut state.source_relationships_tree, &mut state.target_relationships_tree),
+        ActiveTab::Views => (&mut state.source_views_tree, &mut state.target_views_tree),
+        ActiveTab::Forms => (&mut state.source_forms_tree, &mut state.target_forms_tree),
+    };
+
     // Source panel with tree
-    let source_items: Vec<super::tree_items::FieldNode> = vec![];
     let source_panel = Element::panel(
-        Element::tree("source_tree", &source_items, &mut state.source_tree_state, theme)
+        Element::tree("source_tree", &source_items, source_tree_state, theme)
             .build()
     )
-    .title(format!("Source: {}", state.source_entity))
+    .title(format!("Source: {}", source_entity_name))
     .build();
 
     // Target panel with tree
-    let target_items: Vec<super::tree_items::FieldNode> = vec![];
     let target_panel = Element::panel(
-        Element::tree("target_tree", &target_items, &mut state.target_tree_state, theme)
+        Element::tree("target_tree", &target_items, target_tree_state, theme)
             .build()
     )
-    .title(format!("Target: {}", state.target_entity))
+    .title(format!("Target: {}", target_entity_name))
     .build();
 
     // Side-by-side layout

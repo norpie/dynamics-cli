@@ -2,6 +2,7 @@ mod app;
 mod models;
 mod tree_items;
 mod fetch;
+mod tree_builder;
 
 pub use app::{EntityComparisonApp, EntityComparisonParams, State as EntityComparisonState};
 pub use models::*;
