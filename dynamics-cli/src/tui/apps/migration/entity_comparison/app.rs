@@ -104,7 +104,7 @@ impl App for EntityComparisonApp {
         };
 
         // TODO: Load metadata from API
-        (state, Command::None)
+        (state, Command::set_focus("source_tree".into()))
     }
 
     fn update(state: &mut Self::State, msg: Self::Msg) -> Command<Self::Msg> {
@@ -132,16 +132,20 @@ impl App for EntityComparisonApp {
     fn view(state: &mut Self::State, theme: &Theme) -> LayeredView<Self::Msg> {
         use_constraints!();
 
-        // Empty source panel
+        // Source panel with tree
+        let source_items: Vec<super::tree_items::FieldNode> = vec![];
         let source_panel = Element::panel(
-            Element::text("")
+            Element::tree("source_tree", &source_items, &mut state.source_tree_state, theme)
+                .build()
         )
         .title(format!("Source: {}", state.source_entity))
         .build();
 
-        // Empty target panel
+        // Target panel with tree
+        let target_items: Vec<super::tree_items::FieldNode> = vec![];
         let target_panel = Element::panel(
-            Element::text("")
+            Element::tree("target_tree", &target_items, &mut state.target_tree_state, theme)
+                .build()
         )
         .title(format!("Target: {}", state.target_entity))
         .build();
