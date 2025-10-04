@@ -10,6 +10,30 @@ use crate::tui::{AppId, Runtime, AppRuntime, apps::{AppLauncher, LoadingScreen, 
 use crate::tui::element::{ColumnBuilder, RowBuilder, FocusId};
 use crate::tui::widgets::ScrollableState;
 
+/// Group key bindings by description, combining keys with the same description into aliases
+fn group_bindings_by_description(bindings: &[(KeyBinding, &str)]) -> Vec<(String, String)> {
+    let mut grouped: HashMap<&str, Vec<String>> = HashMap::new();
+
+    for (key, desc) in bindings {
+        grouped.entry(*desc)
+            .or_insert_with(Vec::new)
+            .push(key.to_string());
+    }
+
+    let mut result: Vec<(String, String)> = grouped.into_iter()
+        .map(|(desc, mut keys)| {
+            // Sort keys to ensure consistent ordering (shorter keys first)
+            keys.sort_by_key(|k| k.len());
+            (keys.join("/"), desc.to_string())
+        })
+        .collect();
+
+    // Sort by the first key in each group for consistent ordering
+    result.sort_by(|a, b| a.0.cmp(&b.0));
+
+    result
+}
+
 /// Messages for global UI elements (help menu, quit modal, etc.)
 #[derive(Clone)]
 enum GlobalMsg {
@@ -110,7 +134,7 @@ impl MultiAppRuntime {
                 // Calculate content height (same as in render_help_menu)
                 let global_bindings = vec![
                     (KeyBinding::new(KeyCode::F(1)), "Toggle help menu"),
-                    (KeyBinding::ctrl(KeyCode::Char(' ')), "Go to app launcher (hold Ctrl)"),
+                    (KeyBinding::ctrl(KeyCode::Char(' ')), "Go to app launcher"),
                     (KeyBinding::new(KeyCode::Esc), "Close help menu"),
                 ];
 
@@ -126,13 +150,30 @@ impl MultiAppRuntime {
                     .expect("Active app not found");
 
                 let other_apps: Vec<_> = all_app_bindings.iter()
-                    .filter(|(id, _, _)| *id != self.active_app)
+                    .filter(|(id, _, bindings)| *id != self.active_app && !bindings.is_empty())
                     .collect();
 
+                // Calculate total items using grouped bindings
+                let global_grouped = group_bindings_by_description(&global_bindings);
+                let current_bindings_ref: Vec<(KeyBinding, &str)> = current_app_data.2.iter()
+                    .map(|(key, desc)| (*key, desc.as_str()))
+                    .collect();
+                let current_grouped = group_bindings_by_description(&current_bindings_ref);
+
+                let other_apps_grouped_count: usize = other_apps.iter()
+                    .map(|(_, _, bindings)| {
+                        let bindings_ref: Vec<(KeyBinding, &str)> = bindings.iter()
+                            .map(|(key, desc)| (*key, desc.as_str()))
+                            .collect();
+                        let grouped = group_bindings_by_description(&bindings_ref);
+                        2 + grouped.len() // section header + bindings
+                    })
+                    .sum();
+
                 let total_items = 2 + // title + blank
-                    (if !global_bindings.is_empty() { 2 + global_bindings.len() } else { 0 }) +
-                    2 + current_app_data.2.len() +
-                    other_apps.iter().map(|(_, _, bindings)| 2 + bindings.len()).sum::<usize>() +
+                    (if !global_grouped.is_empty() { 2 + global_grouped.len() } else { 0 }) +
+                    (if !current_grouped.is_empty() { 2 + current_grouped.len() } else { 0 }) +
+                    other_apps_grouped_count +
                     2; // blank + footer
 
                 // Get viewport height from last render (approximation: 20 lines for modal)
@@ -401,7 +442,7 @@ impl MultiAppRuntime {
         // Build help content directly as Element<GlobalMsg>
         let global_bindings = vec![
             (KeyBinding::new(KeyCode::F(1)), "Toggle help menu"),
-            (KeyBinding::ctrl(KeyCode::Char(' ')), "Go to app launcher (hold Ctrl)"),
+            (KeyBinding::ctrl(KeyCode::Char(' ')), "Go to app launcher"),
             (KeyBinding::new(KeyCode::Esc), "Close help menu"),
         ];
 
@@ -418,8 +459,34 @@ impl MultiAppRuntime {
             .expect("Active app not found");
 
         let other_apps: Vec<_> = all_app_bindings.iter()
-            .filter(|(id, _, _)| *id != self.active_app)
+            .filter(|(id, _, bindings)| *id != self.active_app && !bindings.is_empty())
             .collect();
+
+        // Pre-group all bindings to calculate max width across entire help menu
+        let global_grouped = group_bindings_by_description(&global_bindings);
+
+        let current_bindings_ref: Vec<(KeyBinding, &str)> = current_app_data.2.iter()
+            .map(|(key, desc)| (*key, desc.as_str()))
+            .collect();
+        let current_grouped = group_bindings_by_description(&current_bindings_ref);
+
+        let other_apps_grouped: Vec<(AppId, &'static str, Vec<(String, String)>)> = other_apps.iter()
+            .map(|(id, title, bindings)| {
+                let bindings_ref: Vec<(KeyBinding, &str)> = bindings.iter()
+                    .map(|(key, desc)| (*key, desc.as_str()))
+                    .collect();
+                let grouped = group_bindings_by_description(&bindings_ref);
+                (*id, *title, grouped)
+            })
+            .collect();
+
+        // Calculate max key width across ALL sections
+        let max_key_width = global_grouped.iter()
+            .chain(current_grouped.iter())
+            .chain(other_apps_grouped.iter().flat_map(|(_, _, grouped)| grouped.iter()))
+            .map(|(keys, _)| keys.len())
+            .max()
+            .unwrap_or(0);
 
         // Build help content
         let mut help_items: Vec<Element<GlobalMsg>> = vec![
@@ -430,48 +497,53 @@ impl MultiAppRuntime {
         ];
 
         // Global section
-        if !global_bindings.is_empty() {
+        if !global_grouped.is_empty() {
             help_items.push(Element::styled_text(Line::from(vec![
                 Span::styled("▼ Global", Style::default().fg(theme.peach).bold())
             ])).build());
 
-            for (key, desc) in &global_bindings {
+            for (keys, desc) in global_grouped {
+                let padding = " ".repeat(max_key_width - keys.len());
                 let line = Line::from(vec![
-                    Span::styled(format!("  {:?}", key), Style::default().fg(theme.mauve)),
+                    Span::styled(format!("  {}{}", keys, padding), Style::default().fg(theme.mauve)),
                     Span::raw("  "),
-                    Span::styled(*desc, Style::default().fg(theme.text)),
+                    Span::styled(desc, Style::default().fg(theme.text)),
                 ]);
                 help_items.push(Element::styled_text(line).build());
             }
             help_items.push(Element::text(""));
         }
 
-        // Current app section
-        help_items.push(Element::styled_text(Line::from(vec![
-            Span::styled(format!("▼ {}", current_app_data.1), Style::default().fg(theme.blue).bold())
-        ])).build());
+        // Current app section (only show if it has bindings)
+        if !current_grouped.is_empty() {
+            help_items.push(Element::styled_text(Line::from(vec![
+                Span::styled(format!("▼ {}", current_app_data.1), Style::default().fg(theme.blue).bold())
+            ])).build());
 
-        for (key, desc) in &current_app_data.2 {
-            let line = Line::from(vec![
-                Span::styled(format!("  {:?}", key), Style::default().fg(theme.green)),
-                Span::raw("  "),
-                Span::styled(desc.clone(), Style::default().fg(theme.text)),
-            ]);
-            help_items.push(Element::styled_text(line).build());
+            for (keys, desc) in current_grouped {
+                let padding = " ".repeat(max_key_width - keys.len());
+                let line = Line::from(vec![
+                    Span::styled(format!("  {}{}", keys, padding), Style::default().fg(theme.green)),
+                    Span::raw("  "),
+                    Span::styled(desc, Style::default().fg(theme.text)),
+                ]);
+                help_items.push(Element::styled_text(line).build());
+            }
+            help_items.push(Element::text(""));
         }
-        help_items.push(Element::text(""));
 
         // Other apps sections
-        for (_, app_title, app_bindings) in &other_apps {
+        for (_, app_title, grouped) in other_apps_grouped {
             help_items.push(Element::styled_text(Line::from(vec![
                 Span::styled(format!("▼ {}", app_title), Style::default().fg(theme.overlay1).bold())
             ])).build());
 
-            for (key, desc) in app_bindings {
+            for (keys, desc) in grouped {
+                let padding = " ".repeat(max_key_width - keys.len());
                 let line = Line::from(vec![
-                    Span::styled(format!("  {:?}", key), Style::default().fg(theme.overlay2)),
+                    Span::styled(format!("  {}{}", keys, padding), Style::default().fg(theme.overlay2)),
                     Span::raw("  "),
-                    Span::styled(desc.clone(), Style::default().fg(theme.subtext0)),
+                    Span::styled(desc, Style::default().fg(theme.subtext0)),
                 ]);
                 help_items.push(Element::styled_text(line).build());
             }
