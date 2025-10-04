@@ -24,14 +24,14 @@ impl Default for State {
         Self {
             apps: vec![
                 AppInfo {
-                    id: AppId::Settings,
-                    name: "Settings".to_string(),
-                    description: "Configure application options".to_string(),
-                },
-                AppInfo {
                     id: AppId::MigrationEnvironment,
                     name: "Migration Environments".to_string(),
                     description: "Manage Dynamics 365 migrations".to_string(),
+                },
+                AppInfo {
+                    id: AppId::Settings,
+                    name: "Settings".to_string(),
+                    description: "Configure application options".to_string(),
                 },
             ],
             list_state: ListState::with_selection(),
