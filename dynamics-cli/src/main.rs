@@ -27,7 +27,7 @@ pub fn client_manager() -> &'static api::ClientManager {
 static CONFIG: OnceCell<config::Config> = OnceCell::new();
 
 /// Get a reference to the global Config
-pub fn config() -> &'static config::Config {
+pub fn global_config() -> &'static config::Config {
     CONFIG.get().expect("Config not initialized")
 }
 

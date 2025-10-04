@@ -10,9 +10,9 @@ keywords = ["dynamics", "cli", "microsoft", "crm", "dynamics365"]
 categories = ["command-line-utilities"]
 readme = "../README.md"
 
-[lib]
-name = "dynamics_cli"
-path = "src/lib.rs"
+# [lib]
+# name = "dynamics_cli"
+# path = "src/lib.rs"
 
 [[bin]]
 name = "dynamics-cli"

@@ -181,7 +181,7 @@ impl App for MigrationComparisonSelectApp {
                         format!("Loading source entities ({})", metadata.source_env),
                         async move {
                             use crate::api::metadata::parse_entity_list;
-                            let config = crate::config();
+                            let config = crate::global_config();
                             let manager = crate::client_manager();
 
                             match config.get_entity_cache(&metadata.source_env, 24).await {
@@ -209,7 +209,7 @@ impl App for MigrationComparisonSelectApp {
                         format!("Loading target entities ({})", metadata.target_env),
                         async move {
                             use crate::api::metadata::parse_entity_list;
-                            let config = crate::config();
+                            let config = crate::global_config();
                             let manager = crate::client_manager();
 
                             match config.get_entity_cache(&metadata.target_env, 24).await {
@@ -255,7 +255,7 @@ impl App for MigrationComparisonSelectApp {
                     let migration_name = state.migration_name.clone().unwrap();
                     Command::perform(
                         async move {
-                            let config = crate::config();
+                            let config = crate::global_config();
                             config.get_comparisons(&migration_name).await.map_err(|e| e.to_string())
                         },
                         Msg::ComparisonsLoaded,
@@ -339,7 +339,7 @@ impl App for MigrationComparisonSelectApp {
 
                         Command::perform(
                             async move {
-                                let config = crate::config();
+                                let config = crate::global_config();
                                 let comparison = SavedComparison {
                                     id: 0, // Will be assigned by database
                                     name,
@@ -393,7 +393,7 @@ impl App for MigrationComparisonSelectApp {
                     // Async delete from database
                     Command::perform(
                         async move {
-                            let config = crate::config();
+                            let config = crate::global_config();
                             config.delete_comparison(id).await.map_err(|e| e.to_string())
                         },
                         Msg::ComparisonDeleted
@@ -444,7 +444,7 @@ impl App for MigrationComparisonSelectApp {
 
                 Command::perform(
                     async move {
-                        let config = crate::config();
+                        let config = crate::global_config();
                         config.rename_comparison(id, &new_name).await
                             .map_err(|e| e.to_string())
                     },
@@ -785,7 +785,7 @@ impl App for MigrationComparisonSelectApp {
 fn reload_comparisons(migration_name: String) -> Command<Msg> {
     Command::perform(
         async move {
-            let config = crate::config();
+            let config = crate::global_config();
             config.get_comparisons(&migration_name).await.map_err(|e| e.to_string())
         },
         Msg::ComparisonsLoaded

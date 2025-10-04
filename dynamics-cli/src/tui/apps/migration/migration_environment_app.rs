@@ -126,7 +126,7 @@ impl App for MigrationEnvironmentApp {
         let state = State::default();
         let cmd = Command::perform(
             async {
-                let config = crate::config();
+                let config = crate::global_config();
                 config.list_migrations().await
                     .map_err(|e| e.to_string())
             },
@@ -181,7 +181,7 @@ impl App for MigrationEnvironmentApp {
                 // Load available environments
                 Command::perform(
                     async {
-                        let config = crate::config();
+                        let config = crate::global_config();
                         config.list_environments().await
                             .map_err(|e| e.to_string())
                     },
@@ -224,7 +224,7 @@ impl App for MigrationEnvironmentApp {
 
                         Command::perform(
                             async move {
-                                let config = crate::config();
+                                let config = crate::global_config();
                                 let migration = SavedMigration {
                                     name,
                                     source_env: source,
@@ -261,7 +261,7 @@ impl App for MigrationEnvironmentApp {
                     state.show_delete_confirm = false;
                     Command::perform(
                         async move {
-                            let config = crate::config();
+                            let config = crate::global_config();
                             config.delete_migration(&name).await.map_err(|e| e.to_string())
                         },
                         Msg::MigrationDeleted
@@ -311,7 +311,7 @@ impl App for MigrationEnvironmentApp {
 
                 Command::perform(
                     async move {
-                        let config = crate::config();
+                        let config = crate::global_config();
                         // Get existing migration
                         let migration = config.get_migration(&old_name).await
                             .map_err(|e| e.to_string())?
@@ -639,7 +639,7 @@ impl State {
 fn reload_migrations() -> Command<Msg> {
     Command::perform(
         async {
-            let config = crate::config();
+            let config = crate::global_config();
             config.list_migrations().await.map_err(|e| e.to_string())
         },
         Msg::MigrationsLoaded

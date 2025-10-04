@@ -10,17 +10,12 @@ use super::models::{Environment, CredentialSet, TokenInfo};
 pub struct ClientManager {
     clients: Arc<RwLock<HashMap<String, DynamicsClient>>>,
     auth_manager: AuthManager,
-    config: crate::config::Config,
     environments: Arc<RwLock<HashMap<String, Environment>>>,
     current_env: Arc<RwLock<Option<String>>>,
     tokens: Arc<RwLock<HashMap<String, TokenInfo>>>,
 }
 
 impl ClientManager {
-    /// Get reference to the internal config
-    pub fn config(&self) -> &crate::config::Config {
-        &self.config
-    }
     pub async fn from_env() -> anyhow::Result<Self> {
         // Load .env file if it exists
         dotenvy::dotenv().ok();
@@ -31,11 +26,9 @@ impl ClientManager {
         let client_id = std::env::var("DYNAMICS_CLIENT_ID")?;
         let client_secret = std::env::var("DYNAMICS_CLIENT_SECRET")?;
 
-        // Create test config (in-memory)
-        let config = crate::config::Config::new_test().await?;
         let mut auth_manager = AuthManager::new();
 
-        // Add test credentials to both config and auth manager
+        // Add test credentials to auth manager
         let credentials = CredentialSet::UsernamePassword {
             username,
             password,
@@ -43,8 +36,6 @@ impl ClientManager {
             client_secret,
         };
 
-        // Save to test config
-        config.add_credentials(".env".to_string(), credentials.clone()).await?;
         auth_manager.add_credentials(".env".to_string(), credentials);
 
         // Add test environment
@@ -54,26 +45,21 @@ impl ClientManager {
             credentials_ref: ".env".to_string(),
         };
 
-        // Save to test config
-        config.add_environment(environment.clone()).await?;
-        config.set_current_environment(".env".to_string()).await?;
-
         let mut environments = HashMap::new();
         environments.insert(".env".to_string(), environment);
 
         Ok(Self {
             clients: Arc::new(RwLock::new(HashMap::new())),
             auth_manager,
-            config,
             environments: Arc::new(RwLock::new(environments)),
             current_env: Arc::new(RwLock::new(Some(".env".to_string()))),
             tokens: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
-    /// Create a new ClientManager from the config database
+    /// Create a new ClientManager from the global config
     pub async fn new() -> anyhow::Result<Self> {
-        let config = crate::config::Config::load().await?;
+        let config = crate::global_config();
         let mut auth_manager = AuthManager::new();
         let mut environments = HashMap::new();
 
@@ -117,7 +103,6 @@ impl ClientManager {
         Ok(Self {
             clients: Arc::new(RwLock::new(HashMap::new())),
             auth_manager,
-            config,
             environments: Arc::new(RwLock::new(environments)),
             current_env: Arc::new(RwLock::new(current_env)),
             tokens: Arc::new(RwLock::new(tokens)),
@@ -146,7 +131,7 @@ impl ClientManager {
             self.tokens.write().await.insert(current_env.clone(), token.clone());
 
             // Save to database for persistence
-            self.config.save_token(current_env, token).await?;
+            crate::global_config().save_token(current_env, token).await?;
         }
 
         Ok(())
@@ -155,7 +140,7 @@ impl ClientManager {
     // Environment management
     pub async fn add_environment(&self, name: String, environment: Environment) -> anyhow::Result<()> {
         // Save to config database
-        self.config.add_environment(environment.clone()).await?;
+        crate::global_config().add_environment(environment.clone()).await?;
 
         // Update local cache
         self.environments.write().await.insert(name, environment);
@@ -164,7 +149,7 @@ impl ClientManager {
 
     pub async fn add_credentials(&self, name: String, credentials: CredentialSet) -> anyhow::Result<()> {
         // Save to config database
-        self.config.add_credentials(name.clone(), credentials.clone()).await?;
+        crate::global_config().add_credentials(name.clone(), credentials.clone()).await?;
 
         // Update auth manager
         self.auth_manager.add_credentials(name, credentials).await;
@@ -183,13 +168,13 @@ impl ClientManager {
 
     /// List all available credentials
     pub async fn list_credentials(&self) -> anyhow::Result<Vec<String>> {
-        self.config.list_credentials().await
+        crate::global_config().list_credentials().await
     }
 
     /// Remove credentials
     pub async fn remove_credentials(&self, name: &str) -> anyhow::Result<()> {
         // Remove from config database
-        self.config.delete_credentials(name).await?;
+        crate::global_config().delete_credentials(name).await?;
         // Remove from auth manager
         self.auth_manager.delete_credentials(name).await?;
         Ok(())
@@ -198,7 +183,7 @@ impl ClientManager {
     /// Rename credentials
     pub async fn rename_credentials(&self, old_name: &str, new_name: String) -> anyhow::Result<()> {
         // Rename in config database
-        self.config.rename_credentials(old_name, new_name.clone()).await?;
+        crate::global_config().rename_credentials(old_name, new_name.clone()).await?;
         // Rename in auth manager
         self.auth_manager.rename_credentials(old_name, new_name).await?;
         Ok(())
@@ -206,7 +191,7 @@ impl ClientManager {
 
     /// Get credentials by name
     pub async fn get_credentials(&self, name: &str) -> anyhow::Result<Option<CredentialSet>> {
-        self.config.get_credentials(name).await
+        crate::global_config().get_credentials(name).await
     }
 
     /// Add environment
@@ -214,7 +199,7 @@ impl ClientManager {
         // Save to config database
         let mut api_env = environment.clone();
         api_env.name = name.clone(); // Ensure name is set
-        self.config.add_environment(api_env).await?;
+        crate::global_config().add_environment(api_env).await?;
         // Update local cache
         self.environments.write().await.insert(name, environment);
         Ok(())
@@ -223,7 +208,7 @@ impl ClientManager {
     /// Remove environment from config
     pub async fn remove_environment_from_config(&self, name: &str) -> anyhow::Result<()> {
         // Remove from config database
-        self.config.delete_environment(name).await?;
+        crate::global_config().delete_environment(name).await?;
         // Remove from local cache
         self.environments.write().await.remove(name);
         Ok(())
@@ -232,7 +217,7 @@ impl ClientManager {
     /// Rename environment in config
     pub async fn rename_environment_in_config(&self, old_name: &str, new_name: String) -> anyhow::Result<()> {
         // Rename in config database
-        self.config.rename_environment(old_name, new_name.clone()).await?;
+        crate::global_config().rename_environment(old_name, new_name.clone()).await?;
         // Update local cache
         let mut environments = self.environments.write().await;
         if let Some(env) = environments.remove(old_name) {
@@ -243,7 +228,7 @@ impl ClientManager {
 
     /// Set current environment in config
     pub async fn set_current_environment_in_config(&self, name: String) -> anyhow::Result<()> {
-        self.config.set_current_environment(name.clone()).await?;
+        crate::global_config().set_current_environment(name.clone()).await?;
         *self.current_env.write().await = Some(name);
         Ok(())
     }
@@ -252,9 +237,9 @@ impl ClientManager {
     pub async fn set_environment_credentials(&self, env_name: &str, credentials_name: String) -> anyhow::Result<()> {
         // This functionality might need to be implemented in Config
         // For now, we'll need to get the environment, update it, and save it back
-        if let Some(mut api_env) = self.config.get_environment(env_name).await? {
+        if let Some(mut api_env) = crate::global_config().get_environment(env_name).await? {
             api_env.credentials_ref = credentials_name;
-            self.config.add_environment(api_env).await // This overwrites the existing one
+            crate::global_config().add_environment(api_env).await // This overwrites the existing one
         } else {
             anyhow::bail!("Environment '{}' not found", env_name)
         }
@@ -262,12 +247,12 @@ impl ClientManager {
 
     /// Get environment by name
     pub async fn get_environment(&self, name: &str) -> anyhow::Result<Option<Environment>> {
-        Ok(self.config.get_environment(name).await?)
+        Ok(crate::global_config().get_environment(name).await?)
     }
 
     /// Get current environment name (returns String for compatibility)
     pub async fn get_current_environment_name(&self) -> anyhow::Result<Option<String>> {
-        self.config.get_current_environment().await
+        crate::global_config().get_current_environment().await
     }
 
     pub async fn try_select_env(&self, name: &str) -> anyhow::Result<Environment> {
@@ -334,7 +319,7 @@ impl ClientManager {
         }
 
         // 2. Check database for persisted token
-        if let Some(token) = self.config.get_token(env_name).await? {
+        if let Some(token) = crate::global_config().get_token(env_name).await? {
             if !Self::is_expired(&token) {
                 log::debug!("Found valid token in database for environment: {}", env_name);
                 // Update memory cache
@@ -343,7 +328,7 @@ impl ClientManager {
             } else {
                 log::debug!("Database token expired for environment: {}", env_name);
                 // Clean up expired token
-                let _ = self.config.delete_token(env_name).await;
+                let _ = crate::global_config().delete_token(env_name).await;
             }
         }
 
@@ -371,7 +356,7 @@ impl ClientManager {
             self.tokens.write().await.insert(env_name.to_string(), token.clone());
 
             // Save to database for persistence
-            self.config.save_token(env_name.to_string(), token).await?;
+            crate::global_config().save_token(env_name.to_string(), token).await?;
 
             log::info!("Successfully authenticated and cached token for environment: {}", env_name);
         }
