@@ -501,4 +501,228 @@ impl DynamicsClient {
             anyhow::bail!("Metadata fetch failed with status {}: {}", status, error_text)
         }
     }
+
+    /// Fetch entity field definitions from EntityDefinitions endpoint
+    pub async fn fetch_entity_fields(&self, entity_name: &str) -> anyhow::Result<Vec<super::metadata::FieldMetadata>> {
+        let url = format!(
+            "{}/{}/EntityDefinitions(LogicalName='{}')/Attributes",
+            self.base_url,
+            constants::api_path(),
+            entity_name
+        );
+
+        // Apply rate limiting before making the request
+        self.apply_rate_limiting().await?;
+
+        let response = self.retry_policy.execute(|| async {
+            self.http_client
+                .get(&url)
+                .bearer_auth(&self.access_token)
+                .header("Accept", headers::CONTENT_TYPE_JSON)
+                .header("OData-Version", headers::ODATA_VERSION)
+                .send()
+                .await
+        }).await?;
+
+        let status = response.status();
+        if status.is_success() {
+            let json: Value = response.json().await?;
+            let attributes = json["value"].as_array()
+                .ok_or_else(|| anyhow::anyhow!("Expected 'value' array in response"))?;
+
+            let fields = attributes.iter()
+                .filter_map(|attr| {
+                    let logical_name = attr["LogicalName"].as_str()?.to_string();
+                    let display_name = attr["DisplayName"]["UserLocalizedLabel"]["Label"].as_str()
+                        .map(|s| s.to_string());
+                    let is_required = attr["RequiredLevel"]["Value"].as_str() == Some("ApplicationRequired")
+                        || attr["RequiredLevel"]["Value"].as_str() == Some("SystemRequired");
+                    let is_primary_key = attr["IsPrimaryId"].as_bool().unwrap_or(false);
+                    let max_length = attr["MaxLength"].as_i64().map(|l| l as i32);
+
+                    let field_type = match attr["AttributeType"].as_str()? {
+                        "String" => super::metadata::FieldType::String,
+                        "Integer" => super::metadata::FieldType::Integer,
+                        "Decimal" | "Double" => super::metadata::FieldType::Decimal,
+                        "Boolean" => super::metadata::FieldType::Boolean,
+                        "DateTime" => super::metadata::FieldType::DateTime,
+                        "Lookup" | "Customer" | "Owner" => {
+                            let related_entity = attr["Targets"].as_array()
+                                .and_then(|targets| targets.first())
+                                .and_then(|t| t.as_str())
+                                .map(|s| s.to_string());
+                            super::metadata::FieldType::Lookup
+                        },
+                        "Picklist" | "State" | "Status" => super::metadata::FieldType::OptionSet,
+                        "Money" => super::metadata::FieldType::Money,
+                        "Memo" => super::metadata::FieldType::Memo,
+                        "Uniqueidentifier" => super::metadata::FieldType::UniqueIdentifier,
+                        other => super::metadata::FieldType::Other(other.to_string()),
+                    };
+
+                    let related_entity = if matches!(field_type, super::metadata::FieldType::Lookup) {
+                        attr["Targets"].as_array()
+                            .and_then(|targets| targets.first())
+                            .and_then(|t| t.as_str())
+                            .map(|s| s.to_string())
+                    } else {
+                        None
+                    };
+
+                    Some(super::metadata::FieldMetadata {
+                        logical_name,
+                        display_name,
+                        field_type,
+                        is_required,
+                        is_primary_key,
+                        max_length,
+                        related_entity,
+                    })
+                })
+                .collect();
+
+            Ok(fields)
+        } else {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            anyhow::bail!("Field metadata fetch failed with status {}: {}", status, error_text)
+        }
+    }
+
+    /// Fetch entity forms from systemforms endpoint
+    pub async fn fetch_entity_forms(&self, entity_name: &str) -> anyhow::Result<Vec<super::metadata::FormMetadata>> {
+        let url = format!(
+            "{}/{}/systemforms?$filter=objecttypecode eq '{}'&$select=formid,name,type",
+            self.base_url,
+            constants::api_path(),
+            entity_name
+        );
+
+        // Apply rate limiting before making the request
+        self.apply_rate_limiting().await?;
+
+        let response = self.retry_policy.execute(|| async {
+            self.http_client
+                .get(&url)
+                .bearer_auth(&self.access_token)
+                .header("Accept", headers::CONTENT_TYPE_JSON)
+                .header("OData-Version", headers::ODATA_VERSION)
+                .send()
+                .await
+        }).await?;
+
+        let status = response.status();
+        if status.is_success() {
+            let json: Value = response.json().await?;
+            let forms_array = json["value"].as_array()
+                .ok_or_else(|| anyhow::anyhow!("Expected 'value' array in response"))?;
+
+            let forms = forms_array.iter()
+                .filter_map(|form| {
+                    let id = form["formid"].as_str()?.to_string();
+                    let name = form["name"].as_str()?.to_string();
+                    let form_type = form["type"].as_i64()
+                        .map(|t| match t {
+                            2 => "Main".to_string(),
+                            5 => "Mobile".to_string(),
+                            6 => "Quick View".to_string(),
+                            7 => "Quick Create".to_string(),
+                            8 => "Dialog".to_string(),
+                            9 => "Task Flow".to_string(),
+                            11 => "Card".to_string(),
+                            12 => "Main - Interactive experience".to_string(),
+                            _ => format!("Type {}", t),
+                        })
+                        .unwrap_or_else(|| "Unknown".to_string());
+
+                    Some(super::metadata::FormMetadata {
+                        id,
+                        name,
+                        form_type,
+                    })
+                })
+                .collect();
+
+            Ok(forms)
+        } else {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            anyhow::bail!("Form metadata fetch failed with status {}: {}", status, error_text)
+        }
+    }
+
+    /// Fetch entity views from savedqueries endpoint
+    pub async fn fetch_entity_views(&self, entity_name: &str) -> anyhow::Result<Vec<super::metadata::ViewMetadata>> {
+        let url = format!(
+            "{}/{}/savedqueries?$filter=returnedtypecode eq '{}'&$select=savedqueryid,name,querytype,layoutxml",
+            self.base_url,
+            constants::api_path(),
+            entity_name
+        );
+
+        // Apply rate limiting before making the request
+        self.apply_rate_limiting().await?;
+
+        let response = self.retry_policy.execute(|| async {
+            self.http_client
+                .get(&url)
+                .bearer_auth(&self.access_token)
+                .header("Accept", headers::CONTENT_TYPE_JSON)
+                .header("OData-Version", headers::ODATA_VERSION)
+                .send()
+                .await
+        }).await?;
+
+        let status = response.status();
+        if status.is_success() {
+            let json: Value = response.json().await?;
+            let views_array = json["value"].as_array()
+                .ok_or_else(|| anyhow::anyhow!("Expected 'value' array in response"))?;
+
+            let views = views_array.iter()
+                .filter_map(|view| {
+                    let id = view["savedqueryid"].as_str()?.to_string();
+                    let name = view["name"].as_str()?.to_string();
+                    let view_type = view["querytype"].as_i64()
+                        .map(|t| match t {
+                            0 => "Public".to_string(),
+                            1 => "Advanced Find".to_string(),
+                            2 => "Associated".to_string(),
+                            4 => "Quick Find".to_string(),
+                            8 => "Lookup".to_string(),
+                            16 => "Main Application".to_string(),
+                            64 => "Offline".to_string(),
+                            128 => "Outlook".to_string(),
+                            256 => "Wizard".to_string(),
+                            _ => format!("Type {}", t),
+                        })
+                        .unwrap_or_else(|| "Unknown".to_string());
+
+                    // Parse layoutxml to extract columns (simplified - just extract attribute names)
+                    let columns = if let Some(layout_xml) = view["layoutxml"].as_str() {
+                        // Basic XML parsing to extract column names from <cell name="attributename" />
+                        let mut cols = Vec::new();
+                        for cap in regex::Regex::new(r#"name="([^"]+)""#).unwrap().captures_iter(layout_xml) {
+                            if let Some(name) = cap.get(1) {
+                                cols.push(name.as_str().to_string());
+                            }
+                        }
+                        cols
+                    } else {
+                        Vec::new()
+                    };
+
+                    Some(super::metadata::ViewMetadata {
+                        id,
+                        name,
+                        view_type,
+                        columns,
+                    })
+                })
+                .collect();
+
+            Ok(views)
+        } else {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            anyhow::bail!("View metadata fetch failed with status {}: {}", status, error_text)
+        }
+    }
 }
