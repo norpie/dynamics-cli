@@ -1,5 +1,5 @@
 use ratatui::{Frame, style::Style, widgets::{Block, Borders}, layout::{Rect, Constraint, Direction, Layout}};
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent};
 use crate::tui::{Element, Theme, LayoutConstraint};
 use crate::tui::element::FocusId;
 use crate::tui::command::DispatchTarget;
@@ -11,15 +11,15 @@ pub fn list_on_key<Msg: Clone + Send + 'static>(
     selected: Option<usize>,
     on_navigate: Option<fn(KeyCode) -> Msg>,
     on_activate: Option<fn(usize) -> Msg>,
-) -> Box<dyn Fn(KeyCode) -> DispatchTarget<Msg> + Send> {
-    Box::new(move |key| match key {
+) -> Box<dyn Fn(KeyEvent) -> DispatchTarget<Msg> + Send> {
+    Box::new(move |key_event| match key_event.code {
         // Navigation keys - handled by on_navigate callback
         KeyCode::Up | KeyCode::Down | KeyCode::PageUp | KeyCode::PageDown
         | KeyCode::Home | KeyCode::End => {
             if let Some(f) = on_navigate {
-                DispatchTarget::AppMsg(f(key))
+                DispatchTarget::AppMsg(f(key_event.code))
             } else {
-                DispatchTarget::WidgetEvent(Box::new(ListEvent::Navigate(key)))
+                DispatchTarget::WidgetEvent(Box::new(ListEvent::Navigate(key_event.code)))
             }
         }
         // Enter activates selected item

@@ -1,4 +1,4 @@
-use crossterm::event::KeyCode;
+use crossterm::event::KeyEvent;
 use ratatui::layout::Rect;
 use crate::tui::element::FocusId;
 use crate::tui::command::DispatchTarget;
@@ -7,7 +7,7 @@ use crate::tui::command::DispatchTarget;
 pub struct FocusableInfo<Msg> {
     pub id: FocusId,
     pub rect: Rect,
-    pub on_key: Box<dyn Fn(KeyCode) -> DispatchTarget<Msg> + Send>,
+    pub on_key: Box<dyn Fn(KeyEvent) -> DispatchTarget<Msg> + Send>,
     pub on_focus: Option<Msg>,
     pub on_blur: Option<Msg>,
     pub inside_panel: bool,  // True if this element is inside a Panel
@@ -203,11 +203,11 @@ impl<Msg: Clone> FocusRegistry<Msg> {
 
     /// Dispatch a key event to the focused element
     /// Returns Some(Msg) if the element handled the key and produced a message
-    pub fn dispatch_key(&self, focused_id: &FocusId, key: KeyCode) -> Option<Msg> {
+    pub fn dispatch_key(&self, focused_id: &FocusId, key_event: KeyEvent) -> Option<Msg> {
         use crate::tui::command::DispatchTarget;
 
         let focusable = self.find_in_active_layer(focused_id)?;
-        match (focusable.on_key)(key) {
+        match (focusable.on_key)(key_event) {
             DispatchTarget::AppMsg(msg) => Some(msg),
             DispatchTarget::WidgetEvent(_) => None, // Widget events not supported in global focus
             DispatchTarget::PassThrough => None,

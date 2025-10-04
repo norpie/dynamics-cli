@@ -1,5 +1,5 @@
 use ratatui::{Frame, style::{Style, Stylize}, widgets::Paragraph, layout::Rect};
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent};
 use crate::tui::{Element, Theme};
 use crate::tui::element::FocusId;
 use crate::tui::command::DispatchTarget;
@@ -10,8 +10,8 @@ use crate::tui::widgets::TextInputEvent;
 pub fn text_input_on_key<Msg: Clone + Send + 'static>(
     on_change: Option<fn(KeyCode) -> Msg>,
     on_submit: Option<Msg>,
-) -> Box<dyn Fn(KeyCode) -> DispatchTarget<Msg> + Send> {
-    Box::new(move |key| match key {
+) -> Box<dyn Fn(KeyEvent) -> DispatchTarget<Msg> + Send> {
+    Box::new(move |key_event| match key_event.code {
         KeyCode::Enter => {
             // Enter fires on_submit (app handles whether to also send on_change)
             if let Some(msg) = on_submit.clone() {
@@ -25,10 +25,10 @@ pub fn text_input_on_key<Msg: Clone + Send + 'static>(
         _ => {
             // All other keys go to on_change for app to handle via TextInputState
             if let Some(f) = on_change {
-                DispatchTarget::AppMsg(f(key))
+                DispatchTarget::AppMsg(f(key_event.code))
             } else {
                 // No handler - use WidgetEvent for auto-dispatch
-                DispatchTarget::WidgetEvent(Box::new(TextInputEvent::Changed(key)))
+                DispatchTarget::WidgetEvent(Box::new(TextInputEvent::Changed(key_event.code)))
             }
         }
     })
@@ -37,11 +37,11 @@ pub fn text_input_on_key<Msg: Clone + Send + 'static>(
 /// Create on_key handler for text inputs using unified event pattern
 pub fn text_input_on_key_event<Msg: Clone + Send + 'static>(
     on_event: fn(TextInputEvent) -> Msg,
-) -> Box<dyn Fn(KeyCode) -> DispatchTarget<Msg> + Send> {
-    Box::new(move |key| match key {
+) -> Box<dyn Fn(KeyEvent) -> DispatchTarget<Msg> + Send> {
+    Box::new(move |key_event| match key_event.code {
         KeyCode::Enter => DispatchTarget::AppMsg(on_event(TextInputEvent::Submit)),
         KeyCode::Esc => DispatchTarget::PassThrough,  // Let runtime handle unfocus/modal close
-        _ => DispatchTarget::AppMsg(on_event(TextInputEvent::Changed(key))),
+        _ => DispatchTarget::AppMsg(on_event(TextInputEvent::Changed(key_event.code))),
     })
 }
 

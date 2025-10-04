@@ -1,5 +1,5 @@
 use ratatui::{Frame, style::Style, widgets::{Block, Borders}, layout::{Rect, Constraint, Direction, Layout}};
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent};
 use crate::tui::{Element, Theme, LayoutConstraint};
 use crate::tui::element::FocusId;
 use crate::tui::command::DispatchTarget;
@@ -8,13 +8,13 @@ use crate::tui::renderer::{InteractionRegistry, FocusRegistry, DropdownRegistry,
 /// Create on_key handler for scrollable elements (scroll navigation)
 pub fn scrollable_on_key<Msg: Clone + Send + 'static>(
     on_navigate: Option<fn(KeyCode) -> Msg>,
-) -> Box<dyn Fn(KeyCode) -> DispatchTarget<Msg> + Send> {
-    Box::new(move |key| match key {
+) -> Box<dyn Fn(KeyEvent) -> DispatchTarget<Msg> + Send> {
+    Box::new(move |key_event| match key_event.code {
         // Scroll navigation keys
         KeyCode::Up | KeyCode::Down | KeyCode::PageUp | KeyCode::PageDown
         | KeyCode::Home | KeyCode::End => {
             if let Some(f) = on_navigate {
-                DispatchTarget::AppMsg(f(key))
+                DispatchTarget::AppMsg(f(key_event.code))
             } else {
                 // No callback - pass through to global subscriptions
                 DispatchTarget::PassThrough

@@ -1,5 +1,5 @@
 use ratatui::{Frame, style::{Style, Stylize}, widgets::Paragraph, layout::Rect};
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent};
 use crate::tui::{Element, Theme};
 use crate::tui::element::FocusId;
 use crate::tui::command::DispatchTarget;
@@ -11,36 +11,36 @@ pub fn autocomplete_on_key<Msg: Clone + Send + 'static>(
     is_open: bool,
     on_input: Option<fn(KeyCode) -> Msg>,
     on_navigate: Option<fn(KeyCode) -> Msg>,
-) -> Box<dyn Fn(KeyCode) -> DispatchTarget<Msg> + Send> {
-    Box::new(move |key| {
+) -> Box<dyn Fn(KeyEvent) -> DispatchTarget<Msg> + Send> {
+    Box::new(move |key_event| {
         if is_open {
             // Dropdown open: Up/Down/Enter/Esc go to navigate, others to input
-            match key {
+            match key_event.code {
                 KeyCode::Up | KeyCode::Down | KeyCode::Enter | KeyCode::Esc => {
                     if let Some(f) = on_navigate {
-                        DispatchTarget::AppMsg(f(key))
+                        DispatchTarget::AppMsg(f(key_event.code))
                     } else {
-                        DispatchTarget::WidgetEvent(Box::new(AutocompleteEvent::Navigate(key)))
+                        DispatchTarget::WidgetEvent(Box::new(AutocompleteEvent::Navigate(key_event.code)))
                     }
                 }
                 _ => {
                     // All other keys go to input for typing
                     if let Some(f) = on_input {
-                        DispatchTarget::AppMsg(f(key))
+                        DispatchTarget::AppMsg(f(key_event.code))
                     } else {
-                        DispatchTarget::WidgetEvent(Box::new(AutocompleteEvent::Input(key)))
+                        DispatchTarget::WidgetEvent(Box::new(AutocompleteEvent::Input(key_event.code)))
                     }
                 }
             }
         } else {
             // Dropdown closed: Escape passes through for unfocus, others go to input
-            match key {
+            match key_event.code {
                 KeyCode::Esc => DispatchTarget::PassThrough,
                 _ => {
                     if let Some(f) = on_input {
-                        DispatchTarget::AppMsg(f(key))
+                        DispatchTarget::AppMsg(f(key_event.code))
                     } else {
-                        DispatchTarget::WidgetEvent(Box::new(AutocompleteEvent::Input(key)))
+                        DispatchTarget::WidgetEvent(Box::new(AutocompleteEvent::Input(key_event.code)))
                     }
                 }
             }
@@ -52,24 +52,24 @@ pub fn autocomplete_on_key<Msg: Clone + Send + 'static>(
 pub fn autocomplete_on_key_event<Msg: Clone + Send + 'static>(
     is_open: bool,
     on_event: fn(AutocompleteEvent) -> Msg,
-) -> Box<dyn Fn(KeyCode) -> DispatchTarget<Msg> + Send> {
-    Box::new(move |key| {
+) -> Box<dyn Fn(KeyEvent) -> DispatchTarget<Msg> + Send> {
+    Box::new(move |key_event| {
         if is_open {
             // Dropdown open: Up/Down/Enter/Esc go to navigate, others to input
-            match key {
+            match key_event.code {
                 KeyCode::Up | KeyCode::Down | KeyCode::Enter | KeyCode::Esc => {
-                    DispatchTarget::AppMsg(on_event(AutocompleteEvent::Navigate(key)))
+                    DispatchTarget::AppMsg(on_event(AutocompleteEvent::Navigate(key_event.code)))
                 }
                 _ => {
                     // All other keys go to input for typing
-                    DispatchTarget::AppMsg(on_event(AutocompleteEvent::Input(key)))
+                    DispatchTarget::AppMsg(on_event(AutocompleteEvent::Input(key_event.code)))
                 }
             }
         } else {
             // Dropdown closed: Escape passes through for unfocus, others go to input
-            match key {
+            match key_event.code {
                 KeyCode::Esc => DispatchTarget::PassThrough,
-                _ => DispatchTarget::AppMsg(on_event(AutocompleteEvent::Input(key))),
+                _ => DispatchTarget::AppMsg(on_event(AutocompleteEvent::Input(key_event.code))),
             }
         }
     })

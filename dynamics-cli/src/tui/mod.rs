@@ -25,7 +25,7 @@ mod test_loading_screen;
 
 pub use command::{Command, AppId};
 pub use element::{Element, LayoutConstraint, Layer, Alignment, FocusId};
-pub use subscription::Subscription;
+pub use subscription::{Subscription, KeyBinding};
 pub use app::{App, AppState};
 pub use renderer::{Renderer, InteractionRegistry, RenderLayer, LayeredView};
 pub use runtime::{Runtime, AppRuntime};

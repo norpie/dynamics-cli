@@ -9,7 +9,7 @@ use std::pin::Pin;
 use std::future::Future;
 use std::any::Any;
 
-use crate::tui::{App, AppId, Command, Renderer, InteractionRegistry, Subscription, AppState};
+use crate::tui::{App, AppId, Command, Renderer, InteractionRegistry, Subscription, AppState, KeyBinding};
 use crate::tui::command::{ParallelConfig, DispatchTarget};
 use crate::tui::renderer::{FocusRegistry, FocusableInfo, DropdownRegistry};
 use crate::tui::element::FocusId;
@@ -22,7 +22,7 @@ pub trait AppRuntime {
     fn render_to_area(&mut self, frame: &mut Frame, area: ratatui::layout::Rect);
     fn get_title(&self) -> &'static str;
     fn get_status(&self) -> Option<ratatui::text::Line<'static>>;
-    fn get_key_bindings(&self) -> Vec<(KeyCode, String)>;
+    fn get_key_bindings(&self) -> Vec<(KeyBinding, String)>;
     fn poll_timers(&mut self) -> Result<()>;
     fn poll_async(&mut self) -> Pin<Box<dyn Future<Output = Result<()>> + '_>>;
     fn take_navigation(&mut self) -> Option<AppId>;
@@ -58,7 +58,7 @@ pub struct Runtime<A: App> {
     focused_id: Option<FocusId>,
 
     /// Keyboard subscriptions
-    key_subscriptions: HashMap<KeyCode, A::Msg>,
+    key_subscriptions: HashMap<KeyBinding, A::Msg>,
 
     /// Event bus for pub/sub
     event_bus: HashMap<String, Vec<Box<dyn Fn(Value) -> Option<A::Msg> + Send>>>,
@@ -134,7 +134,7 @@ impl<A: App> Runtime<A> {
     }
 
     /// Get keyboard bindings for help menu
-    pub fn get_key_bindings(&self) -> Vec<(KeyCode, String)> {
+    pub fn get_key_bindings(&self) -> Vec<(KeyBinding, String)> {
         use crate::tui::Subscription;
 
         A::subscriptions(&self.state)
@@ -382,7 +382,7 @@ impl<A: App> Runtime<A> {
         // If there's a focused element, try routing the key to it first
         if let Some(focused_id) = &self.focused_id {
             if let Some(focusable) = self.focus_registry.find_in_active_layer(focused_id) {
-                match (focusable.on_key)(key_event.code) {
+                match (focusable.on_key)(key_event) {
                     DispatchTarget::WidgetEvent(boxed_event) => {
                         // Try widget auto-dispatch
                         if self.state.dispatch_widget_event(focused_id, boxed_event.as_ref()) {
@@ -424,8 +424,9 @@ impl<A: App> Runtime<A> {
         }
 
         // No focused element handled it (or it returned PassThrough), check global subscriptions
-        if let Some(msg) = self.key_subscriptions.get(&key_event.code).cloned() {
-            log::debug!("✓ Runtime - global subscription matched key {:?}", key_event.code);
+        let binding = KeyBinding::with_modifiers(key_event.code, key_event.modifiers);
+        if let Some(msg) = self.key_subscriptions.get(&binding).cloned() {
+            log::debug!("✓ Runtime - global subscription matched key {:?}", binding);
             let command = A::update(&mut self.state, msg);
             let result = self.execute_command(command)?;
             // Refresh subscriptions after state change (subscriptions may depend on state)
@@ -433,7 +434,7 @@ impl<A: App> Runtime<A> {
             return Ok(result);
         }
 
-        log::debug!("✗ Runtime - no subscription for key {:?}", key_event.code);
+        log::debug!("✗ Runtime - no subscription for key {:?}", binding);
         Ok(true)
     }
 
@@ -506,7 +507,8 @@ impl<A: App> Runtime<A> {
                             && pos.1 >= focusable.rect.y
                             && pos.1 < focusable.rect.y + focusable.rect.height
                         {
-                            match (focusable.on_key)(KeyCode::Up) {
+                            let scroll_up_event = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::empty());
+                            match (focusable.on_key)(scroll_up_event) {
                                 DispatchTarget::WidgetEvent(boxed_event) => {
                                     if self.state.dispatch_widget_event(focused_id, boxed_event.as_ref()) {
                                         return Ok(true);
@@ -537,7 +539,8 @@ impl<A: App> Runtime<A> {
                             && pos.1 >= focusable.rect.y
                             && pos.1 < focusable.rect.y + focusable.rect.height
                         {
-                            match (focusable.on_key)(KeyCode::Down) {
+                            let scroll_down_event = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::empty());
+                            match (focusable.on_key)(scroll_down_event) {
                                 DispatchTarget::WidgetEvent(boxed_event) => {
                                     if self.state.dispatch_widget_event(focused_id, boxed_event.as_ref()) {
                                         return Ok(true);
@@ -860,7 +863,7 @@ where
         Runtime::get_status(self)
     }
 
-    fn get_key_bindings(&self) -> Vec<(KeyCode, String)> {
+    fn get_key_bindings(&self) -> Vec<(KeyBinding, String)> {
         Runtime::get_key_bindings(self)
     }
 

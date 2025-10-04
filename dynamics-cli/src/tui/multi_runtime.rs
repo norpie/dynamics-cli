@@ -6,7 +6,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use anyhow::Result;
 use std::collections::HashMap;
 
-use crate::tui::{AppId, Runtime, AppRuntime, apps::{AppLauncher, LoadingScreen, ErrorScreen, SettingsApp, migration::{MigrationEnvironmentApp, MigrationComparisonSelectApp}}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App, ModalState};
+use crate::tui::{AppId, Runtime, AppRuntime, apps::{AppLauncher, LoadingScreen, ErrorScreen, SettingsApp, migration::{MigrationEnvironmentApp, MigrationComparisonSelectApp}}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App, ModalState, KeyBinding};
 use crate::tui::element::{ColumnBuilder, RowBuilder, FocusId};
 use crate::tui::widgets::ScrollableState;
 
@@ -82,11 +82,11 @@ impl MultiAppRuntime {
 
     /// Handle keyboard input for global UI elements (when modals are open)
     /// Returns Some(should_continue) if the key was handled, None if it should pass through
-    fn handle_global_key(&mut self, key: KeyCode) -> Result<Option<bool>> {
+    fn handle_global_key(&mut self, key_event: KeyEvent) -> Result<Option<bool>> {
         // Check if there's a focused element in the global focus registry
         if let Some(focused_id) = &self.global_focused_id {
             // Get the key handler for the focused element
-            if let Some(msg) = self.global_focus_registry.dispatch_key(focused_id, key) {
+            if let Some(msg) = self.global_focus_registry.dispatch_key(focused_id, key_event) {
                 return Ok(Some(self.handle_global_msg(msg)?));
             }
         }
@@ -103,17 +103,18 @@ impl MultiAppRuntime {
             }
             GlobalMsg::QuitCancel => {
                 self.quit_modal.close();
+                self.global_focused_id = None; // Clear focus when closing modal
                 return Ok(true);
             }
             GlobalMsg::HelpScroll(key) => {
                 // Calculate content height (same as in render_help_menu)
                 let global_bindings = vec![
-                    (KeyCode::F(1), "Toggle help menu"),
-                    (KeyCode::Char(' '), "Go to app launcher (hold Ctrl)"),
-                    (KeyCode::Esc, "Close help menu"),
+                    (KeyBinding::new(KeyCode::F(1)), "Toggle help menu"),
+                    (KeyBinding::ctrl(KeyCode::Char(' ')), "Go to app launcher (hold Ctrl)"),
+                    (KeyBinding::new(KeyCode::Esc), "Close help menu"),
                 ];
 
-                let mut all_app_bindings: Vec<(AppId, &'static str, Vec<(KeyCode, String)>)> = vec![];
+                let mut all_app_bindings: Vec<(AppId, &'static str, Vec<(KeyBinding, String)>)> = vec![];
                 for (app_id, runtime) in &self.runtimes {
                     let title = runtime.get_title();
                     let bindings = runtime.get_key_bindings();
@@ -141,6 +142,7 @@ impl MultiAppRuntime {
             }
             GlobalMsg::CloseHelp => {
                 self.help_modal.close();
+                self.global_focused_id = None; // Clear focus when closing modal
                 return Ok(true);
             }
         }
@@ -163,7 +165,7 @@ impl MultiAppRuntime {
             }
 
             // Dispatch key to focused element
-            if let Some(should_continue) = self.handle_global_key(key_event.code)? {
+            if let Some(should_continue) = self.handle_global_key(key_event)? {
                 return Ok(should_continue);
             }
         }
@@ -400,13 +402,13 @@ impl MultiAppRuntime {
 
         // Build help content directly as Element<GlobalMsg>
         let global_bindings = vec![
-            (KeyCode::F(1), "Toggle help menu"),
-            (KeyCode::Char(' '), "Go to app launcher (hold Ctrl)"),
-            (KeyCode::Esc, "Close help menu"),
+            (KeyBinding::new(KeyCode::F(1)), "Toggle help menu"),
+            (KeyBinding::ctrl(KeyCode::Char(' ')), "Go to app launcher (hold Ctrl)"),
+            (KeyBinding::new(KeyCode::Esc), "Close help menu"),
         ];
 
         // Get all apps' key bindings
-        let mut all_app_bindings: Vec<(AppId, &'static str, Vec<(KeyCode, String)>)> = vec![];
+        let mut all_app_bindings: Vec<(AppId, &'static str, Vec<(KeyBinding, String)>)> = vec![];
         for (app_id, runtime) in &self.runtimes {
             let title = runtime.get_title();
             let bindings = runtime.get_key_bindings();
