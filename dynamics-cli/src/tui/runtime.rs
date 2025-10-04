@@ -375,22 +375,6 @@ impl<A: App> Runtime<A> {
             return Ok(true);
         }
 
-        // Special handling for Escape: blur focused element first
-        if key_event.code == KeyCode::Esc {
-            if let Some(focused_id) = self.focused_id.take() {
-                // Send blur message to focused element
-                if let Some(focusable) = self.focus_registry.find_in_active_layer(&focused_id) {
-                    if let Some(on_blur) = focusable.on_blur.clone() {
-                        let command = A::update(&mut self.state, on_blur);
-                        self.execute_command(command)?;
-                    }
-                }
-                // Focus cleared, Escape consumed
-                return Ok(true);
-            }
-            // Nothing focused, fall through to app subscriptions
-        }
-
         // If there's a focused element, try routing the key to it first
         if let Some(focused_id) = &self.focused_id {
             if let Some(focusable) = self.focus_registry.find_in_active_layer(focused_id) {
@@ -413,11 +397,26 @@ impl<A: App> Runtime<A> {
                         return Ok(result);
                     }
                     DispatchTarget::PassThrough => {
-                        // Widget didn't handle this key - pass through to global subscriptions
-                        // Don't return early, fall through to subscription check below
+                        // Widget didn't handle this key
+                        // Special handling for Escape: unfocus element
+                        if key_event.code == KeyCode::Esc {
+                            let focused_id = self.focused_id.take().unwrap();
+                            // Send blur message to focused element
+                            if let Some(focusable) = self.focus_registry.find_in_active_layer(&focused_id) {
+                                if let Some(on_blur) = focusable.on_blur.clone() {
+                                    let command = A::update(&mut self.state, on_blur);
+                                    self.execute_command(command)?;
+                                }
+                            }
+                            // Focus cleared, Escape consumed
+                            return Ok(true);
+                        }
+                        // Not Escape, fall through to global subscriptions
                     }
                 }
             }
+        } else if key_event.code == KeyCode::Esc {
+            // Nothing focused, Escape does nothing (fall through to app subscriptions)
         }
 
         // No focused element handled it (or it returned PassThrough), check global subscriptions
