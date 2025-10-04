@@ -152,16 +152,13 @@ impl MultiAppRuntime {
         // Priority 1: Global modal keyboard handling (Tab, focused elements)
         if self.quit_modal.is_open() || self.help_modal.is_open() {
             // Tab/Shift-Tab: Move focus within global modal
-            match key_event.code {
-                KeyCode::Tab if !key_event.modifiers.contains(KeyModifiers::SHIFT) => {
-                    self.move_global_focus(true);
-                    return Ok(true);
-                }
-                KeyCode::BackTab | KeyCode::Tab if key_event.modifiers.contains(KeyModifiers::SHIFT) => {
-                    self.move_global_focus(false);
-                    return Ok(true);
-                }
-                _ => {}
+            if KeyBinding::new(KeyCode::Tab).matches(&key_event) {
+                self.move_global_focus(true);
+                return Ok(true);
+            }
+            if KeyBinding::shift(KeyCode::Tab).matches(&key_event) || key_event.code == KeyCode::BackTab {
+                self.move_global_focus(false);
+                return Ok(true);
             }
 
             // Dispatch key to focused element
@@ -200,7 +197,7 @@ impl MultiAppRuntime {
         }
 
         // Priority 5: Ctrl+Space navigates to app launcher
-        if key_event.code == KeyCode::Char(' ') && key_event.modifiers.contains(KeyModifiers::CONTROL) {
+        if KeyBinding::ctrl(KeyCode::Char(' ')).matches(&key_event) {
             // Clear any stale navigation from app launcher before switching to it
             self.runtimes.get_mut(&AppId::AppLauncher)
                 .expect("AppLauncher not found in runtimes")
@@ -248,17 +245,18 @@ impl MultiAppRuntime {
         }
 
         // Global Tab/Shift-Tab navigation (before app-specific handling)
-        if key_event.code == KeyCode::Tab {
+        if KeyBinding::new(KeyCode::Tab).matches(&key_event) {
             let runtime = self.runtimes
                 .get_mut(&self.active_app)
                 .expect("Active app not found in runtimes");
-
-            if key_event.modifiers.contains(KeyModifiers::SHIFT) {
-                runtime.focus_previous()?;
-            } else {
-                runtime.focus_next()?;
-            }
-
+            runtime.focus_next()?;
+            return Ok(true);
+        }
+        if KeyBinding::shift(KeyCode::Tab).matches(&key_event) || key_event.code == KeyCode::BackTab {
+            let runtime = self.runtimes
+                .get_mut(&self.active_app)
+                .expect("Active app not found in runtimes");
+            runtime.focus_previous()?;
             return Ok(true);
         }
 
