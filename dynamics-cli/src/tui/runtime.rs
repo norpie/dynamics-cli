@@ -86,6 +86,12 @@ pub struct Runtime<A: App> {
 
     /// Active parallel task coordinator
     parallel_coordinator: Option<ParallelTaskCoordinator<A::Msg>>,
+
+    /// Track if user explicitly unfocused via Escape (to prevent auto-restore)
+    explicitly_unfocused: bool,
+
+    /// Previous layer count (to detect modal open/close)
+    previous_layer_count: usize,
 }
 
 impl<A: App> Runtime<A> {
@@ -109,6 +115,8 @@ impl<A: App> Runtime<A> {
             pending_parallel: Vec::new(),
             pending_publishes: Vec::new(),
             parallel_coordinator: None,
+            explicitly_unfocused: false,
+            previous_layer_count: 1,  // Start with 1 (base layer)
         };
 
         // Initialize subscriptions
@@ -408,6 +416,8 @@ impl<A: App> Runtime<A> {
                                     self.execute_command(command)?;
                                 }
                             }
+                            // Mark as explicitly unfocused (prevents auto-restore on next render)
+                            self.explicitly_unfocused = true;
                             // Focus cleared, Escape consumed
                             return Ok(true);
                         }
@@ -698,6 +708,8 @@ impl<A: App> Runtime<A> {
                 // Set new focus
                 log::debug!("  Setting new focus: {:?}", id);
                 self.focused_id = Some(id.clone());
+                // Clear explicit unfocus flag (focus was set programmatically)
+                self.explicitly_unfocused = false;
 
                 // Send focus message to new element
                 if let Some(focusable) = self.focus_registry.find_in_active_layer(&id) {
@@ -734,8 +746,20 @@ impl<A: App> Runtime<A> {
     pub fn render_to_area(&mut self, frame: &mut Frame, area: ratatui::layout::Rect) {
         log::debug!("=== Runtime::render_to_area START - current focus: {:?} ===", self.focused_id);
 
-        // Sync runtime's focus to active layer BEFORE clear() to prevent stale state preservation
-        self.focus_registry.save_layer_focus(self.focused_id.clone());
+        // Sync runtime's focus to active layer ONLY if it exists in the current registry
+        // This prevents Command::SetFocus from corrupting layer 0 when focusing modal elements
+        // that haven't been rendered yet
+        if let Some(ref focused_id) = self.focused_id {
+            if self.focus_registry.contains(focused_id) {
+                log::debug!("Runtime: saving validated focus {:?} to active layer before clear", focused_id);
+                self.focus_registry.save_layer_focus(Some(focused_id.clone()));
+            } else {
+                log::debug!("Runtime: NOT saving focus {:?} - doesn't exist in current registry", focused_id);
+            }
+        } else {
+            // No focus - clear the active layer's saved focus
+            self.focus_registry.save_layer_focus(None);
+        }
 
         // Clear registries for this frame
         self.registry.clear();
@@ -762,6 +786,15 @@ impl<A: App> Runtime<A> {
             None, // No global UI area in single-app runtime
         );
 
+        // Detect layer count changes (modal open/close)
+        let current_layer_count = self.focus_registry.active_layer().map(|l| l.layer_index + 1).unwrap_or(1);
+        if current_layer_count != self.previous_layer_count {
+            log::debug!("Runtime: layer count changed {} -> {}, clearing explicit unfocus flag",
+                       self.previous_layer_count, current_layer_count);
+            self.explicitly_unfocused = false;
+            self.previous_layer_count = current_layer_count;
+        }
+
         log::debug!("Runtime: validating focus");
         // Check if focused element still exists in the tree
         if let Some(focused_id) = &self.focused_id {
@@ -777,12 +810,22 @@ impl<A: App> Runtime<A> {
                 log::debug!("Runtime: focused element {:?} still exists", focused_id);
             }
         } else {
-            // No focus currently - DON'T auto-restore
-            // User may have explicitly unfocused via Escape, and we want the second Escape
-            // to reach global subscriptions (e.g., to close modals)
-            // Focus is only restored when the focused element disappears (handled above),
-            // or when apps explicitly set focus via Command::SetFocus
-            log::debug!("Runtime: no current focus, leaving unfocused (no auto-restore)");
+            // No focus currently - check if we should restore
+            if self.explicitly_unfocused {
+                // User explicitly unfocused via Escape - don't restore
+                // This allows the second Escape to reach global subscriptions (e.g., close modal)
+                log::debug!("Runtime: no current focus, user explicitly unfocused, leaving unfocused");
+            } else {
+                // Focus lost due to layer change or element disappearing - try to restore
+                log::debug!("Runtime: no current focus, attempting restore from layers");
+                let restored = self.focus_registry.restore_focus_from_layers();
+                if restored.is_some() {
+                    log::debug!("Runtime: restored focus from layers: {:?}", restored);
+                    self.focused_id = restored;
+                } else {
+                    log::debug!("Runtime: no focus to restore");
+                }
+            }
         }
 
         // Save validated/restored focus to the active layer for next frame
