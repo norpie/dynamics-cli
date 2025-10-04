@@ -158,10 +158,8 @@ impl App for EntityComparisonApp {
         if state.show_back_confirmation {
             let modal = ConfirmationModal::new("Go Back?")
                 .message("Are you sure you want to go back to the comparison list?")
-                .confirm_text("Yes, Go Back")
-                .cancel_text("Cancel")
-                .confirm_hotkey("Enter")
-                .cancel_hotkey("Esc")
+                .confirm_text("Yes")
+                .cancel_text("No")
                 .on_confirm(Msg::ConfirmBack)
                 .on_cancel(Msg::CancelBack)
                 .width(60)
@@ -174,8 +172,8 @@ impl App for EntityComparisonApp {
         view
     }
 
-    fn subscriptions(_state: &Self::State) -> Vec<Subscription<Self::Msg>> {
-        vec![
+    fn subscriptions(state: &Self::State) -> Vec<Subscription<Self::Msg>> {
+        let mut subs = vec![
             Subscription::keyboard(KeyCode::Esc, "Back to comparison list", Msg::Back),
             Subscription::keyboard(KeyCode::Char('b'), "Back to comparison list", Msg::Back),
             Subscription::keyboard(KeyCode::Char('B'), "Back to comparison list", Msg::Back),
@@ -185,7 +183,18 @@ impl App for EntityComparisonApp {
             Subscription::keyboard(KeyCode::Char('2'), "Switch to Relationships", Msg::SwitchTab(2)),
             Subscription::keyboard(KeyCode::Char('3'), "Switch to Views", Msg::SwitchTab(3)),
             Subscription::keyboard(KeyCode::Char('4'), "Switch to Forms", Msg::SwitchTab(4)),
-        ]
+        ];
+
+        // When showing confirmation modal, add y/n hotkeys
+        if state.show_back_confirmation {
+            subs.push(Subscription::keyboard(KeyCode::Char('y'), "Confirm", Msg::ConfirmBack));
+            subs.push(Subscription::keyboard(KeyCode::Char('Y'), "Confirm", Msg::ConfirmBack));
+            subs.push(Subscription::keyboard(KeyCode::Char('n'), "Cancel", Msg::CancelBack));
+            subs.push(Subscription::keyboard(KeyCode::Char('N'), "Cancel", Msg::CancelBack));
+            subs.push(Subscription::keyboard(KeyCode::Enter, "Confirm", Msg::ConfirmBack));
+        }
+
+        subs
     }
 
     fn title() -> &'static str {

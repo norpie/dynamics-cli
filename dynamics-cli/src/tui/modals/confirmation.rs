@@ -20,8 +20,6 @@ pub struct ConfirmationModal<Msg> {
     message: Option<String>,
     confirm_text: String,
     cancel_text: String,
-    confirm_hotkey: Option<String>,
-    cancel_hotkey: Option<String>,
     on_confirm: Option<Msg>,
     on_cancel: Option<Msg>,
     width: Option<u16>,
@@ -36,8 +34,6 @@ impl<Msg: Clone> ConfirmationModal<Msg> {
             message: None,
             confirm_text: "Confirm".to_string(),
             cancel_text: "Cancel".to_string(),
-            confirm_hotkey: None,  // No default hotkey - caller should set specific keys
-            cancel_hotkey: None,   // No default hotkey - caller should set specific keys
             on_confirm: None,
             on_cancel: None,
             width: None,
@@ -60,18 +56,6 @@ impl<Msg: Clone> ConfirmationModal<Msg> {
     /// Set the cancel button text (default: "Cancel")
     pub fn cancel_text(mut self, text: impl Into<String>) -> Self {
         self.cancel_text = text.into();
-        self
-    }
-
-    /// Set the confirm hotkey text (default: "Ctrl+Enter")
-    pub fn confirm_hotkey(mut self, hotkey: impl Into<String>) -> Self {
-        self.confirm_hotkey = Some(hotkey.into());
-        self
-    }
-
-    /// Set the cancel hotkey text (default: "Esc")
-    pub fn cancel_hotkey(mut self, hotkey: impl Into<String>) -> Self {
-        self.cancel_hotkey = Some(hotkey.into());
         self
     }
 
@@ -99,6 +83,24 @@ impl<Msg: Clone> ConfirmationModal<Msg> {
         self
     }
 
+    /// Generate hotkey display from text (e.g., "Yes" -> "(y)es")
+    fn generate_hotkey_label(text: &str) -> String {
+        if text.is_empty() {
+            return text.to_string();
+        }
+
+        let mut chars: Vec<char> = text.chars().collect();
+        if chars.is_empty() {
+            return text.to_string();
+        }
+
+        // Make first char lowercase and wrap in parens
+        let first = chars[0].to_lowercase().to_string();
+        let rest: String = chars[1..].iter().collect();
+
+        format!("({}){}", first, rest)
+    }
+
     /// Build the modal Element
     pub fn build(self, theme: &Theme) -> Element<Msg> {
         // Title line
@@ -122,12 +124,8 @@ impl<Msg: Clone> ConfirmationModal<Msg> {
         let confirm_msg = self.on_confirm.clone()
             .expect("ConfirmationModal requires on_confirm callback");
 
-        // Cancel button with hotkey indicator
-        let cancel_label = if let Some(hotkey) = &self.cancel_hotkey {
-            format!("[ {} ({}) ]", self.cancel_text, hotkey)
-        } else {
-            format!("[ {} ]", self.cancel_text)
-        };
+        // Cancel button with auto-generated hotkey
+        let cancel_label = format!("[ {} ]", Self::generate_hotkey_label(&self.cancel_text));
         let cancel_button = Element::button(
             FocusId::new("confirmation-cancel"),
             cancel_label,
@@ -135,12 +133,8 @@ impl<Msg: Clone> ConfirmationModal<Msg> {
         .on_press(cancel_msg)
         .build();
 
-        // Confirm button with hotkey indicator
-        let confirm_label = if let Some(hotkey) = &self.confirm_hotkey {
-            format!("[ {} ({}) ]", self.confirm_text, hotkey)
-        } else {
-            format!("[ {} ]", self.confirm_text)
-        };
+        // Confirm button with auto-generated hotkey
+        let confirm_label = format!("[ {} ]", Self::generate_hotkey_label(&self.confirm_text));
         let confirm_button = Element::button(
             FocusId::new("confirmation-confirm"),
             confirm_label,
