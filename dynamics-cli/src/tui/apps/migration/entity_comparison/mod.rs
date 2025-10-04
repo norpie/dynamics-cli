@@ -9,5 +9,7 @@ pub use models::*;
 #[derive(Clone)]
 pub enum Msg {
     Back,
+    ConfirmBack,
+    CancelBack,
     SwitchTab(usize), // 1-indexed tab number
 }

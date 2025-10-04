@@ -7,6 +7,8 @@ use crate::tui::{
     renderer::LayeredView,
     Resource,
     widgets::TreeState,
+    modals::ConfirmationModal,
+    Alignment as LayerAlignment,
 };
 use crate::api::EntityMetadata;
 use crossterm::event::KeyCode;
@@ -49,6 +51,9 @@ pub struct State {
 
     // Examples
     examples: ExamplesState,
+
+    // Modal state
+    show_back_confirmation: bool,
 }
 
 pub struct EntityComparisonParams {
@@ -95,6 +100,7 @@ impl App for EntityComparisonApp {
             target_tree_state: TreeState::new(),
             focused_side: Side::Source,
             examples: ExamplesState::new(),
+            show_back_confirmation: false,
         };
 
         // TODO: Load metadata from API
@@ -103,7 +109,17 @@ impl App for EntityComparisonApp {
 
     fn update(state: &mut Self::State, msg: Self::Msg) -> Command<Self::Msg> {
         match msg {
-            Msg::Back => Command::navigate_to(AppId::MigrationComparisonSelect),
+            Msg::Back => {
+                state.show_back_confirmation = true;
+                Command::None
+            }
+            Msg::ConfirmBack => {
+                Command::navigate_to(AppId::MigrationComparisonSelect)
+            }
+            Msg::CancelBack => {
+                state.show_back_confirmation = false;
+                Command::None
+            }
             Msg::SwitchTab(n) => {
                 if let Some(tab) = ActiveTab::from_number(n) {
                     state.active_tab = tab;
@@ -136,7 +152,26 @@ impl App for EntityComparisonApp {
             target_panel => Fill(1),
         ];
 
-        LayeredView::new(main_ui)
+        let mut view = LayeredView::new(main_ui);
+
+        // Add confirmation modal if showing
+        if state.show_back_confirmation {
+            let modal = ConfirmationModal::new("Go Back?")
+                .message("Are you sure you want to go back to the comparison list?")
+                .confirm_text("Yes, Go Back")
+                .cancel_text("Cancel")
+                .confirm_hotkey("Enter")
+                .cancel_hotkey("Esc")
+                .on_confirm(Msg::ConfirmBack)
+                .on_cancel(Msg::CancelBack)
+                .width(60)
+                .height(10)
+                .build(theme);
+
+            view = view.with_app_modal(modal, LayerAlignment::Center);
+        }
+
+        view
     }
 
     fn subscriptions(_state: &Self::State) -> Vec<Subscription<Self::Msg>> {
