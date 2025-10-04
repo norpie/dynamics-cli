@@ -390,11 +390,11 @@ impl MultiAppRuntime {
 
     fn render_help_menu(&mut self, frame: &mut Frame, area: ratatui::layout::Rect, theme: &Theme) {
         // First, render a dim overlay over the entire area
-        use ratatui::widgets::Block;
+        use ratatui::widgets::Paragraph;
         use ratatui::style::Style;
-        let dim_block = Block::default()
+        let dim_overlay = Paragraph::new("")
             .style(Style::default().bg(theme.surface0));
-        frame.render_widget(dim_block, area);
+        frame.render_widget(dim_overlay, area);
 
         // Build help content directly as Element<GlobalMsg>
         let global_bindings = vec![
@@ -498,6 +498,10 @@ impl MultiAppRuntime {
             height: modal_height,
         };
 
+        // Clear the modal area to prevent bleed-through from dim overlay
+        use ratatui::widgets::Clear;
+        frame.render_widget(Clear, modal_area);
+
         let content_height = modal_height.saturating_sub(4) as usize;
 
         // Count total items for scroll state
@@ -551,13 +555,13 @@ impl MultiAppRuntime {
 
     /// Render quit confirmation modal
     fn render_quit_confirm(&mut self, frame: &mut Frame, area: ratatui::layout::Rect, theme: &Theme) {
-        use ratatui::widgets::Block;
+        use ratatui::widgets::Paragraph;
         use ratatui::style::Style;
 
         // Render dim overlay
-        let dim_block = Block::default()
+        let dim_overlay = Paragraph::new("")
             .style(Style::default().bg(theme.surface0));
-        frame.render_widget(dim_block, area);
+        frame.render_widget(dim_overlay, area);
 
         // Build quit confirmation modal using Element<GlobalMsg>
         let button_row = RowBuilder::new()
@@ -623,6 +627,10 @@ impl MultiAppRuntime {
             width: modal_width,
             height: modal_height,
         };
+
+        // Clear the modal area to prevent bleed-through from dim overlay
+        use ratatui::widgets::Clear;
+        frame.render_widget(Clear, modal_area);
 
         // Render with global registries
         use crate::tui::Renderer;
