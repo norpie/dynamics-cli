@@ -310,6 +310,38 @@ impl App for EntityComparisonApp {
             ));
         }
 
+        // Add separator
+        spans.push(Span::styled(" | ", Style::default().fg(theme.overlay1)));
+
+        // Hide matched status
+        if state.hide_matched {
+            spans.push(Span::styled(
+                "Hide Matched: ON",
+                Style::default().fg(theme.green),
+            ));
+        } else {
+            spans.push(Span::styled(
+                "Hide Matched: OFF",
+                Style::default().fg(theme.subtext1),
+            ));
+        }
+
+        // Example display status
+        if state.examples.enabled {
+            if let Some(active_pair_id) = &state.examples.active_pair_id {
+                // Find the index of the active pair
+                if let Some(index) = state.examples.pairs.iter().position(|p| &p.id == active_pair_id) {
+                    let pair_num = index + 1;
+                    let total = state.examples.pairs.len();
+                    spans.push(Span::styled(" | ", Style::default().fg(theme.overlay1)));
+                    spans.push(Span::styled(
+                        format!("Example: {}/{}", pair_num, total),
+                        Style::default().fg(theme.sky),
+                    ));
+                }
+            }
+        }
+
         Some(Line::from(spans))
     }
 }
