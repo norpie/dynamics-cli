@@ -36,7 +36,6 @@ pub enum Msg {
     LabelInputEvent(crate::tui::widgets::TextInputEvent),
     AddExamplePair,
     DeleteExamplePair,
-    FetchExampleData,
     ExampleDataFetched(String, Result<(serde_json::Value, serde_json::Value), String>), // pair_id, (source_data, target_data)
     CycleExamplePair,
     ToggleExamples,
@@ -50,4 +49,5 @@ pub enum FetchedData {
     TargetFields(Vec<crate::api::metadata::FieldMetadata>),
     TargetForms(Vec<crate::api::metadata::FormMetadata>),
     TargetViews(Vec<crate::api::metadata::ViewMetadata>),
+    ExampleData(String, serde_json::Value, serde_json::Value), // pair_id, source_data, target_data
 }

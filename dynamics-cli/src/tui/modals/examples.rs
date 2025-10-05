@@ -58,7 +58,6 @@ impl<Msg: Clone> ListItem for ExamplePairItem<Msg> {
 ///     .list_state(list_state)
 ///     .on_add(Msg::AddExamplePair)
 ///     .on_delete(Msg::DeleteExamplePair)
-///     .on_fetch(Msg::FetchExampleData)
 ///     .on_close(Msg::CloseExamplesModal)
 ///     .build(theme);
 /// ```
@@ -74,7 +73,6 @@ pub struct ExamplesModal<Msg> {
     on_list_navigate: Option<fn(crossterm::event::KeyCode) -> Msg>,
     on_add: Option<Msg>,
     on_delete: Option<Msg>,
-    on_fetch: Option<Msg>,
     on_close: Option<Msg>,
     width: Option<u16>,
     height: Option<u16>,
@@ -95,7 +93,6 @@ impl<Msg: Clone> ExamplesModal<Msg> {
             on_list_navigate: None,
             on_add: None,
             on_delete: None,
-            on_fetch: None,
             on_close: None,
             width: Some(80),
             height: Some(30),
@@ -165,12 +162,6 @@ impl<Msg: Clone> ExamplesModal<Msg> {
     /// Set the message sent when Delete is clicked
     pub fn on_delete(mut self, msg: Msg) -> Self {
         self.on_delete = Some(msg);
-        self
-    }
-
-    /// Set the message sent when Fetch is clicked
-    pub fn on_fetch(mut self, msg: Msg) -> Self {
-        self.on_fetch = Some(msg);
         self
     }
 
@@ -259,11 +250,10 @@ impl<Msg: Clone> ExamplesModal<Msg> {
             .title("Saved Pairs")
             .build();
 
-        // Buttons
+        // Buttons (examples are fetched automatically)
         let buttons = button_row![
             ("examples-add", "Add", self.on_add.clone().expect("ExamplesModal requires on_add")),
             ("examples-delete", "Delete", self.on_delete.clone().expect("ExamplesModal requires on_delete")),
-            ("examples-fetch", "Fetch", self.on_fetch.clone().expect("ExamplesModal requires on_fetch")),
             ("examples-close", "Close", self.on_close.clone().expect("ExamplesModal requires on_close")),
         ];
 

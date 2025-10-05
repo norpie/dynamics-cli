@@ -172,79 +172,8 @@ impl App for EntityComparisonApp {
             show_back_confirmation: false,
         };
 
-        // Load metadata in parallel with automatic LoadingScreen (6 tasks total)
-        let cmd = Command::perform_parallel()
-            // Source entity fetches
-            .add_task(
-                format!("Loading {} fields ({})", params.source_entity, params.source_env),
-                {
-                    let env = params.source_env.clone();
-                    let entity = params.source_entity.clone();
-                    async move {
-                        fetch_with_cache(&env, &entity, FetchType::SourceFields, true).await
-                    }
-                }
-            )
-            .add_task(
-                format!("Loading {} forms ({})", params.source_entity, params.source_env),
-                {
-                    let env = params.source_env.clone();
-                    let entity = params.source_entity.clone();
-                    async move {
-                        fetch_with_cache(&env, &entity, FetchType::SourceForms, true).await
-                    }
-                }
-            )
-            .add_task(
-                format!("Loading {} views ({})", params.source_entity, params.source_env),
-                {
-                    let env = params.source_env.clone();
-                    let entity = params.source_entity.clone();
-                    async move {
-                        fetch_with_cache(&env, &entity, FetchType::SourceViews, true).await
-                    }
-                }
-            )
-            // Target entity fetches
-            .add_task(
-                format!("Loading {} fields ({})", params.target_entity, params.target_env),
-                {
-                    let env = params.target_env.clone();
-                    let entity = params.target_entity.clone();
-                    async move {
-                        fetch_with_cache(&env, &entity, FetchType::TargetFields, true).await
-                    }
-                }
-            )
-            .add_task(
-                format!("Loading {} forms ({})", params.target_entity, params.target_env),
-                {
-                    let env = params.target_env.clone();
-                    let entity = params.target_entity.clone();
-                    async move {
-                        fetch_with_cache(&env, &entity, FetchType::TargetForms, true).await
-                    }
-                }
-            )
-            .add_task(
-                format!("Loading {} views ({})", params.target_entity, params.target_env),
-                {
-                    let env = params.target_env.clone();
-                    let entity = params.target_entity.clone();
-                    async move {
-                        fetch_with_cache(&env, &entity, FetchType::TargetViews, true).await
-                    }
-                }
-            )
-            .with_title("Loading Entity Metadata")
-            .on_complete(AppId::EntityComparison)
-            .build(|task_idx, result| {
-                let data = result.downcast::<Result<super::FetchedData, String>>().unwrap();
-                Msg::ParallelDataLoaded(task_idx, *data)
-            });
-
-        // Also load saved field and prefix mappings, and example pairs
-        let mappings_cmd = Command::perform({
+        // First, load mappings to know which example pairs to fetch
+        let init_cmd = Command::perform({
             let source_entity = params.source_entity.clone();
             let target_entity = params.target_entity.clone();
             async move {
@@ -270,7 +199,7 @@ impl App for EntityComparisonApp {
             Msg::MappingsLoaded(field_mappings, prefix_mappings, example_pairs)
         });
 
-        (state, Command::batch(vec![cmd, mappings_cmd]))
+        (state, init_cmd)
     }
 
     fn update(state: &mut Self::State, msg: Self::Msg) -> Command<Self::Msg> {
@@ -355,6 +284,15 @@ impl App for EntityComparisonApp {
                                         views,
                                         ..Default::default()
                                     });
+                                }
+                            }
+                            super::FetchedData::ExampleData(pair_id, source_data, target_data) => {
+                                // Store example data in cache
+                                if let Some(pair) = state.examples.pairs.iter().find(|p| p.id == pair_id) {
+                                    log::info!("Fetched example data for pair {}: source_id={}, target_id={}",
+                                        pair_id, pair.source_record_id, pair.target_record_id);
+                                    state.examples.cache.insert(pair.source_record_id.clone(), source_data);
+                                    state.examples.cache.insert(pair.target_record_id.clone(), target_data);
                                 }
                             }
                         }
@@ -561,7 +499,10 @@ impl App for EntityComparisonApp {
                 state.source_metadata = Resource::Loading;
                 state.target_metadata = Resource::Loading;
 
-                Command::perform_parallel()
+                // Clear example cache to force re-fetch
+                state.examples.cache.clear();
+
+                let mut builder = Command::perform_parallel()
                     // Source entity fetches - bypass cache for manual refresh
                     .add_task(
                         format!("Refreshing {} fields ({})", state.source_entity, state.source_env),
@@ -623,12 +564,41 @@ impl App for EntityComparisonApp {
                                 fetch_with_cache(&env, &entity, FetchType::TargetViews, false).await
                             }
                         }
-                    )
-                    .with_title("Refreshing Entity Metadata")
+                    );
+
+                // Add example data fetching tasks
+                for pair in &state.examples.pairs {
+                    let pair_id = pair.id.clone();
+                    let source_env = state.source_env.clone();
+                    let source_entity = state.source_entity.clone();
+                    let source_record_id = pair.source_record_id.clone();
+                    let target_env = state.target_env.clone();
+                    let target_entity = state.target_entity.clone();
+                    let target_record_id = pair.target_record_id.clone();
+
+                    builder = builder.add_task(
+                        format!("Refreshing example: {}", pair.display_name()),
+                        async move {
+                            super::fetch_example_pair_data(
+                                &source_env,
+                                &source_entity,
+                                &source_record_id,
+                                &target_env,
+                                &target_entity,
+                                &target_record_id,
+                            ).await
+                            .map(|(source, target)| super::FetchedData::ExampleData(pair_id, source, target))
+                            .map_err(|e| e.to_string())
+                        }
+                    );
+                }
+
+                builder
+                    .with_title("Refreshing Entity Comparison")
                     .on_complete(AppId::EntityComparison)
-                    .build(|task_idx, result| {
+                    .build(|_task_idx, result| {
                         let data = result.downcast::<Result<super::FetchedData, String>>().unwrap();
-                        Msg::ParallelDataLoaded(task_idx, *data)
+                        Msg::ParallelDataLoaded(0, *data)
                     })
             }
             Msg::CreateManualMapping => {
@@ -722,20 +692,112 @@ impl App for EntityComparisonApp {
                 // Update state with loaded mappings and examples
                 state.field_mappings = field_mappings;
                 state.prefix_mappings = prefix_mappings;
-                state.examples.pairs = example_pairs;
+                state.examples.pairs = example_pairs.clone();
 
                 // Set first pair as active if any exist
                 if !state.examples.pairs.is_empty() {
                     state.examples.active_pair_id = Some(state.examples.pairs[0].id.clone());
                 }
 
-                // Recompute matches if we have metadata loaded
-                if matches!(state.source_metadata, Resource::Success(_))
-                    && matches!(state.target_metadata, Resource::Success(_)) {
-                    recompute_matches(state);
+                // Now load metadata + example data in one parallel batch
+                let mut builder = Command::perform_parallel()
+                    // Source entity fetches
+                    .add_task(
+                        format!("Loading {} fields ({})", state.source_entity, state.source_env),
+                        {
+                            let env = state.source_env.clone();
+                            let entity = state.source_entity.clone();
+                            async move {
+                                fetch_with_cache(&env, &entity, FetchType::SourceFields, true).await
+                            }
+                        }
+                    )
+                    .add_task(
+                        format!("Loading {} forms ({})", state.source_entity, state.source_env),
+                        {
+                            let env = state.source_env.clone();
+                            let entity = state.source_entity.clone();
+                            async move {
+                                fetch_with_cache(&env, &entity, FetchType::SourceForms, true).await
+                            }
+                        }
+                    )
+                    .add_task(
+                        format!("Loading {} views ({})", state.source_entity, state.source_env),
+                        {
+                            let env = state.source_env.clone();
+                            let entity = state.source_entity.clone();
+                            async move {
+                                fetch_with_cache(&env, &entity, FetchType::SourceViews, true).await
+                            }
+                        }
+                    )
+                    // Target entity fetches
+                    .add_task(
+                        format!("Loading {} fields ({})", state.target_entity, state.target_env),
+                        {
+                            let env = state.target_env.clone();
+                            let entity = state.target_entity.clone();
+                            async move {
+                                fetch_with_cache(&env, &entity, FetchType::TargetFields, true).await
+                            }
+                        }
+                    )
+                    .add_task(
+                        format!("Loading {} forms ({})", state.target_entity, state.target_env),
+                        {
+                            let env = state.target_env.clone();
+                            let entity = state.target_entity.clone();
+                            async move {
+                                fetch_with_cache(&env, &entity, FetchType::TargetForms, true).await
+                            }
+                        }
+                    )
+                    .add_task(
+                        format!("Loading {} views ({})", state.target_entity, state.target_env),
+                        {
+                            let env = state.target_env.clone();
+                            let entity = state.target_entity.clone();
+                            async move {
+                                fetch_with_cache(&env, &entity, FetchType::TargetViews, true).await
+                            }
+                        }
+                    );
+
+                // Add example data fetching tasks
+                for pair in example_pairs {
+                    let pair_id = pair.id.clone();
+                    let source_env = state.source_env.clone();
+                    let source_entity = state.source_entity.clone();
+                    let source_record_id = pair.source_record_id.clone();
+                    let target_env = state.target_env.clone();
+                    let target_entity = state.target_entity.clone();
+                    let target_record_id = pair.target_record_id.clone();
+
+                    builder = builder.add_task(
+                        format!("Loading example: {}", pair.display_name()),
+                        async move {
+                            super::fetch_example_pair_data(
+                                &source_env,
+                                &source_entity,
+                                &source_record_id,
+                                &target_env,
+                                &target_entity,
+                                &target_record_id,
+                            ).await
+                            .map(|(source, target)| super::FetchedData::ExampleData(pair_id, source, target))
+                            .map_err(|e| e.to_string())
+                        }
+                    );
                 }
 
-                Command::None
+                builder
+                    .with_title("Loading Entity Comparison")
+                    .on_complete(AppId::EntityComparison)
+                    .build(|_task_idx, result| {
+                        let data = result.downcast::<Result<super::FetchedData, String>>().unwrap();
+                        Msg::ParallelDataLoaded(0, *data)
+                    })
             }
 
             // Examples modal messages
@@ -775,6 +837,10 @@ impl App for EntityComparisonApp {
                         pair = pair.with_label(label);
                     }
 
+                    let pair_id = pair.id.clone();
+                    let source_record_id = pair.source_record_id.clone();
+                    let target_record_id = pair.target_record_id.clone();
+
                     state.examples.pairs.push(pair.clone());
 
                     // Clear inputs
@@ -792,7 +858,28 @@ impl App for EntityComparisonApp {
                         }
                     });
 
-                    // TODO: Auto-fetch data for new pair
+                    // Auto-fetch data for new pair
+                    let source_env = state.source_env.clone();
+                    let source_entity = state.source_entity.clone();
+                    let target_env = state.target_env.clone();
+                    let target_entity = state.target_entity.clone();
+
+                    return Command::perform(
+                        async move {
+                            super::fetch_example_pair_data(
+                                &source_env,
+                                &source_entity,
+                                &source_record_id,
+                                &target_env,
+                                &target_entity,
+                                &target_record_id,
+                            ).await.map(|(source, target)| (pair_id, source, target))
+                        },
+                        |result| match result {
+                            Ok((pair_id, source, target)) => Msg::ExampleDataFetched(pair_id, Ok((source, target))),
+                            Err(e) => Msg::ExampleDataFetched(String::new(), Err(e)),
+                        }
+                    );
                 }
 
                 Command::None
@@ -811,45 +898,6 @@ impl App for EntityComparisonApp {
                                 log::error!("Failed to delete example pair: {}", e);
                             }
                         });
-                    }
-                }
-                Command::None
-            }
-            Msg::FetchExampleData => {
-                // Fetch data for selected pair with loading screen
-                if let Some(selected_idx) = state.examples_list_state.selected() {
-                    if let Some(pair) = state.examples.pairs.get(selected_idx) {
-                        let pair_id = pair.id.clone();
-                        let source_env = state.source_env.clone();
-                        let source_entity = state.source_entity.clone();
-                        let source_record_id = pair.source_record_id.clone();
-                        let target_env = state.target_env.clone();
-                        let target_entity = state.target_entity.clone();
-                        let target_record_id = pair.target_record_id.clone();
-
-                        return Command::perform_parallel()
-                            .add_task(
-                                format!("Fetching example data for pair {}", pair.display_name()),
-                                async move {
-                                    super::fetch_example_pair_data(
-                                        &source_env,
-                                        &source_entity,
-                                        &source_record_id,
-                                        &target_env,
-                                        &target_entity,
-                                        &target_record_id,
-                                    ).await.map(|(source, target)| (pair_id, source, target))
-                                }
-                            )
-                            .with_title("Fetching Example Data")
-                            .on_complete(AppId::EntityComparison)
-                            .build(|_task_idx, result| {
-                                let data = result.downcast::<Result<(String, serde_json::Value, serde_json::Value), String>>().unwrap();
-                                match *data {
-                                    Ok((pair_id, source, target)) => Msg::ExampleDataFetched(pair_id, Ok((source, target))),
-                                    Err(e) => Msg::ExampleDataFetched(String::new(), Err(e)),
-                                }
-                            });
                     }
                 }
                 Command::None
@@ -987,7 +1035,6 @@ impl App for EntityComparisonApp {
         if state.show_examples_modal {
             subs.push(Subscription::keyboard(KeyCode::Char('a'), "Add example pair", Msg::AddExamplePair));
             subs.push(Subscription::keyboard(KeyCode::Char('d'), "Delete example pair", Msg::DeleteExamplePair));
-            subs.push(Subscription::keyboard(KeyCode::Char('f'), "Fetch example data", Msg::FetchExampleData));
             subs.push(Subscription::keyboard(KeyCode::Char('c'), "Close modal", Msg::CloseExamplesModal));
             subs.push(Subscription::keyboard(KeyCode::Esc, "Close modal", Msg::CloseExamplesModal));
         }
@@ -1190,7 +1237,6 @@ fn render_examples_modal(state: &State, theme: &Theme) -> Element<Msg> {
         .on_list_navigate(Msg::ExamplesListNavigate)
         .on_add(Msg::AddExamplePair)
         .on_delete(Msg::DeleteExamplePair)
-        .on_fetch(Msg::FetchExampleData)
         .on_close(Msg::CloseExamplesModal)
         .build(theme)
 }
@@ -1423,3 +1469,4 @@ fn mirror_container_toggle(state: &mut State, source_id: &str, is_expanded: bool
         }
     }
 }
+
