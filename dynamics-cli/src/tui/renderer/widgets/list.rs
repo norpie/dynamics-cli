@@ -102,6 +102,16 @@ pub fn render_list<Msg: Clone + Send + 'static>(
         for ((_, child), chunk) in visible_items.iter().zip(chunks.iter()) {
             render_fn(frame, theme, registry, focus_registry, dropdown_registry, focused_id, child, *chunk, inside_panel);
         }
+
+        // Register click handlers for list items
+        if let Some(on_select_fn) = on_select {
+            for (idx, chunk) in chunks.iter().enumerate() {
+                let item_idx = start_idx + idx;
+                if item_idx < items.len() {
+                    registry.register_click(*chunk, on_select_fn(item_idx));
+                }
+            }
+        }
     }
 
     // Render scrollbar if needed

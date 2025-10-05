@@ -88,3 +88,41 @@ pub fn handle_target_viewport_height(state: &mut State, height: usize) -> Comman
     tree_state.set_viewport_height(height);
     Command::None
 }
+
+pub fn handle_source_node_clicked(state: &mut State, node_id: String) -> Command<Msg> {
+    // Get the tree state for the active tab
+    let tree_state = match state.active_tab {
+        ActiveTab::Fields => &mut state.source_fields_tree,
+        ActiveTab::Relationships => &mut state.source_relationships_tree,
+        ActiveTab::Views => &mut state.source_views_tree,
+        ActiveTab::Forms => &mut state.source_forms_tree,
+        ActiveTab::Entities => &mut state.source_entities_tree,
+    };
+
+    // Update selection
+    tree_state.select(Some(node_id.clone()));
+
+    // Release the borrow
+    drop(tree_state);
+
+    // Trigger mirrored selection to update target tree
+    update_mirrored_selection(state, &node_id);
+
+    Command::None
+}
+
+pub fn handle_target_node_clicked(state: &mut State, node_id: String) -> Command<Msg> {
+    // Get the tree state for the active tab
+    let tree_state = match state.active_tab {
+        ActiveTab::Fields => &mut state.target_fields_tree,
+        ActiveTab::Relationships => &mut state.target_relationships_tree,
+        ActiveTab::Views => &mut state.target_views_tree,
+        ActiveTab::Forms => &mut state.target_forms_tree,
+        ActiveTab::Entities => &mut state.target_entities_tree,
+    };
+
+    // Update selection
+    tree_state.select(Some(node_id.clone()));
+
+    Command::None
+}

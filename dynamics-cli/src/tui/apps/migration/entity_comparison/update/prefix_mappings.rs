@@ -22,6 +22,11 @@ pub fn handle_list_navigate(state: &mut State, key: crossterm::event::KeyCode) -
     Command::None
 }
 
+pub fn handle_list_select(state: &mut State, index: usize) -> Command<Msg> {
+    state.prefix_mappings_list_state.select(Some(index));
+    Command::None
+}
+
 pub fn handle_source_input_event(
     state: &mut State,
     event: crate::tui::widgets::TextInputEvent,

@@ -373,6 +373,7 @@ impl App for MigrationEnvironmentApp {
         use_constraints!();
 
         let list = Element::list("migration-list", &state.environments, &state.list_state, theme)
+            .on_select(Msg::SelectEnvironment)
             .on_activate(Msg::SelectEnvironment)
             .on_navigate(Msg::ListNavigate)
             .build();

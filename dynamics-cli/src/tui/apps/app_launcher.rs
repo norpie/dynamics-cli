@@ -104,6 +104,7 @@ impl App for AppLauncher {
             &state.list_state,
             theme,
         )
+        .on_select(Msg::LaunchApp)
         .on_activate(Msg::LaunchApp)
         .on_navigate(Msg::ListNavigate)
         .build();

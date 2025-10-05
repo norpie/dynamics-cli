@@ -19,6 +19,11 @@ pub fn handle_list_navigate(state: &mut State, key: KeyCode) -> Command<Msg> {
     Command::None
 }
 
+pub fn handle_list_select(state: &mut State, index: usize) -> Command<Msg> {
+    state.examples_list_state.select(Some(index));
+    Command::None
+}
+
 pub fn handle_source_input_event(state: &mut State, event: TextInputEvent) -> Command<Msg> {
     state.examples_source_input.handle_event(event, None);
     Command::None

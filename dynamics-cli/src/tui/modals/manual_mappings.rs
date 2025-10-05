@@ -48,6 +48,7 @@ pub struct ManualMappingsModal<Msg> {
     mappings: Vec<ManualMappingItem<Msg>>,
     list_state: ListState,
     on_list_navigate: Option<fn(crossterm::event::KeyCode) -> Msg>,
+    on_list_select: Option<fn(usize) -> Msg>,
     on_delete: Option<Msg>,
     on_close: Option<Msg>,
     width: Option<u16>,
@@ -61,6 +62,7 @@ impl<Msg: Clone> ManualMappingsModal<Msg> {
             mappings: Vec::new(),
             list_state: ListState::new(),
             on_list_navigate: None,
+            on_list_select: None,
             on_delete: None,
             on_close: None,
             width: Some(70),
@@ -83,6 +85,12 @@ impl<Msg: Clone> ManualMappingsModal<Msg> {
     /// Set list navigation handler
     pub fn on_list_navigate(mut self, handler: fn(crossterm::event::KeyCode) -> Msg) -> Self {
         self.on_list_navigate = Some(handler);
+        self
+    }
+
+    /// Set list select handler
+    pub fn on_list_select(mut self, handler: fn(usize) -> Msg) -> Self {
+        self.on_list_select = Some(handler);
         self
     }
 
@@ -117,12 +125,15 @@ impl<Msg: Clone> ManualMappingsModal<Msg> {
         // Build list
         let list_handler = self.on_list_navigate
             .expect("ManualMappingsModal requires on_list_navigate");
+        let select_handler = self.on_list_select
+            .expect("ManualMappingsModal requires on_list_select");
         let mappings_list = Element::list(
             FocusId::new("manual-mappings-list"),
             &self.mappings,
             &self.list_state,
             theme,
         )
+        .on_select(select_handler)
         .on_navigate(list_handler)
         .build();
 

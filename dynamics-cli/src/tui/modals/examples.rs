@@ -71,6 +71,7 @@ pub struct ExamplesModal<Msg> {
     on_target_input_event: Option<fn(crate::tui::widgets::TextInputEvent) -> Msg>,
     on_label_input_event: Option<fn(crate::tui::widgets::TextInputEvent) -> Msg>,
     on_list_navigate: Option<fn(crossterm::event::KeyCode) -> Msg>,
+    on_list_select: Option<fn(usize) -> Msg>,
     on_add: Option<Msg>,
     on_delete: Option<Msg>,
     on_close: Option<Msg>,
@@ -91,6 +92,7 @@ impl<Msg: Clone> ExamplesModal<Msg> {
             on_target_input_event: None,
             on_label_input_event: None,
             on_list_navigate: None,
+            on_list_select: None,
             on_add: None,
             on_delete: None,
             on_close: None,
@@ -150,6 +152,12 @@ impl<Msg: Clone> ExamplesModal<Msg> {
     /// Set list navigation handler
     pub fn on_list_navigate(mut self, handler: fn(crossterm::event::KeyCode) -> Msg) -> Self {
         self.on_list_navigate = Some(handler);
+        self
+    }
+
+    /// Set list select handler
+    pub fn on_list_select(mut self, handler: fn(usize) -> Msg) -> Self {
+        self.on_list_select = Some(handler);
         self
     }
 
@@ -224,12 +232,15 @@ impl<Msg: Clone> ExamplesModal<Msg> {
         // Build list
         let list_handler = self.on_list_navigate
             .expect("ExamplesModal requires on_list_navigate");
+        let select_handler = self.on_list_select
+            .expect("ExamplesModal requires on_list_select");
         let pairs_list = Element::list(
             FocusId::new("examples-list"),
             &self.pairs,
             &self.list_state,
             theme,
         )
+        .on_select(select_handler)
         .on_navigate(list_handler)
         .build();
 

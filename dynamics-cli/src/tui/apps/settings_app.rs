@@ -685,6 +685,7 @@ impl App for SettingsApp {
             &state.namespace_list_state,
             theme
         )
+        .on_select(Msg::SelectNamespace)
         .on_activate(Msg::SelectNamespace)
         .on_navigate(Msg::NamespaceListNavigate)
         .build();
@@ -720,6 +721,7 @@ impl App for SettingsApp {
                 &state.option_list_state,
                 theme
             )
+            .on_select(Msg::SelectOption)
             .on_activate(Msg::SelectOption)
             .on_navigate(Msg::OptionListNavigate)
             .build()

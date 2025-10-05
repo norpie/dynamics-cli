@@ -509,6 +509,7 @@ impl App for MigrationComparisonSelectApp {
                 &state.list_state,
                 theme,
             )
+            .on_select(|_| Msg::SelectComparison)
             .on_navigate(Msg::ListNavigate)
             .on_activate(|_| Msg::SelectComparison)
             .build()

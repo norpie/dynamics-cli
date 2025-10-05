@@ -19,6 +19,11 @@ pub fn handle_list_navigate(state: &mut State, key: crossterm::event::KeyCode) -
     Command::None
 }
 
+pub fn handle_list_select(state: &mut State, index: usize) -> Command<Msg> {
+    state.manual_mappings_list_state.select(Some(index));
+    Command::None
+}
+
 pub fn handle_delete_manual_mapping(state: &mut State) -> Command<Msg> {
     // Get selected mapping from list
     if let Some(selected_idx) = state.manual_mappings_list_state.selected() {

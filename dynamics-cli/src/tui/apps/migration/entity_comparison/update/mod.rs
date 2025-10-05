@@ -23,6 +23,8 @@ pub fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         Msg::TargetTreeEvent(event) => tree_events::handle_target_tree_event(state, event),
         Msg::SourceViewportHeight(h) => tree_events::handle_source_viewport_height(state, h),
         Msg::TargetViewportHeight(h) => tree_events::handle_target_viewport_height(state, h),
+        Msg::SourceTreeNodeClicked(node_id) => tree_events::handle_source_node_clicked(state, node_id),
+        Msg::TargetTreeNodeClicked(node_id) => tree_events::handle_target_node_clicked(state, node_id),
 
         // Data loading
         Msg::ParallelDataLoaded(idx, result) => data_loading::handle_parallel_data_loaded(state, idx, result),
@@ -40,6 +42,7 @@ pub fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         Msg::OpenExamplesModal => examples::handle_open_modal(state),
         Msg::CloseExamplesModal => examples::handle_close_modal(state),
         Msg::ExamplesListNavigate(key) => examples::handle_list_navigate(state, key),
+        Msg::ExamplesListSelect(idx) => examples::handle_list_select(state, idx),
         Msg::SourceInputEvent(event) => examples::handle_source_input_event(state, event),
         Msg::TargetInputEvent(event) => examples::handle_target_input_event(state, event),
         Msg::LabelInputEvent(event) => examples::handle_label_input_event(state, event),
@@ -53,6 +56,7 @@ pub fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         Msg::OpenPrefixMappingsModal => prefix_mappings::handle_open_modal(state),
         Msg::ClosePrefixMappingsModal => prefix_mappings::handle_close_modal(state),
         Msg::PrefixMappingsListNavigate(key) => prefix_mappings::handle_list_navigate(state, key),
+        Msg::PrefixMappingsListSelect(idx) => prefix_mappings::handle_list_select(state, idx),
         Msg::PrefixSourceInputEvent(event) => prefix_mappings::handle_source_input_event(state, event),
         Msg::PrefixTargetInputEvent(event) => prefix_mappings::handle_target_input_event(state, event),
         Msg::AddPrefixMapping => prefix_mappings::handle_add_prefix_mapping(state),
@@ -62,6 +66,7 @@ pub fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         Msg::OpenManualMappingsModal => manual_mappings::handle_open_modal(state),
         Msg::CloseManualMappingsModal => manual_mappings::handle_close_modal(state),
         Msg::ManualMappingsListNavigate(key) => manual_mappings::handle_list_navigate(state, key),
+        Msg::ManualMappingsListSelect(idx) => manual_mappings::handle_list_select(state, idx),
         Msg::DeleteManualMappingFromModal => manual_mappings::handle_delete_manual_mapping(state),
 
         // Export

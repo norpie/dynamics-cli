@@ -26,6 +26,8 @@ pub enum Msg {
     TargetTreeEvent(crate::tui::widgets::TreeEvent),
     SourceViewportHeight(usize),  // Called by renderer with actual area.height
     TargetViewportHeight(usize),  // Called by renderer with actual area.height
+    SourceTreeNodeClicked(String), // Node clicked in source tree
+    TargetTreeNodeClicked(String), // Node clicked in target tree
     CreateManualMapping,  // Create mapping from selected source to selected target
     DeleteManualMapping,  // Delete mapping from selected field
     ToggleHideMatched,    // Toggle showing/hiding matched items in trees
@@ -37,6 +39,7 @@ pub enum Msg {
     OpenExamplesModal,
     CloseExamplesModal,
     ExamplesListNavigate(crossterm::event::KeyCode),
+    ExamplesListSelect(usize),
     SourceInputEvent(crate::tui::widgets::TextInputEvent),
     TargetInputEvent(crate::tui::widgets::TextInputEvent),
     LabelInputEvent(crate::tui::widgets::TextInputEvent),
@@ -50,6 +53,7 @@ pub enum Msg {
     OpenPrefixMappingsModal,
     ClosePrefixMappingsModal,
     PrefixMappingsListNavigate(crossterm::event::KeyCode),
+    PrefixMappingsListSelect(usize),
     PrefixSourceInputEvent(crate::tui::widgets::TextInputEvent),
     PrefixTargetInputEvent(crate::tui::widgets::TextInputEvent),
     AddPrefixMapping,
@@ -59,6 +63,7 @@ pub enum Msg {
     OpenManualMappingsModal,
     CloseManualMappingsModal,
     ManualMappingsListNavigate(crossterm::event::KeyCode),
+    ManualMappingsListSelect(usize),
     DeleteManualMappingFromModal,
 
     // Export
