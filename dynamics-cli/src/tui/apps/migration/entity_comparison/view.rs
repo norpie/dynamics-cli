@@ -33,6 +33,7 @@ pub fn render_main_layout(state: &mut State, theme: &Theme) -> Element<Msg> {
             &state.source_entities,
             &state.examples,
             true, // is_source
+            &state.source_entity,
             sort_mode,
         )
     } else {
@@ -85,6 +86,7 @@ pub fn render_main_layout(state: &mut State, theme: &Theme) -> Element<Msg> {
             &state.target_entities,
             &state.examples,
             false, // is_source
+            &state.target_entity,
             sort_mode,
         )
     } else {

@@ -1072,6 +1072,13 @@ impl DynamicsClient {
         }
 
         let record: serde_json::Value = response.json().await?;
+
+        log::debug!("Fetched record for entity '{}' with ID '{}'", entity_name, record_id);
+        log::debug!("Record has {} top-level fields", record.as_object().map(|o| o.len()).unwrap_or(0));
+        if let Some(obj) = record.as_object() {
+            log::debug!("Record field names: {:?}", obj.keys().collect::<Vec<_>>());
+        }
+
         Ok(record)
     }
 }

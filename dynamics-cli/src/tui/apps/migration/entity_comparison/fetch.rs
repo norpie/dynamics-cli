@@ -196,6 +196,10 @@ pub async fn fetch_example_pair_data(
     target_entity: &str,
     target_record_id: &str,
 ) -> Result<(serde_json::Value, serde_json::Value), String> {
+    log::debug!("Fetching example pair: source={}:{} ({}), target={}:{} ({})",
+        source_env, source_entity, source_record_id,
+        target_env, target_entity, target_record_id);
+
     let manager = crate::client_manager();
 
     // Fetch source record
@@ -203,18 +207,22 @@ pub async fn fetch_example_pair_data(
         .await
         .map_err(|e| format!("Failed to get source client: {}", e))?;
 
+    log::debug!("Fetching source record...");
     let source_record = source_client.fetch_record_by_id(source_entity, source_record_id)
         .await
         .map_err(|e| format!("Failed to fetch source record: {}", e))?;
+    log::debug!("Source record fetched successfully");
 
     // Fetch target record
     let target_client = manager.get_client(target_env)
         .await
         .map_err(|e| format!("Failed to get target client: {}", e))?;
 
+    log::debug!("Fetching target record...");
     let target_record = target_client.fetch_record_by_id(target_entity, target_record_id)
         .await
         .map_err(|e| format!("Failed to fetch target record: {}", e))?;
+    log::debug!("Target record fetched successfully");
 
     Ok((source_record, target_record))
 }

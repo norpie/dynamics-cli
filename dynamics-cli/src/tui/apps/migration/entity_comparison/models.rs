@@ -160,7 +160,7 @@ pub struct ExamplesState {
     pub pairs: Vec<ExamplePair>,
     pub active_pair_id: Option<String>,
     pub enabled: bool,
-    pub cache: HashMap<String, serde_json::Value>, // record_id -> data
+    pub cache: HashMap<String, serde_json::Value>, // (entity:record_id) -> data
 }
 
 impl Default for ExamplesState {
@@ -194,7 +194,8 @@ impl ExamplesState {
     /// Get example value for a field
     /// For hierarchical paths (Forms/Views), extracts just the field name from the path
     /// field_name can be either a simple name like "accountname" or a path like "formtype/main/form/MainForm/tab/General/accountname"
-    pub fn get_field_value(&self, field_name: &str, is_source: bool) -> Option<String> {
+    /// entity_name is the entity logical name (e.g., "cgk_deadline", "nrq_deadline")
+    pub fn get_field_value(&self, field_name: &str, is_source: bool, entity_name: &str) -> Option<String> {
         if !self.enabled {
             return None;
         }
@@ -209,26 +210,36 @@ impl ExamplesState {
             &active_pair.target_record_id
         };
 
+        // Create composite cache key: entity:record_id
+        let cache_key = format!("{}:{}", entity_name, record_id);
+
+        log::debug!("Looking up field '{}' for cache_key '{}' (is_source: {})", field_name, cache_key, is_source);
+
         // Get the cached record data
-        let record_data = self.cache.get(record_id);
+        let record_data = self.cache.get(&cache_key);
 
         if record_data.is_none() {
-            log::warn!("No cached data for record_id: {} (is_source: {})", record_id, is_source);
-            log::warn!("Cache keys: {:?}", self.cache.keys().collect::<Vec<_>>());
+            log::warn!("No cached data for cache_key: {} (is_source: {})", cache_key, is_source);
+            log::warn!("Available cache keys: {:?}", self.cache.keys().collect::<Vec<_>>());
             return None;
         }
 
         let record_data = record_data.unwrap();
 
+        log::debug!("Found cached data with {} fields", record_data.as_object().map(|o| o.len()).unwrap_or(0));
+
         // Extract just the field name from hierarchical path if present
         // e.g., "formtype/main/form/MainForm/tab/General/accountname" -> "accountname"
-        let field_name = field_name
+        let extracted_field_name = field_name
             .split('/')
             .last()
             .unwrap_or(field_name);
 
+        log::debug!("Extracted field name: '{}' (from '{}')", extracted_field_name, field_name);
+
         // Try to get the field value from the JSON
-        if let Some(value) = record_data.get(field_name) {
+        if let Some(value) = record_data.get(extracted_field_name) {
+            log::debug!("Found value for field '{}': {:?}", extracted_field_name, value);
             // Format the value based on its type
             match value {
                 serde_json::Value::String(s) => Some(format!("\"{}\"", s)),
@@ -247,6 +258,10 @@ impl ExamplesState {
                 }
             }
         } else {
+            log::debug!("Field '{}' not found in cached data", extracted_field_name);
+            if let Some(obj) = record_data.as_object() {
+                log::debug!("Available fields in cached data: {:?}", obj.keys().collect::<Vec<_>>());
+            }
             None
         }
     }

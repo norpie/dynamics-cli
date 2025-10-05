@@ -135,12 +135,35 @@ pub fn handle_parallel_data_loaded(
                     }
                 }
                 FetchedData::ExampleData(pair_id, source_data, target_data) => {
-                    // Store example data in cache
+                    // Store example data in cache with composite keys (entity:record_id)
                     if let Some(pair) = state.examples.pairs.iter().find(|p| p.id == pair_id) {
-                        log::info!("Fetched example data for pair {}: source_id={}, target_id={}",
+                        log::debug!("Storing example data for pair {}: source_id={}, target_id={}",
                             pair_id, pair.source_record_id, pair.target_record_id);
-                        state.examples.cache.insert(pair.source_record_id.clone(), source_data);
-                        state.examples.cache.insert(pair.target_record_id.clone(), target_data);
+
+                        log::debug!("Source data has {} top-level fields",
+                            source_data.as_object().map(|o| o.len()).unwrap_or(0));
+                        if let Some(obj) = source_data.as_object() {
+                            log::debug!("Source field names: {:?}", obj.keys().collect::<Vec<_>>());
+                        }
+
+                        log::debug!("Target data has {} top-level fields",
+                            target_data.as_object().map(|o| o.len()).unwrap_or(0));
+                        if let Some(obj) = target_data.as_object() {
+                            log::debug!("Target field names: {:?}", obj.keys().collect::<Vec<_>>());
+                        }
+
+                        // Use composite keys: entity:record_id
+                        let source_key = format!("{}:{}", state.source_entity, pair.source_record_id);
+                        let target_key = format!("{}:{}", state.target_entity, pair.target_record_id);
+
+                        log::debug!("Storing with keys: source='{}', target='{}'", source_key, target_key);
+
+                        state.examples.cache.insert(source_key, source_data);
+                        state.examples.cache.insert(target_key, target_data);
+
+                        log::debug!("Cache now has {} entries", state.examples.cache.len());
+                    } else {
+                        log::warn!("No pair found with ID {} to store example data", pair_id);
                     }
                 }
             }

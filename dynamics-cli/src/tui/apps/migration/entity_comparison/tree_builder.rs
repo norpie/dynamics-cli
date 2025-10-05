@@ -17,13 +17,14 @@ pub fn build_tree_items(
     entities: &[(String, usize)],
     examples: &super::models::ExamplesState,
     is_source: bool,
+    entity_name: &str,
     sort_mode: super::models::SortMode,
 ) -> Vec<ComparisonTreeItem> {
     match active_tab {
-        ActiveTab::Fields => build_fields_tree(&metadata.fields, field_matches, examples, is_source, sort_mode),
+        ActiveTab::Fields => build_fields_tree(&metadata.fields, field_matches, examples, is_source, entity_name, sort_mode),
         ActiveTab::Relationships => build_relationships_tree(&metadata.relationships, relationship_matches, sort_mode),
-        ActiveTab::Views => build_views_tree(&metadata.views, field_matches, &metadata.fields, examples, is_source),
-        ActiveTab::Forms => build_forms_tree(&metadata.forms, field_matches, &metadata.fields, examples, is_source),
+        ActiveTab::Views => build_views_tree(&metadata.views, field_matches, &metadata.fields, examples, is_source, entity_name),
+        ActiveTab::Forms => build_forms_tree(&metadata.forms, field_matches, &metadata.fields, examples, is_source, entity_name),
         ActiveTab::Entities => build_entities_tree(entities, entity_matches, sort_mode),
     }
 }
@@ -35,6 +36,7 @@ fn build_fields_tree(
     field_matches: &HashMap<String, MatchInfo>,
     examples: &super::models::ExamplesState,
     is_source: bool,
+    entity_name: &str,
     sort_mode: super::models::SortMode,
 ) -> Vec<ComparisonTreeItem> {
     let mut items: Vec<ComparisonTreeItem> = fields
@@ -42,7 +44,7 @@ fn build_fields_tree(
         .map(|f| ComparisonTreeItem::Field(FieldNode {
             metadata: f.clone(),
             match_info: field_matches.get(&f.logical_name).cloned(),
-            example_value: examples.get_field_value(&f.logical_name, is_source),
+            example_value: examples.get_field_value(&f.logical_name, is_source, entity_name),
         }))
         .collect();
 
@@ -77,6 +79,7 @@ fn build_views_tree(
     all_fields: &[crate::api::metadata::FieldMetadata],
     examples: &super::models::ExamplesState,
     is_source: bool,
+    entity_name: &str,
 ) -> Vec<ComparisonTreeItem> {
     // Group views by type
     let mut grouped: HashMap<String, Vec<&crate::api::metadata::ViewMetadata>> = HashMap::new();
@@ -138,7 +141,7 @@ fn build_views_tree(
                     ComparisonTreeItem::Field(FieldNode {
                         metadata: field_metadata,
                         match_info: field_matches.get(&column_path).cloned(),
-                        example_value: examples.get_field_value(&column_path, is_source),
+                        example_value: examples.get_field_value(&column_path, is_source, entity_name),
                     })
                 })
                 .collect();
@@ -177,6 +180,7 @@ fn build_forms_tree(
     all_fields: &[crate::api::metadata::FieldMetadata],
     examples: &super::models::ExamplesState,
     is_source: bool,
+    entity_name: &str,
 ) -> Vec<ComparisonTreeItem> {
     // Group forms by type
     let mut grouped: HashMap<String, Vec<&crate::api::metadata::FormMetadata>> = HashMap::new();
@@ -261,7 +265,7 @@ fn build_forms_tree(
                                 ComparisonTreeItem::Field(FieldNode {
                                     metadata: field_metadata,
                                     match_info: field_matches.get(&field_path).cloned(),
-                                    example_value: examples.get_field_value(&field_path, is_source),
+                                    example_value: examples.get_field_value(&field_path, is_source, entity_name),
                                 })
                             })
                             .collect();
