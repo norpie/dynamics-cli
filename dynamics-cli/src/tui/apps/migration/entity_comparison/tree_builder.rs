@@ -426,8 +426,9 @@ fn sort_items(items: &mut [ComparisonTreeItem], sort_mode: super::models::SortMo
                 a_name.cmp(&b_name)
             });
         }
-        super::models::SortMode::MatchesFirst => {
+        super::models::SortMode::MatchesFirst | super::models::SortMode::SourceMatches => {
             // Sort matched items first (alphabetically), then unmatched (alphabetically)
+            // For SourceMatches, this is only applied to source side - target side uses special logic
             items.sort_by(|a, b| {
                 let a_has_match = item_has_match(a);
                 let b_has_match = item_has_match(b);

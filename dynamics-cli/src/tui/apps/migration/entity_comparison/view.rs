@@ -11,6 +11,7 @@ use crate::{col, row, use_constraints};
 use super::{Msg, ActiveTab};
 use super::app::State;
 use super::tree_builder::build_tree_items;
+use super::tree_items::ComparisonTreeItem;
 use std::collections::HashMap;
 use super::models::MatchInfo;
 
@@ -93,6 +94,11 @@ pub fn render_main_layout(state: &mut State, theme: &Theme) -> Element<Msg> {
     // Filter out matched items if hide_matched is enabled
     if hide_matched {
         target_items = filter_matched_items(target_items);
+    }
+
+    // Apply SourceMatches sorting to target side if enabled
+    if sort_mode == super::models::SortMode::SourceMatches {
+        target_items = sort_target_by_source_order(&source_items, target_items);
     }
 
     // Cache entity names before borrowing tree states
@@ -229,4 +235,72 @@ pub fn filter_matched_items(items: Vec<super::tree_items::ComparisonTreeItem>) -
             ComparisonTreeItem::View(_) | ComparisonTreeItem::Form(_) => Some(item),
         }
     }).collect()
+}
+
+/// Sort target items to align with source order in SourceMatches mode
+/// Matched target items appear at the same index as their source match
+/// Unmatched target items are appended alphabetically at the end
+fn sort_target_by_source_order(
+    source_items: &[ComparisonTreeItem],
+    mut target_items: Vec<ComparisonTreeItem>,
+) -> Vec<ComparisonTreeItem> {
+    use std::collections::HashMap;
+
+    // Build a map of target item names to the items themselves
+    let mut target_by_name: HashMap<String, ComparisonTreeItem> = target_items
+        .iter()
+        .map(|item| (get_item_name(item).to_string(), item.clone()))
+        .collect();
+
+    let mut result = Vec::new();
+    let mut used_targets = std::collections::HashSet::new();
+
+    // First pass: Add target items in source order (for matched items)
+    for source_item in source_items {
+        // Get the target field name from the source item's match
+        if let Some(target_name) = get_item_match_target(source_item) {
+            // Find and add the corresponding target item
+            if let Some(target_item) = target_by_name.get(target_name) {
+                result.push(target_item.clone());
+                used_targets.insert(target_name.clone());
+            }
+        }
+    }
+
+    // Second pass: Add remaining unmatched target items alphabetically
+    let mut unmatched: Vec<ComparisonTreeItem> = target_items
+        .into_iter()
+        .filter(|item| !used_targets.contains(get_item_name(item)))
+        .collect();
+
+    unmatched.sort_by(|a, b| {
+        let a_name = get_item_name(a);
+        let b_name = get_item_name(b);
+        a_name.cmp(&b_name)
+    });
+
+    result.extend(unmatched);
+    result
+}
+
+/// Get the name of an item
+fn get_item_name(item: &ComparisonTreeItem) -> &str {
+    match item {
+        ComparisonTreeItem::Field(node) => &node.metadata.logical_name,
+        ComparisonTreeItem::Relationship(node) => &node.metadata.name,
+        ComparisonTreeItem::Entity(node) => &node.name,
+        ComparisonTreeItem::Container(node) => &node.id,
+        _ => "",
+    }
+}
+
+/// Get the target field name from an item's match info
+fn get_item_match_target(item: &ComparisonTreeItem) -> Option<&str> {
+    match item {
+        ComparisonTreeItem::Field(node) => node.match_info.as_ref().map(|m| m.target_field.as_str()),
+        ComparisonTreeItem::Relationship(node) => node.match_info.as_ref().map(|m| m.target_field.as_str()),
+        ComparisonTreeItem::Entity(node) => node.match_info.as_ref().map(|m| m.target_field.as_str()),
+        ComparisonTreeItem::Container(node) => node.match_info.as_ref().map(|m| m.target_field.as_str()),
+        _ => None,
+    }
 }

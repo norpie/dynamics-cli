@@ -9,6 +9,7 @@ pub enum SortMode {
     #[default]
     Alphabetical,
     MatchesFirst,
+    SourceMatches,
 }
 
 impl SortMode {
@@ -16,13 +17,15 @@ impl SortMode {
         match self {
             SortMode::Alphabetical => "Alphabetical",
             SortMode::MatchesFirst => "Matches First",
+            SortMode::SourceMatches => "Source Matches",
         }
     }
 
     pub fn toggle(&self) -> Self {
         match self {
             SortMode::Alphabetical => SortMode::MatchesFirst,
-            SortMode::MatchesFirst => SortMode::Alphabetical,
+            SortMode::MatchesFirst => SortMode::SourceMatches,
+            SortMode::SourceMatches => SortMode::Alphabetical,
         }
     }
 }
