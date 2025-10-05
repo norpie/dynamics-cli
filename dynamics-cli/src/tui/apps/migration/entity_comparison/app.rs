@@ -702,6 +702,13 @@ impl App for EntityComparisonApp {
             Subscription::keyboard(KeyCode::Char('4'), "Switch to Forms", Msg::SwitchTab(4)),
             Subscription::keyboard(KeyCode::Char('5'), "Switch to Entities", Msg::SwitchTab(5)),
 
+            // AZERTY keyboard aliases
+            Subscription::keyboard(KeyCode::Char('&'), "Switch to Fields", Msg::SwitchTab(1)),
+            Subscription::keyboard(KeyCode::Char('é'), "Switch to Relationships", Msg::SwitchTab(2)),
+            Subscription::keyboard(KeyCode::Char('"'), "Switch to Views", Msg::SwitchTab(3)),
+            Subscription::keyboard(KeyCode::Char('\''), "Switch to Forms", Msg::SwitchTab(4)),
+            Subscription::keyboard(KeyCode::Char('('), "Switch to Entities", Msg::SwitchTab(5)),
+
             // Refresh metadata
             Subscription::keyboard(KeyCode::F(5), "Refresh metadata", Msg::Refresh),
 
