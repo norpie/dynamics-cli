@@ -7,6 +7,7 @@ mod matching;
 mod view;
 mod tree_sync;
 mod update;
+mod export;
 
 pub use app::{EntityComparisonApp, EntityComparisonParams, State as EntityComparisonState};
 pub use models::*;
@@ -44,6 +45,9 @@ pub enum Msg {
     ExampleDataFetched(String, Result<(serde_json::Value, serde_json::Value), String>), // pair_id, (source_data, target_data)
     CycleExamplePair,
     ToggleExamples,
+
+    // Export
+    ExportToExcel,
 }
 
 #[derive(Clone)]

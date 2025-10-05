@@ -133,3 +133,40 @@ pub fn handle_toggle_technical_names(state: &mut State) -> Command<Msg> {
     state.show_technical_names = !state.show_technical_names;
     Command::None
 }
+
+pub fn handle_export_to_excel(state: &mut State) -> Command<Msg> {
+    // Check if metadata is loaded
+    if !matches!(state.source_metadata, Resource::Success(_)) ||
+       !matches!(state.target_metadata, Resource::Success(_)) {
+        log::warn!("Cannot export: metadata not fully loaded");
+        return Command::None;
+    }
+
+    // Generate filename with timestamp
+    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+    let filename = format!(
+        "{}_{}_to_{}_{}.xlsx",
+        state.migration_name,
+        state.source_entity,
+        state.target_entity,
+        timestamp
+    );
+
+    // Get output directory from config or use current directory
+    let output_path = std::path::PathBuf::from(&filename);
+
+    // Perform export in background
+    let state_clone = state.clone();
+    tokio::spawn(async move {
+        match super::super::export::MigrationExporter::export_and_open(&state_clone, output_path.to_str().unwrap()) {
+            Ok(_) => {
+                log::info!("Successfully exported to {}", filename);
+            }
+            Err(e) => {
+                log::error!("Failed to export to Excel: {}", e);
+            }
+        }
+    });
+
+    Command::None
+}

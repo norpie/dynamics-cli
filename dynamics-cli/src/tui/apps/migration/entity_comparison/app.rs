@@ -266,6 +266,9 @@ impl App for EntityComparisonApp {
             Subscription::keyboard(KeyCode::Char('e'), "Cycle example pairs", Msg::CycleExamplePair),
             Subscription::keyboard(KeyCode::Char('x'), "Open examples modal", Msg::OpenExamplesModal),
             Subscription::keyboard(KeyCode::Char('X'), "Open examples modal", Msg::OpenExamplesModal),
+
+            // Export
+            Subscription::keyboard(KeyCode::F(10), "Export to Excel", Msg::ExportToExcel),
         ];
 
         // When showing confirmation modal, add y/n hotkeys

@@ -46,5 +46,8 @@ pub fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         Msg::ExampleDataFetched(id, result) => examples::handle_example_data_fetched(state, id, result),
         Msg::CycleExamplePair => examples::handle_cycle_example_pair(state),
         Msg::ToggleExamples => examples::handle_toggle_examples(state),
+
+        // Export
+        Msg::ExportToExcel => mappings::handle_export_to_excel(state),
     }
 }
