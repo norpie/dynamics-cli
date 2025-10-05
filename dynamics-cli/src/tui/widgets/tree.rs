@@ -73,6 +73,11 @@ impl TreeState {
         self.viewport_height = Some(height);
     }
 
+    /// Invalidate the metadata cache (forces rebuild on next flatten)
+    pub fn invalidate_cache(&mut self) {
+        self.cache_valid = false;
+    }
+
     /// Create a new TreeState with first node selected
     pub fn with_selection() -> Self {
         let mut state = Self::new();

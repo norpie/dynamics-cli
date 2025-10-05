@@ -469,6 +469,9 @@ impl<Msg> Element<Msg> {
     where
         T: crate::tui::widgets::TreeItem<Msg = Msg>,
     {
+        // Force cache invalidation to rebuild visible_order with current items
+        state.invalidate_cache();
+
         // Flatten tree based on expansion state
         let flattened = crate::tui::widgets::tree::flatten_tree(root_items, state, theme);
 
