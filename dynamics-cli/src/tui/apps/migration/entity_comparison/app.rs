@@ -310,11 +310,39 @@ impl App for EntityComparisonApp {
                             }
                         }
 
-                        // Focus tree when both fully loaded
+                        // Write complete metadata to cache and focus tree when both fully loaded
                         if let (Resource::Success(source), Resource::Success(target)) =
                             (&state.source_metadata, &state.target_metadata)
                         {
-                            if !source.fields.is_empty() && !target.fields.is_empty() {
+                            if !source.fields.is_empty() && !target.fields.is_empty()
+                                && !source.forms.is_empty() && !target.forms.is_empty()
+                                && !source.views.is_empty() && !target.views.is_empty() {
+
+                                // Cache both metadata objects asynchronously
+                                let source_env = state.source_env.clone();
+                                let source_entity = state.source_entity.clone();
+                                let source_meta = source.clone();
+                                tokio::spawn(async move {
+                                    let config = crate::global_config();
+                                    if let Err(e) = config.set_entity_metadata_cache(&source_env, &source_entity, &source_meta).await {
+                                        log::error!("Failed to cache source metadata for {}/{}: {}", source_env, source_entity, e);
+                                    } else {
+                                        log::debug!("Cached source metadata for {}/{}", source_env, source_entity);
+                                    }
+                                });
+
+                                let target_env = state.target_env.clone();
+                                let target_entity = state.target_entity.clone();
+                                let target_meta = target.clone();
+                                tokio::spawn(async move {
+                                    let config = crate::global_config();
+                                    if let Err(e) = config.set_entity_metadata_cache(&target_env, &target_entity, &target_meta).await {
+                                        log::error!("Failed to cache target metadata for {}/{}: {}", target_env, target_entity, e);
+                                    } else {
+                                        log::debug!("Cached target metadata for {}/{}", target_env, target_entity);
+                                    }
+                                });
+
                                 return Command::set_focus("source_tree".into());
                             }
                         }
