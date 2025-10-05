@@ -673,7 +673,7 @@ impl DynamicsClient {
     /// Fetch entity forms from systemforms endpoint
     pub async fn fetch_entity_forms(&self, entity_name: &str) -> anyhow::Result<Vec<super::metadata::FormMetadata>> {
         let url = format!(
-            "{}/{}/systemforms?$filter=objecttypecode eq '{}'&$select=formid,name,type",
+            "{}/{}/systemforms?$filter=objecttypecode eq '{}'&$select=formid,name,type,formxml",
             self.base_url,
             constants::api_path(),
             entity_name
@@ -716,10 +716,18 @@ impl DynamicsClient {
                         })
                         .unwrap_or_else(|| "Unknown".to_string());
 
+                    // Parse formxml if present
+                    let form_structure = if let Some(formxml_str) = form["formxml"].as_str() {
+                        Self::parse_form_xml(formxml_str, entity_name).ok()
+                    } else {
+                        None
+                    };
+
                     Some(super::metadata::FormMetadata {
                         id,
                         name,
                         form_type,
+                        form_structure,
                     })
                 })
                 .collect();
@@ -778,16 +786,9 @@ impl DynamicsClient {
                         })
                         .unwrap_or_else(|| "Unknown".to_string());
 
-                    // Parse layoutxml to extract columns (simplified - just extract attribute names)
+                    // Parse layoutxml to extract columns with metadata
                     let columns = if let Some(layout_xml) = view["layoutxml"].as_str() {
-                        // Basic XML parsing to extract column names from <cell name="attributename" />
-                        let mut cols = Vec::new();
-                        for cap in regex::Regex::new(r#"name="([^"]+)""#).unwrap().captures_iter(layout_xml) {
-                            if let Some(name) = cap.get(1) {
-                                cols.push(name.as_str().to_string());
-                            }
-                        }
-                        cols
+                        Self::parse_view_layout_xml(layout_xml)
                     } else {
                         Vec::new()
                     };
@@ -806,5 +807,135 @@ impl DynamicsClient {
             let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
             anyhow::bail!("View metadata fetch failed with status {}: {}", status, error_text)
         }
+    }
+
+    /// Parse form XML into structured hierarchy
+    fn parse_form_xml(formxml: &str, entity_name: &str) -> anyhow::Result<super::metadata::FormStructure> {
+        use roxmltree::Document;
+
+        let doc = Document::parse(formxml)
+            .map_err(|e| anyhow::anyhow!("Failed to parse form XML: {}", e))?;
+
+        let mut tabs = Vec::new();
+
+        // Find all tab elements
+        for tab_node in doc.descendants().filter(|n| n.has_tag_name("tab")) {
+            let tab_name = tab_node.attribute("name").unwrap_or("").to_string();
+            let tab_label = tab_node.descendants()
+                .find(|n| n.has_tag_name("label"))
+                .and_then(|n| n.attribute("description"))
+                .unwrap_or(&tab_name)
+                .to_string();
+            let visible = tab_node.attribute("visible").map(|v| v == "true").unwrap_or(true);
+            let expanded = tab_node.attribute("expanded").map(|v| v == "true").unwrap_or(true);
+            let order = tab_node.attribute("verticallayout")
+                .and_then(|s| s.parse::<i32>().ok())
+                .unwrap_or(0);
+
+            let mut sections = Vec::new();
+
+            // Find all sections within this tab
+            for section_node in tab_node.descendants().filter(|n| n.has_tag_name("section")) {
+                let section_name = section_node.attribute("name").unwrap_or("").to_string();
+                let section_label = section_node.descendants()
+                    .find(|n| n.has_tag_name("label"))
+                    .and_then(|n| n.attribute("description"))
+                    .unwrap_or(&section_name)
+                    .to_string();
+                let section_visible = section_node.attribute("visible").map(|v| v == "true").unwrap_or(true);
+                let section_columns = section_node.attribute("columns")
+                    .and_then(|s| s.parse::<i32>().ok())
+                    .unwrap_or(1);
+
+                let mut fields = Vec::new();
+
+                // Find all fields (control elements with datafieldname) within this section
+                for (idx, control_node) in section_node.descendants()
+                    .filter(|n| n.has_tag_name("control") && n.attribute("datafieldname").is_some())
+                    .enumerate()
+                {
+                    let logical_name = control_node.attribute("datafieldname").unwrap_or("").to_string();
+                    let field_label = control_node.descendants()
+                        .find(|n| n.has_tag_name("label"))
+                        .and_then(|n| n.attribute("description"))
+                        .unwrap_or(&logical_name)
+                        .to_string();
+                    let field_visible = control_node.attribute("visible").map(|v| v == "true").unwrap_or(true);
+                    let required_level = control_node.attribute("classid")
+                        .and_then(|_| control_node.attribute("requirementlevel"))
+                        .unwrap_or("None")
+                        .to_string();
+                    let readonly = control_node.attribute("disabled").map(|v| v == "true").unwrap_or(false);
+
+                    fields.push(super::metadata::FormField {
+                        logical_name,
+                        label: field_label,
+                        visible: field_visible,
+                        required_level,
+                        readonly,
+                        row: idx as i32,  // Approximation
+                        column: 0,  // Would need more complex layout parsing
+                    });
+                }
+
+                sections.push(super::metadata::FormSection {
+                    name: section_name,
+                    label: section_label,
+                    visible: section_visible,
+                    columns: section_columns,
+                    order: 0,  // Would need to extract from XML
+                    fields,
+                });
+            }
+
+            tabs.push(super::metadata::FormTab {
+                name: tab_name,
+                label: tab_label,
+                visible,
+                expanded,
+                order,
+                sections,
+            });
+        }
+
+        Ok(super::metadata::FormStructure {
+            name: "Form Structure".to_string(),
+            entity_name: entity_name.to_string(),
+            tabs,
+        })
+    }
+
+    /// Parse view layout XML to extract column metadata
+    fn parse_view_layout_xml(layout_xml: &str) -> Vec<super::metadata::ViewColumn> {
+        use roxmltree::Document;
+
+        let doc = match Document::parse(layout_xml) {
+            Ok(d) => d,
+            Err(_) => return Vec::new(),
+        };
+
+        let mut columns = Vec::new();
+
+        // Find all cell elements (columns in the view)
+        for (idx, cell_node) in doc.descendants()
+            .filter(|n| n.has_tag_name("cell"))
+            .enumerate()
+        {
+            if let Some(name) = cell_node.attribute("name") {
+                let width = cell_node.attribute("width")
+                    .and_then(|w| w.parse::<u32>().ok());
+                let is_primary = cell_node.attribute("isprimary")
+                    .map(|v| v == "true" || v == "1")
+                    .unwrap_or(idx == 0);  // First column is typically primary
+
+                columns.push(super::metadata::ViewColumn {
+                    name: name.to_string(),
+                    width,
+                    is_primary,
+                });
+            }
+        }
+
+        columns
     }
 }

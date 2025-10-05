@@ -47,13 +47,63 @@ pub enum RelationshipType {
     ManyToMany,
 }
 
+/// View column metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ViewColumn {
+    pub name: String,
+    pub width: Option<u32>,
+    pub is_primary: bool,
+}
+
 /// View metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ViewMetadata {
     pub id: String,
     pub name: String,
     pub view_type: String,
-    pub columns: Vec<String>,
+    pub columns: Vec<ViewColumn>,
+}
+
+/// Form field metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FormField {
+    pub logical_name: String,
+    pub label: String,
+    pub visible: bool,
+    pub required_level: String,  // None, ApplicationRequired, SystemRequired
+    pub readonly: bool,
+    pub row: i32,
+    pub column: i32,
+}
+
+/// Form section metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FormSection {
+    pub name: String,
+    pub label: String,
+    pub visible: bool,
+    pub columns: i32,
+    pub order: i32,
+    pub fields: Vec<FormField>,
+}
+
+/// Form tab metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FormTab {
+    pub name: String,
+    pub label: String,
+    pub visible: bool,
+    pub expanded: bool,
+    pub order: i32,
+    pub sections: Vec<FormSection>,
+}
+
+/// Form structure (nested hierarchy)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FormStructure {
+    pub name: String,
+    pub entity_name: String,
+    pub tabs: Vec<FormTab>,
 }
 
 /// Form metadata
@@ -62,6 +112,7 @@ pub struct FormMetadata {
     pub id: String,
     pub name: String,
     pub form_type: String,
+    pub form_structure: Option<FormStructure>,
 }
 
 /// Complete entity metadata

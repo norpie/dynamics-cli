@@ -3,8 +3,9 @@
 pub mod models;
 
 pub use models::{
-    EntityMetadata, FieldMetadata, FieldType, FormMetadata, RelationshipMetadata,
-    RelationshipType, ViewMetadata,
+    EntityMetadata, FieldMetadata, FieldType, FormMetadata, FormStructure, FormTab,
+    FormSection, FormField, RelationshipMetadata, RelationshipType, ViewMetadata,
+    ViewColumn,
 };
 
 use anyhow::Result;
