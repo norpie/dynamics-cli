@@ -21,6 +21,7 @@ pub fn render_main_layout(state: &mut State, theme: &Theme) -> Element<Msg> {
     // Build tree items for the active tab from metadata
     let active_tab = state.active_tab;
     let hide_matched = state.hide_matched;
+    let sort_mode = state.sort_mode;
     let mut source_items = if let Resource::Success(ref metadata) = state.source_metadata {
         build_tree_items(
             metadata,
@@ -31,6 +32,7 @@ pub fn render_main_layout(state: &mut State, theme: &Theme) -> Element<Msg> {
             &state.source_entities,
             &state.examples,
             true, // is_source
+            sort_mode,
         )
     } else {
         vec![]
@@ -82,6 +84,7 @@ pub fn render_main_layout(state: &mut State, theme: &Theme) -> Element<Msg> {
             &state.target_entities,
             &state.examples,
             false, // is_source
+            sort_mode,
         )
     } else {
         vec![]

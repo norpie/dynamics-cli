@@ -123,3 +123,8 @@ pub fn handle_toggle_hide_matched(state: &mut State) -> Command<Msg> {
     state.hide_matched = !state.hide_matched;
     Command::None
 }
+
+pub fn handle_toggle_sort_mode(state: &mut State) -> Command<Msg> {
+    state.sort_mode = state.sort_mode.toggle();
+    Command::None
+}

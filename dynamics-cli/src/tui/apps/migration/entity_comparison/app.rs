@@ -44,6 +44,7 @@ pub struct State {
     pub(super) field_mappings: HashMap<String, String>,  // source -> target (manual)
     pub(super) prefix_mappings: HashMap<String, String>, // source_prefix -> target_prefix
     pub(super) hide_matched: bool,
+    pub(super) sort_mode: super::models::SortMode,
 
     // Computed matches (cached)
     pub(super) field_matches: HashMap<String, MatchInfo>,        // source_field -> match_info
@@ -145,6 +146,7 @@ impl App for EntityComparisonApp {
             field_mappings: HashMap::new(),
             prefix_mappings: HashMap::new(),
             hide_matched: false,
+            sort_mode: super::models::SortMode::default(),
             field_matches: HashMap::new(),
             relationship_matches: HashMap::new(),
             entity_matches: HashMap::new(),
@@ -250,6 +252,10 @@ impl App for EntityComparisonApp {
             Subscription::keyboard(KeyCode::Char('h'), "Toggle hide matched", Msg::ToggleHideMatched),
             Subscription::keyboard(KeyCode::Char('H'), "Toggle hide matched", Msg::ToggleHideMatched),
 
+            // Sort mode toggle
+            Subscription::keyboard(KeyCode::Char('s'), "Toggle sort mode", Msg::ToggleSortMode),
+            Subscription::keyboard(KeyCode::Char('S'), "Toggle sort mode", Msg::ToggleSortMode),
+
             // Examples management
             Subscription::keyboard(KeyCode::Char('e'), "Cycle example pairs", Msg::CycleExamplePair),
             Subscription::keyboard(KeyCode::Char('x'), "Open examples modal", Msg::OpenExamplesModal),
@@ -325,6 +331,13 @@ impl App for EntityComparisonApp {
                 Style::default().fg(theme.subtext1),
             ));
         }
+
+        // Sort mode
+        spans.push(Span::styled(" | ", Style::default().fg(theme.overlay1)));
+        spans.push(Span::styled(
+            format!("Sort: {}", state.sort_mode.label()),
+            Style::default().fg(theme.subtext1),
+        ));
 
         // Example display status
         if state.examples.enabled {

@@ -3,6 +3,30 @@
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
+/// Sort mode for tree items
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SortMode {
+    #[default]
+    Alphabetical,
+    MatchesFirst,
+}
+
+impl SortMode {
+    pub fn label(&self) -> &'static str {
+        match self {
+            SortMode::Alphabetical => "Alphabetical",
+            SortMode::MatchesFirst => "Matches First",
+        }
+    }
+
+    pub fn toggle(&self) -> Self {
+        match self {
+            SortMode::Alphabetical => SortMode::MatchesFirst,
+            SortMode::MatchesFirst => SortMode::Alphabetical,
+        }
+    }
+}
+
 /// Active tab in the comparison view
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ActiveTab {
@@ -125,14 +149,6 @@ impl MatchType {
             MatchType::Manual => "[Manual]",
         }
     }
-}
-
-/// Sorting mode for field lists
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SortMode {
-    Alphabetical,
-    MatchedFirst,
-    UnmatchedFirst,
 }
 
 /// Examples state

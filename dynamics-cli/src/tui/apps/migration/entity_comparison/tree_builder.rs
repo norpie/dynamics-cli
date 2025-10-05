@@ -17,13 +17,14 @@ pub fn build_tree_items(
     entities: &[(String, usize)],
     examples: &super::models::ExamplesState,
     is_source: bool,
+    sort_mode: super::models::SortMode,
 ) -> Vec<ComparisonTreeItem> {
     match active_tab {
-        ActiveTab::Fields => build_fields_tree(&metadata.fields, field_matches, examples, is_source),
-        ActiveTab::Relationships => build_relationships_tree(&metadata.relationships, relationship_matches),
+        ActiveTab::Fields => build_fields_tree(&metadata.fields, field_matches, examples, is_source, sort_mode),
+        ActiveTab::Relationships => build_relationships_tree(&metadata.relationships, relationship_matches, sort_mode),
         ActiveTab::Views => build_views_tree(&metadata.views, field_matches, &metadata.fields, examples, is_source),
         ActiveTab::Forms => build_forms_tree(&metadata.forms, field_matches, &metadata.fields, examples, is_source),
-        ActiveTab::Entities => build_entities_tree(entities, entity_matches),
+        ActiveTab::Entities => build_entities_tree(entities, entity_matches, sort_mode),
     }
 }
 
@@ -34,29 +35,37 @@ fn build_fields_tree(
     field_matches: &HashMap<String, MatchInfo>,
     examples: &super::models::ExamplesState,
     is_source: bool,
+    sort_mode: super::models::SortMode,
 ) -> Vec<ComparisonTreeItem> {
-    fields
+    let mut items: Vec<ComparisonTreeItem> = fields
         .iter()
         .map(|f| ComparisonTreeItem::Field(FieldNode {
             metadata: f.clone(),
             match_info: field_matches.get(&f.logical_name).cloned(),
             example_value: examples.get_field_value(&f.logical_name, is_source),
         }))
-        .collect()
+        .collect();
+
+    sort_items(&mut items, sort_mode);
+    items
 }
 
 /// Build tree items for the Relationships tab
 fn build_relationships_tree(
     relationships: &[crate::api::metadata::RelationshipMetadata],
     relationship_matches: &HashMap<String, MatchInfo>,
+    sort_mode: super::models::SortMode,
 ) -> Vec<ComparisonTreeItem> {
-    relationships
+    let mut items: Vec<ComparisonTreeItem> = relationships
         .iter()
         .map(|r| ComparisonTreeItem::Relationship(RelationshipNode {
             metadata: r.clone(),
             match_info: relationship_matches.get(&r.name).cloned(),
         }))
-        .collect()
+        .collect();
+
+    sort_items(&mut items, sort_mode);
+    items
 }
 
 /// Build tree items for the Views tab
@@ -391,13 +400,71 @@ fn compute_container_match_type(
 fn build_entities_tree(
     entities: &[(String, usize)],
     entity_matches: &HashMap<String, MatchInfo>,
+    sort_mode: super::models::SortMode,
 ) -> Vec<ComparisonTreeItem> {
-    entities
+    let mut items: Vec<ComparisonTreeItem> = entities
         .iter()
         .map(|(name, usage_count)| ComparisonTreeItem::Entity(EntityNode {
             name: name.clone(),
             match_info: entity_matches.get(name).cloned(),
             usage_count: *usage_count,
         }))
-        .collect()
+        .collect();
+
+    sort_items(&mut items, sort_mode);
+    items
+}
+
+/// Sort tree items based on sort mode
+fn sort_items(items: &mut [ComparisonTreeItem], sort_mode: super::models::SortMode) {
+    match sort_mode {
+        super::models::SortMode::Alphabetical => {
+            // Sort alphabetically by name
+            items.sort_by(|a, b| {
+                let a_name = item_name(a);
+                let b_name = item_name(b);
+                a_name.cmp(&b_name)
+            });
+        }
+        super::models::SortMode::MatchesFirst => {
+            // Sort matched items first (alphabetically), then unmatched (alphabetically)
+            items.sort_by(|a, b| {
+                let a_has_match = item_has_match(a);
+                let b_has_match = item_has_match(b);
+
+                match (a_has_match, b_has_match) {
+                    (true, false) => std::cmp::Ordering::Less,    // Matched before unmatched
+                    (false, true) => std::cmp::Ordering::Greater, // Unmatched after matched
+                    _ => {
+                        // Both matched or both unmatched - sort alphabetically
+                        let a_name = item_name(a);
+                        let b_name = item_name(b);
+                        a_name.cmp(&b_name)
+                    }
+                }
+            });
+        }
+    }
+}
+
+/// Get the name of an item for sorting
+fn item_name(item: &ComparisonTreeItem) -> &str {
+    match item {
+        ComparisonTreeItem::Field(node) => &node.metadata.logical_name,
+        ComparisonTreeItem::Relationship(node) => &node.metadata.name,
+        ComparisonTreeItem::Entity(node) => &node.name,
+        ComparisonTreeItem::Container(node) => &node.label,
+        _ => "",
+    }
+}
+
+/// Check if an item has a match
+fn item_has_match(item: &ComparisonTreeItem) -> bool {
+    match item {
+        ComparisonTreeItem::Field(node) => node.match_info.is_some(),
+        ComparisonTreeItem::Relationship(node) => node.match_info.is_some(),
+        ComparisonTreeItem::Entity(node) => node.match_info.is_some(),
+        ComparisonTreeItem::Container(node) => node.match_info.is_some(),
+        _ => false,
+    }
 }
