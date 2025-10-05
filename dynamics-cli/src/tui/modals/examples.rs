@@ -193,29 +193,8 @@ impl<Msg: Clone> ExamplesModal<Msg> {
 
     /// Build the modal Element
     pub fn build(self, theme: &Theme) -> Element<Msg> {
-        // Title
-        let title = Element::styled_text(Line::from(vec![
-            Span::styled("Manage Example Pairs", Style::default().fg(theme.mauve).bold())
-        ])).build();
-
-        // Existing pairs list
-        let list_label = Element::text("Existing Pairs:");
-
-        let pairs_list = if !self.pairs.is_empty() {
-            Element::list(
-                FocusId::new("examples-list"),
-                &self.pairs,
-                &self.list_state,
-                theme,
-            ).build()
-        } else {
-            Element::text("  (no pairs yet)")
-        };
-
-        // Form section
-        let form_label = Element::styled_text(Line::from(vec![
-            Span::styled("Add New Pair:", Style::default().fg(theme.blue).bold())
-        ])).build();
+        use crate::{col, spacer, use_constraints};
+        use_constraints!();
 
         // Build text input elements from state
         let source_handler = self.on_source_input_event
@@ -225,7 +204,7 @@ impl<Msg: Clone> ExamplesModal<Msg> {
             &self.source_input_state.value,
             &self.source_input_state.state,
         )
-        .placeholder("Enter source record UUID")
+        .placeholder("UUID")
         .on_event(source_handler)
         .build();
 
@@ -236,7 +215,7 @@ impl<Msg: Clone> ExamplesModal<Msg> {
             &self.target_input_state.value,
             &self.target_input_state.state,
         )
-        .placeholder("Enter target record UUID")
+        .placeholder("UUID")
         .on_event(target_handler)
         .build();
 
@@ -247,88 +226,73 @@ impl<Msg: Clone> ExamplesModal<Msg> {
             &self.label_input_state.value,
             &self.label_input_state.state,
         )
-        .placeholder("Optional label")
+        .placeholder("Optional")
         .on_event(label_handler)
         .build();
 
-        // Buttons
-        let add_msg = self.on_add.clone()
-            .expect("ExamplesModal requires on_add callback");
-        let delete_msg = self.on_delete.clone()
-            .expect("ExamplesModal requires on_delete callback");
-        let fetch_msg = self.on_fetch.clone()
-            .expect("ExamplesModal requires on_fetch callback");
-        let close_msg = self.on_close.clone()
-            .expect("ExamplesModal requires on_close callback");
+        // Build list
+        let pairs_list = Element::list(
+            FocusId::new("examples-list"),
+            &self.pairs,
+            &self.list_state,
+            theme,
+        ).build();
 
-        let add_button = Element::button(
-            FocusId::new("examples-add"),
-            "[ (a)dd ]",
-        )
-        .on_press(add_msg)
-        .style(Style::default().fg(theme.green))
-        .build();
-
-        let delete_button = Element::button(
-            FocusId::new("examples-delete"),
-            "[ (d)elete ]",
-        )
-        .on_press(delete_msg)
-        .style(Style::default().fg(theme.red))
-        .build();
-
-        let fetch_button = Element::button(
-            FocusId::new("examples-fetch"),
-            "[ (f)etch ]",
-        )
-        .on_press(fetch_msg)
-        .style(Style::default().fg(theme.blue))
-        .build();
-
-        let close_button = Element::button(
-            FocusId::new("examples-close"),
-            "[ (c)lose ]",
-        )
-        .on_press(close_msg)
-        .build();
-
-        let buttons = RowBuilder::new()
-            .add(add_button, LayoutConstraint::Fill(1))
-            .add(delete_button, LayoutConstraint::Fill(1))
-            .add(fetch_button, LayoutConstraint::Fill(1))
-            .add(close_button, LayoutConstraint::Fill(1))
-            .spacing(2)
+        // Input panels
+        let source_panel = Element::panel(source_input)
+            .title("Source Record ID")
             .build();
 
-        // Build modal content
-        let content = ColumnBuilder::new()
-            .add(title, LayoutConstraint::Length(1))
-            .add(Element::text(""), LayoutConstraint::Length(1))
-            .add(list_label, LayoutConstraint::Length(1))
-            .add(pairs_list, LayoutConstraint::Fill(1))
-            .add(Element::text(""), LayoutConstraint::Length(1))
-            .add(form_label, LayoutConstraint::Length(1))
-            .add(Element::text("Source Record ID:"), LayoutConstraint::Length(1))
-            .add(source_input, LayoutConstraint::Length(3))
-            .add(Element::text("Target Record ID:"), LayoutConstraint::Length(1))
-            .add(target_input, LayoutConstraint::Length(3))
-            .add(Element::text("Label (optional):"), LayoutConstraint::Length(1))
-            .add(label_input, LayoutConstraint::Length(3))
-            .add(Element::text(""), LayoutConstraint::Length(1))
-            .add(buttons, LayoutConstraint::Length(3))
+        let target_panel = Element::panel(target_input)
+            .title("Target Record ID")
             .build();
 
-        // Wrap in panel
-        let mut panel = Element::panel(content);
+        let label_panel = Element::panel(label_input)
+            .title("Label")
+            .build();
 
-        if let Some(w) = self.width {
-            panel = panel.width(w);
-        }
-        if let Some(h) = self.height {
-            panel = panel.height(h);
-        }
+        let pairs_panel = Element::panel(pairs_list)
+            .title("Saved Pairs")
+            .build();
 
-        panel.build()
+        // Keybindings help
+        let help_text = Element::styled_text(
+            Line::from(vec![
+                Span::styled(
+                    "[a] Add  [d] Delete  [f] Fetch  [e] Cycle  [c/Esc] Close",
+                    Style::default().fg(theme.subtext0)
+                )
+            ])
+        ).build();
+
+        // Layout with explicit constraints
+        let modal_body = col![
+            Element::styled_text(
+                Line::from(vec![
+                    Span::styled("Example Record Pairs", Style::default().fg(theme.mauve).bold())
+                ])
+            ).build() => Length(1),
+            spacer!() => Length(1),
+            source_panel => Length(3),
+            spacer!() => Length(1),
+            target_panel => Length(3),
+            spacer!() => Length(1),
+            label_panel => Length(3),
+            spacer!() => Length(1),
+            pairs_panel => Fill(1),
+            spacer!() => Length(1),
+            help_text => Length(1),
+        ];
+
+        // Wrap in outer panel with title, width, and height
+        Element::panel(
+            Element::container(modal_body)
+                .padding(2)
+                .build()
+        )
+        .width(self.width.unwrap_or(80))
+        .height(self.height.unwrap_or(30))
+        .build()
     }
 }
 
