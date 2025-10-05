@@ -243,7 +243,7 @@ impl App for EntityComparisonApp {
                 Msg::ParallelDataLoaded(task_idx, *data)
             });
 
-        // Also load saved field and prefix mappings
+        // Also load saved field and prefix mappings, and example pairs
         let mappings_cmd = Command::perform({
             let source_entity = params.source_entity.clone();
             let target_entity = params.target_entity.clone();
@@ -259,9 +259,16 @@ impl App for EntityComparisonApp {
                         log::error!("Failed to load prefix mappings: {}", e);
                         HashMap::new()
                     });
-                (field_mappings, prefix_mappings)
+                let example_pairs = config.get_example_pairs(&source_entity, &target_entity).await
+                    .unwrap_or_else(|e| {
+                        log::error!("Failed to load example pairs: {}", e);
+                        Vec::new()
+                    });
+                (field_mappings, prefix_mappings, example_pairs)
             }
-        }, |(field_mappings, prefix_mappings)| Msg::MappingsLoaded(field_mappings, prefix_mappings));
+        }, |(field_mappings, prefix_mappings, example_pairs)| {
+            Msg::MappingsLoaded(field_mappings, prefix_mappings, example_pairs)
+        });
 
         (state, Command::batch(vec![cmd, mappings_cmd]))
     }
@@ -711,10 +718,16 @@ impl App for EntityComparisonApp {
                 state.hide_matched = !state.hide_matched;
                 Command::None
             }
-            Msg::MappingsLoaded(field_mappings, prefix_mappings) => {
-                // Update state with loaded mappings
+            Msg::MappingsLoaded(field_mappings, prefix_mappings, example_pairs) => {
+                // Update state with loaded mappings and examples
                 state.field_mappings = field_mappings;
                 state.prefix_mappings = prefix_mappings;
+                state.examples.pairs = example_pairs;
+
+                // Set first pair as active if any exist
+                if !state.examples.pairs.is_empty() {
+                    state.examples.active_pair_id = Some(state.examples.pairs[0].id.clone());
+                }
 
                 // Recompute matches if we have metadata loaded
                 if matches!(state.source_metadata, Resource::Success(_))
@@ -769,7 +782,16 @@ impl App for EntityComparisonApp {
                     state.examples_target_input.set_value(String::new());
                     state.examples_label_input.set_value(String::new());
 
-                    // TODO: Persist to database
+                    // Persist to database
+                    let source_entity = state.source_entity.clone();
+                    let target_entity = state.target_entity.clone();
+                    tokio::spawn(async move {
+                        let config = crate::global_config();
+                        if let Err(e) = config.save_example_pair(&source_entity, &target_entity, &pair).await {
+                            log::error!("Failed to save example pair: {}", e);
+                        }
+                    });
+
                     // TODO: Auto-fetch data for new pair
                 }
 
@@ -779,8 +801,16 @@ impl App for EntityComparisonApp {
                 // Delete selected pair from list
                 if let Some(selected_idx) = state.examples_list_state.selected() {
                     if selected_idx < state.examples.pairs.len() {
-                        state.examples.pairs.remove(selected_idx);
-                        // TODO: Persist to database
+                        let pair = state.examples.pairs.remove(selected_idx);
+
+                        // Persist to database
+                        let pair_id = pair.id.clone();
+                        tokio::spawn(async move {
+                            let config = crate::global_config();
+                            if let Err(e) = config.delete_example_pair(&pair_id).await {
+                                log::error!("Failed to delete example pair: {}", e);
+                            }
+                        });
                     }
                 }
                 Command::None

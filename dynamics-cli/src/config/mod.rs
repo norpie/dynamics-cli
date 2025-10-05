@@ -334,4 +334,19 @@ impl Config {
     pub async fn delete_prefix_mapping(&self, source_entity: &str, target_entity: &str, source_prefix: &str) -> Result<()> {
         repository::mappings::delete_prefix_mapping(&self.pool, source_entity, target_entity, source_prefix).await
     }
+
+    /// Get example pairs for entity comparison
+    pub async fn get_example_pairs(&self, source_entity: &str, target_entity: &str) -> Result<Vec<crate::tui::apps::migration::entity_comparison::ExamplePair>> {
+        repository::examples::get_example_pairs(&self.pool, source_entity, target_entity).await
+    }
+
+    /// Save example pair
+    pub async fn save_example_pair(&self, source_entity: &str, target_entity: &str, pair: &crate::tui::apps::migration::entity_comparison::ExamplePair) -> Result<()> {
+        repository::examples::save_example_pair(&self.pool, source_entity, target_entity, pair).await
+    }
+
+    /// Delete example pair
+    pub async fn delete_example_pair(&self, pair_id: &str) -> Result<()> {
+        repository::examples::delete_example_pair(&self.pool, pair_id).await
+    }
 }

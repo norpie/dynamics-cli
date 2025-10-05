@@ -3,6 +3,7 @@
 use crate::tui::{Element, Theme, FocusId};
 use crate::tui::element::{LayoutConstraint, RowBuilder, ColumnBuilder};
 use crate::tui::widgets::{ListState, ListItem, TextInputField};
+use crate::{button_row, col, spacer, use_constraints};
 use ratatui::prelude::*;
 use ratatui::text::{Line, Span};
 
@@ -193,7 +194,6 @@ impl<Msg: Clone> ExamplesModal<Msg> {
 
     /// Build the modal Element
     pub fn build(self, theme: &Theme) -> Element<Msg> {
-        use crate::{col, spacer, use_constraints};
         use_constraints!();
 
         // Build text input elements from state
@@ -255,15 +255,13 @@ impl<Msg: Clone> ExamplesModal<Msg> {
             .title("Saved Pairs")
             .build();
 
-        // Keybindings help
-        let help_text = Element::styled_text(
-            Line::from(vec![
-                Span::styled(
-                    "[a] Add  [d] Delete  [f] Fetch  [e] Cycle  [c/Esc] Close",
-                    Style::default().fg(theme.subtext0)
-                )
-            ])
-        ).build();
+        // Buttons
+        let buttons = button_row![
+            ("examples-add", "Add", self.on_add.clone().expect("ExamplesModal requires on_add")),
+            ("examples-delete", "Delete", self.on_delete.clone().expect("ExamplesModal requires on_delete")),
+            ("examples-fetch", "Fetch", self.on_fetch.clone().expect("ExamplesModal requires on_fetch")),
+            ("examples-close", "Close", self.on_close.clone().expect("ExamplesModal requires on_close")),
+        ];
 
         // Layout with explicit constraints
         let modal_body = col![
@@ -281,7 +279,7 @@ impl<Msg: Clone> ExamplesModal<Msg> {
             spacer!() => Length(1),
             pairs_panel => Fill(1),
             spacer!() => Length(1),
-            help_text => Length(1),
+            buttons => Length(3),
         ];
 
         // Wrap in outer panel with title, width, and height

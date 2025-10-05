@@ -8,3 +8,4 @@ pub mod migrations;
 pub mod entity_cache;
 pub mod entity_metadata_cache;
 pub mod mappings;
+pub mod examples;
