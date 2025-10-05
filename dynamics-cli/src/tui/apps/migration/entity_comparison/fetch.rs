@@ -191,3 +191,35 @@ fn process_lookup_fields(fields: Vec<crate::api::metadata::FieldMetadata>) -> Ve
         })
         .collect()
 }
+
+/// Fetch example record data for a pair
+pub async fn fetch_example_pair_data(
+    source_env: &str,
+    source_entity: &str,
+    source_record_id: &str,
+    target_env: &str,
+    target_entity: &str,
+    target_record_id: &str,
+) -> Result<(serde_json::Value, serde_json::Value), String> {
+    let manager = crate::client_manager();
+
+    // Fetch source record
+    let source_client = manager.get_client(source_env)
+        .await
+        .map_err(|e| format!("Failed to get source client: {}", e))?;
+
+    let source_record = source_client.fetch_record_by_id(source_entity, source_record_id)
+        .await
+        .map_err(|e| format!("Failed to fetch source record: {}", e))?;
+
+    // Fetch target record
+    let target_client = manager.get_client(target_env)
+        .await
+        .map_err(|e| format!("Failed to get target client: {}", e))?;
+
+    let target_record = target_client.fetch_record_by_id(target_entity, target_record_id)
+        .await
+        .map_err(|e| format!("Failed to fetch target record: {}", e))?;
+
+    Ok((source_record, target_record))
+}

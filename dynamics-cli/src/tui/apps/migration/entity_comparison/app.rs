@@ -787,12 +787,50 @@ impl App for EntityComparisonApp {
             }
             Msg::FetchExampleData => {
                 // Fetch data for selected pair
-                // TODO: Implement API fetch
+                if let Some(selected_idx) = state.examples_list_state.selected() {
+                    if let Some(pair) = state.examples.pairs.get(selected_idx) {
+                        let pair_id = pair.id.clone();
+                        let source_env = state.source_env.clone();
+                        let source_entity = state.source_entity.clone();
+                        let source_record_id = pair.source_record_id.clone();
+                        let target_env = state.target_env.clone();
+                        let target_entity = state.target_entity.clone();
+                        let target_record_id = pair.target_record_id.clone();
+
+                        return Command::perform(
+                            async move {
+                                let result = super::fetch_example_pair_data(
+                                    &source_env,
+                                    &source_entity,
+                                    &source_record_id,
+                                    &target_env,
+                                    &target_entity,
+                                    &target_record_id,
+                                ).await;
+                                (pair_id, result)
+                            },
+                            |(pair_id, result)| Msg::ExampleDataFetched(pair_id, result)
+                        );
+                    }
+                }
                 Command::None
             }
-            Msg::ExampleDataFetched(_pair_id, _result) => {
+            Msg::ExampleDataFetched(pair_id, result) => {
                 // Store fetched data in cache
-                // TODO: Implement
+                match result {
+                    Ok((source_data, target_data)) => {
+                        // Find the pair and store its record IDs as cache keys
+                        if let Some(pair) = state.examples.pairs.iter().find(|p| p.id == pair_id) {
+                            state.examples.cache.insert(pair.source_record_id.clone(), source_data);
+                            state.examples.cache.insert(pair.target_record_id.clone(), target_data);
+                            log::info!("Fetched and cached example data for pair {}", pair_id);
+                        }
+                    }
+                    Err(err) => {
+                        log::error!("Failed to fetch example data: {}", err);
+                        // TODO: Show error to user
+                    }
+                }
                 Command::None
             }
             Msg::CycleExamplePair => {
@@ -952,6 +990,8 @@ fn render_main_layout(state: &mut State, theme: &Theme) -> Element<Msg> {
             &state.relationship_matches,
             &state.entity_matches,
             &state.source_entities,
+            &state.examples,
+            true, // is_source
         )
     } else {
         vec![]
@@ -1001,6 +1041,8 @@ fn render_main_layout(state: &mut State, theme: &Theme) -> Element<Msg> {
             &reverse_relationship_matches,
             &reverse_entity_matches,
             &state.target_entities,
+            &state.examples,
+            false, // is_source
         )
     } else {
         vec![]

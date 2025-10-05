@@ -1004,4 +1004,42 @@ impl DynamicsClient {
 
         columns
     }
+
+    /// Fetch a single record by ID
+    /// Returns the full record as JSON
+    pub async fn fetch_record_by_id(
+        &self,
+        entity_name: &str,
+        record_id: &str,
+    ) -> anyhow::Result<serde_json::Value> {
+        self.apply_rate_limiting().await?;
+
+        // Pluralize entity name for the endpoint
+        let plural_entity = super::pluralization::pluralize_entity_name(entity_name);
+
+        // Build URL: /api/data/v9.2/accounts(id)
+        let url = format!("{}{}/{}({})",
+            self.base_url,
+            constants::api_path(),
+            plural_entity,
+            record_id
+        );
+
+        let response = self.retry_policy.execute(|| async {
+            self.http_client
+                .get(&url)
+                .bearer_auth(&self.access_token)
+                .header("Accept", headers::CONTENT_TYPE_JSON)
+                .header("OData-Version", headers::ODATA_VERSION)
+                .send()
+                .await
+        }).await?;
+
+        if !response.status().is_success() {
+            anyhow::bail!("Failed to fetch record: {} - {}", response.status(), response.text().await?);
+        }
+
+        let record: serde_json::Value = response.json().await?;
+        Ok(record)
+    }
 }

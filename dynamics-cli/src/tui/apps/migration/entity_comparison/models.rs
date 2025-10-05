@@ -173,9 +173,54 @@ impl ExamplesState {
     }
 
     /// Get example value for a field
-    /// TODO: Implement field value extraction logic
-    pub fn get_field_value(&self, _field_name: &str, _is_source: bool) -> Option<String> {
-        // Placeholder - will implement extraction logic later
-        None
+    /// For hierarchical paths (Forms/Views), extracts just the field name from the path
+    /// field_name can be either a simple name like "accountname" or a path like "formtype/main/form/MainForm/tab/General/accountname"
+    pub fn get_field_value(&self, field_name: &str, is_source: bool) -> Option<String> {
+        if !self.enabled {
+            return None;
+        }
+
+        // Get active pair
+        let active_pair = self.get_active_pair()?;
+
+        // Get the record ID for the appropriate side
+        let record_id = if is_source {
+            &active_pair.source_record_id
+        } else {
+            &active_pair.target_record_id
+        };
+
+        // Get the cached record data
+        let record_data = self.cache.get(record_id)?;
+
+        // Extract just the field name from hierarchical path if present
+        // e.g., "formtype/main/form/MainForm/tab/General/accountname" -> "accountname"
+        let field_name = field_name
+            .split('/')
+            .last()
+            .unwrap_or(field_name);
+
+        // Try to get the field value from the JSON
+        if let Some(value) = record_data.get(field_name) {
+            // Format the value based on its type
+            match value {
+                serde_json::Value::String(s) => Some(format!("\"{}\"", s)),
+                serde_json::Value::Number(n) => Some(n.to_string()),
+                serde_json::Value::Bool(b) => Some(b.to_string()),
+                serde_json::Value::Null => Some("null".to_string()),
+                serde_json::Value::Array(_) => Some("[...]".to_string()),
+                serde_json::Value::Object(_) => {
+                    // For lookups, try to get the formatted value
+                    if let Some(formatted) = value.get("@OData.Community.Display.V1.FormattedValue") {
+                        if let Some(s) = formatted.as_str() {
+                            return Some(format!("\"{}\"", s));
+                        }
+                    }
+                    Some("{...}".to_string())
+                }
+            }
+        } else {
+            None
+        }
     }
 }
