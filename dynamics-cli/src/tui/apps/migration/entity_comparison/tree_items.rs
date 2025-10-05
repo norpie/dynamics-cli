@@ -58,7 +58,12 @@ impl TreeItem for ComparisonTreeItem {
         match self {
             Self::Container(node) => {
                 let indent = "  ".repeat(depth);
-                let text = format!("{}{}", indent, node.label);
+                let mut spans = Vec::new();
+
+                // Indent
+                if depth > 0 {
+                    spans.push(Span::styled(indent, Style::default()));
+                }
 
                 // Use stored container_match_type for color (keep color even when selected)
                 let color = match node.container_match_type {
@@ -67,10 +72,35 @@ impl TreeItem for ComparisonTreeItem {
                     ContainerMatchType::NoMatch => theme.red,
                 };
 
-                let mut builder = Element::styled_text(Line::from(Span::styled(
-                    text,
+                // Container label
+                spans.push(Span::styled(
+                    node.label.clone(),
                     Style::default().fg(color).bold(),
-                )));
+                ));
+
+                // Show match info if container has a mapping
+                if let Some(match_info) = &node.match_info {
+                    spans.push(Span::styled(" → ", Style::default().fg(theme.overlay1)));
+
+                    // Extract just the container name from target path
+                    let target_display = match_info.target_field
+                        .split('/')
+                        .last()
+                        .unwrap_or(&match_info.target_field)
+                        .to_string();
+
+                    spans.push(Span::styled(
+                        target_display,
+                        Style::default().fg(theme.blue),
+                    ));
+
+                    spans.push(Span::styled(
+                        format!(" {}", match_info.match_type.label()),
+                        Style::default().fg(theme.overlay1),
+                    ));
+                }
+
+                let mut builder = Element::styled_text(Line::from(spans));
 
                 if is_selected {
                     builder = builder.background(Style::default().bg(theme.surface0));
@@ -93,6 +123,7 @@ pub struct ContainerNode {
     pub label: String,
     pub children: Vec<ComparisonTreeItem>,
     pub container_match_type: ContainerMatchType, // Unmapped, FullMatch, or Mixed
+    pub match_info: Option<MatchInfo>, // Match info if this container is manually/automatically mapped
 }
 
 /// Container match type (aggregated from children)

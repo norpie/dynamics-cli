@@ -110,22 +110,24 @@ fn build_views_tree(
                 .collect();
 
             // Create container for this view
-            let container_match_type = compute_container_match_type(&view_path, &column_fields, field_matches);
+            let (container_match_type, match_info) = compute_container_match_type(&view_path, &column_fields, field_matches);
             view_containers.push(ComparisonTreeItem::Container(ContainerNode {
                 id: view_path.clone(),
                 label: format!("{} ({} columns)", view.name, view.columns.len()),
                 children: column_fields,
                 container_match_type,
+                match_info,
             }));
         }
 
         // Create container for this view type
-        let container_match_type = compute_container_match_type(&viewtype_path, &view_containers, field_matches);
+        let (container_match_type, match_info) = compute_container_match_type(&viewtype_path, &view_containers, field_matches);
         result.push(ComparisonTreeItem::Container(ContainerNode {
             id: viewtype_path.clone(),
             label: format!("{} ({} views)", view_type, view_containers.len()),
             children: view_containers,
             container_match_type,
+            match_info,
         }));
     }
 
@@ -212,22 +214,24 @@ fn build_forms_tree(
                             .collect();
 
                         // Create container for section
-                        let container_match_type = compute_container_match_type(&section_path, &field_nodes, field_matches);
+                        let (container_match_type, match_info) = compute_container_match_type(&section_path, &field_nodes, field_matches);
                         section_containers.push(ComparisonTreeItem::Container(ContainerNode {
                             id: section_path.clone(),
                             label: format!("{} ({} fields)", section.label, section.fields.len()),
                             children: field_nodes,
                             container_match_type,
+                            match_info,
                         }));
                     }
 
                     // Create container for tab
-                    let container_match_type = compute_container_match_type(&tab_path, &section_containers, field_matches);
+                    let (container_match_type, match_info) = compute_container_match_type(&tab_path, &section_containers, field_matches);
                     tab_containers.push(ComparisonTreeItem::Container(ContainerNode {
                         id: tab_path.clone(),
                         label: format!("{} ({} sections)", tab.label, tab.sections.len()),
                         children: section_containers,
                         container_match_type,
+                        match_info,
                     }));
                 }
 
@@ -238,7 +242,7 @@ fn build_forms_tree(
             };
 
             // Create container for this form
-            let container_match_type = compute_container_match_type(&form_path, &form_children, field_matches);
+            let (container_match_type, match_info) = compute_container_match_type(&form_path, &form_children, field_matches);
             form_containers.push(ComparisonTreeItem::Container(ContainerNode {
                 id: form_path.clone(),
                 label: if form_children.is_empty() {
@@ -248,16 +252,18 @@ fn build_forms_tree(
                 },
                 children: form_children,
                 container_match_type,
+                match_info,
             }));
         }
 
         // Create container for this form type
-        let container_match_type = compute_container_match_type(&formtype_path, &form_containers, field_matches);
+        let (container_match_type, match_info) = compute_container_match_type(&formtype_path, &form_containers, field_matches);
         result.push(ComparisonTreeItem::Container(ContainerNode {
             id: formtype_path.clone(),
             label: format!("{} ({} forms)", form_type, form_containers.len()),
             children: form_containers,
             container_match_type,
+            match_info,
         }));
     }
 
@@ -269,29 +275,35 @@ fn is_relationship_field(field: &crate::api::metadata::FieldMetadata) -> bool {
     matches!(field.field_type, FieldType::Lookup)
 }
 
-/// Compute ContainerMatchType based on container's own match and children's match status
+/// Compute ContainerMatchType and MatchInfo based on container's own match and children's match status
 ///
 /// Logic:
 /// - NoMatch: Container path doesn't match (OR no children and not matched)
 /// - FullMatch: Container path matches AND all children match
 /// - Mixed: Container path matches BUT not all children match
+///
+/// Returns: (ContainerMatchType, Option<MatchInfo>)
 fn compute_container_match_type(
     container_id: &str,
     children: &[ComparisonTreeItem],
     field_matches: &HashMap<String, MatchInfo>,
-) -> ContainerMatchType {
+) -> (ContainerMatchType, Option<MatchInfo>) {
     // Check if this container itself has a match
-    let container_matched = field_matches.contains_key(container_id);
+    let match_info = field_matches.get(container_id).cloned();
 
-    if !container_matched {
+    if match_info.is_some() {
+        log::debug!("Container '{}' has match: {:?}", container_id, match_info);
+    }
+
+    if match_info.is_none() {
         // Container doesn't match → NoMatch
-        return ContainerMatchType::NoMatch;
+        return (ContainerMatchType::NoMatch, None);
     }
 
     // Container matched - now check children
     if children.is_empty() {
         // Container matched but has no children → FullMatch
-        return ContainerMatchType::FullMatch;
+        return (ContainerMatchType::FullMatch, match_info);
     }
 
     let mut has_matched = false;
@@ -316,13 +328,13 @@ fn compute_container_match_type(
 
         // Early exit if we know it's mixed
         if has_matched && has_unmatched {
-            return ContainerMatchType::Mixed;
+            return (ContainerMatchType::Mixed, match_info);
         }
     }
 
     if has_matched && !has_unmatched {
-        ContainerMatchType::FullMatch
+        (ContainerMatchType::FullMatch, match_info)
     } else {
-        ContainerMatchType::Mixed  // Container matched but some/all children didn't
+        (ContainerMatchType::Mixed, match_info)  // Container matched but some/all children didn't
     }
 }
