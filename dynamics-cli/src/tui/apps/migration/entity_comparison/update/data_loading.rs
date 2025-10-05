@@ -183,6 +183,9 @@ pub fn handle_parallel_data_loaded(
                             target,
                             &state.field_mappings,
                             &state.prefix_mappings,
+                            &state.examples,
+                            &state.source_entity,
+                            &state.target_entity,
                         );
 
                     state.field_matches = field_matches;

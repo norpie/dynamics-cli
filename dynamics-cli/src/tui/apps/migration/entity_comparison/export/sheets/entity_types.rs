@@ -30,6 +30,7 @@ pub fn create_source_entities_sheet(workbook: &mut Workbook, state: &State) -> R
     let exact_match_format = create_exact_match_format();
     let manual_mapping_format = create_manual_mapping_format();
     let prefix_match_format = create_prefix_match_format();
+    let example_value_format = create_example_value_format();
     let unmapped_format = create_unmapped_format();
     let indent_format = Format::new().set_indent(1);
 
@@ -55,6 +56,7 @@ pub fn create_source_entities_sheet(workbook: &mut Workbook, state: &State) -> R
                         MatchType::Exact => ("Exact", &exact_match_format),
                         MatchType::Manual => ("Manual", &manual_mapping_format),
                         MatchType::Prefix => ("Prefix", &prefix_match_format),
+                        MatchType::ExampleValue => ("Example", &example_value_format),
                         MatchType::TypeMismatch => ("Type Mismatch", &unmapped_format),
                     };
 
@@ -111,6 +113,7 @@ pub fn create_target_entities_sheet(workbook: &mut Workbook, state: &State) -> R
     let exact_match_format = create_exact_match_format();
     let manual_mapping_format = create_manual_mapping_format();
     let prefix_match_format = create_prefix_match_format();
+    let example_value_format = create_example_value_format();
     let unmapped_format = create_unmapped_format();
     let indent_format = Format::new().set_indent(1);
 
@@ -140,6 +143,7 @@ pub fn create_target_entities_sheet(workbook: &mut Workbook, state: &State) -> R
                         MatchType::Exact => ("Exact", &exact_match_format),
                         MatchType::Manual => ("Manual", &manual_mapping_format),
                         MatchType::Prefix => ("Prefix", &prefix_match_format),
+                        MatchType::ExampleValue => ("Example", &example_value_format),
                         MatchType::TypeMismatch => ("Type Mismatch", &unmapped_format),
                     };
 

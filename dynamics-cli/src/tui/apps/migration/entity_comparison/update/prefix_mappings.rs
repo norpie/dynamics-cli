@@ -61,6 +61,9 @@ pub fn handle_add_prefix_mapping(state: &mut State) -> Command<Msg> {
                 target,
                 &state.field_mappings,
                 &state.prefix_mappings,
+                &state.examples,
+                &state.source_entity,
+                &state.target_entity,
             );
         state.field_matches = field_matches;
         state.relationship_matches = relationship_matches;
@@ -107,6 +110,9 @@ pub fn handle_delete_prefix_mapping(state: &mut State) -> Command<Msg> {
                         target,
                         &state.field_mappings,
                         &state.prefix_mappings,
+                        &state.examples,
+                        &state.source_entity,
+                        &state.target_entity,
                     );
                 state.field_matches = field_matches;
                 state.relationship_matches = relationship_matches;

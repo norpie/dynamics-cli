@@ -71,6 +71,43 @@ pub fn compute_entity_matches(
     matches
 }
 
+/// Find a target field that matches the source field's example value
+/// Returns target field name if exact value match found
+fn find_example_value_match(
+    source_field: &FieldMetadata,
+    target_fields: &[FieldMetadata],
+    examples: &super::ExamplesState,
+    source_entity: &str,
+    target_entity: &str,
+    already_matched: &std::collections::HashSet<String>,
+) -> Option<String> {
+    // Only if examples enabled and has active pair
+    if !examples.enabled || examples.get_active_pair().is_none() {
+        return None;
+    }
+
+    // Get source value (skip if null/empty)
+    let source_value = examples.get_field_value(&source_field.logical_name, true, source_entity)?;
+    if source_value == "null" || source_value.trim().is_empty() || source_value == "\"\"" {
+        return None;
+    }
+
+    // Find target with matching value
+    for target_field in target_fields {
+        if already_matched.contains(&target_field.logical_name) {
+            continue;
+        }
+
+        if let Some(target_value) = examples.get_field_value(&target_field.logical_name, false, target_entity) {
+            if target_value == source_value {
+                return Some(target_field.logical_name.clone());
+            }
+        }
+    }
+
+    None
+}
+
 /// Compute field matches between source and target
 /// Returns map of source_field_name -> MatchInfo
 pub fn compute_field_matches(
@@ -78,6 +115,9 @@ pub fn compute_field_matches(
     target_fields: &[FieldMetadata],
     manual_mappings: &HashMap<String, String>,
     prefix_mappings: &HashMap<String, String>,
+    examples: &super::ExamplesState,
+    source_entity: &str,
+    target_entity: &str,
 ) -> HashMap<String, MatchInfo> {
     let mut matches = HashMap::new();
 
@@ -86,6 +126,9 @@ pub fn compute_field_matches(
         .iter()
         .map(|f| (f.logical_name.clone(), f))
         .collect();
+
+    // Track already matched targets to prevent duplicate matches
+    let mut already_matched = std::collections::HashSet::new();
 
     for source_field in source_fields {
         let source_name = &source_field.logical_name;
@@ -101,6 +144,7 @@ pub fn compute_field_matches(
                         confidence: 1.0,
                     },
                 );
+                already_matched.insert(target_name.clone());
                 continue;
             }
         }
@@ -120,6 +164,7 @@ pub fn compute_field_matches(
                     confidence: if types_match { 1.0 } else { 0.7 },
                 },
             );
+            already_matched.insert(source_name.clone());
             continue;
         }
 
@@ -130,7 +175,7 @@ pub fn compute_field_matches(
                 matches.insert(
                     source_name.clone(),
                     MatchInfo {
-                        target_field: transformed,
+                        target_field: transformed.clone(),
                         match_type: if types_match {
                             MatchType::Prefix
                         } else {
@@ -139,8 +184,30 @@ pub fn compute_field_matches(
                         confidence: if types_match { 0.9 } else { 0.6 },
                     },
                 );
+                already_matched.insert(transformed);
                 continue;
             }
+        }
+
+        // 4. Check example-based matching (only for unmatched fields)
+        if let Some(target_name) = find_example_value_match(
+            source_field,
+            target_fields,
+            examples,
+            source_entity,
+            target_entity,
+            &already_matched,
+        ) {
+            matches.insert(
+                source_name.clone(),
+                MatchInfo {
+                    target_field: target_name.clone(),
+                    match_type: MatchType::ExampleValue,
+                    confidence: 1.0,
+                },
+            );
+            already_matched.insert(target_name);
+            continue;
         }
 
         // No match found - don't insert anything
@@ -556,6 +623,9 @@ pub fn recompute_all_matches(
     target_metadata: &crate::api::EntityMetadata,
     field_mappings: &HashMap<String, String>,
     prefix_mappings: &HashMap<String, String>,
+    examples: &super::ExamplesState,
+    source_entity: &str,
+    target_entity: &str,
 ) -> (
     HashMap<String, MatchInfo>,  // field_matches
     HashMap<String, MatchInfo>,  // relationship_matches
@@ -569,6 +639,9 @@ pub fn recompute_all_matches(
         &target_metadata.fields,
         field_mappings,
         prefix_mappings,
+        examples,
+        source_entity,
+        target_entity,
     );
 
     // Hierarchical matching for Forms tab

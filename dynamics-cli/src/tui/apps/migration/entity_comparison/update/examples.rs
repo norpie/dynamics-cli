@@ -144,6 +144,9 @@ pub fn handle_example_data_fetched(
 }
 
 pub fn handle_cycle_example_pair(state: &mut State) -> Command<Msg> {
+    use crate::tui::Resource;
+    use super::super::matching::recompute_all_matches;
+
     // Cycle through pairs, or toggle off if at end
     if state.examples.pairs.is_empty() {
         // No pairs, just toggle
@@ -177,6 +180,28 @@ pub fn handle_cycle_example_pair(state: &mut State) -> Command<Msg> {
         // Enabled but no active pair, select first
         state.examples.active_pair_id = state.examples.pairs.first().map(|p| p.id.clone());
     }
+
+    // Recompute matches since the active example pair changed
+    if let (Resource::Success(source), Resource::Success(target)) =
+        (&state.source_metadata, &state.target_metadata)
+    {
+        let (field_matches, relationship_matches, entity_matches, source_entities, target_entities) =
+            recompute_all_matches(
+                source,
+                target,
+                &state.field_mappings,
+                &state.prefix_mappings,
+                &state.examples,
+                &state.source_entity,
+                &state.target_entity,
+            );
+        state.field_matches = field_matches;
+        state.relationship_matches = relationship_matches;
+        state.entity_matches = entity_matches;
+        state.source_entities = source_entities;
+        state.target_entities = target_entities;
+    }
+
     Command::None
 }
 

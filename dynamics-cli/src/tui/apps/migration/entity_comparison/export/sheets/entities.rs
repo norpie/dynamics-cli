@@ -38,6 +38,7 @@ pub fn create_source_entity_sheet(workbook: &mut Workbook, state: &State) -> Res
         let manual_mapping_format = create_manual_mapping_format();
         let prefix_match_format = create_prefix_match_format();
         let type_mismatch_format = create_type_mismatch_format();
+        let example_value_format = create_example_value_format();
         let unmapped_format = create_unmapped_format();
         let required_format = create_required_format();
         let indent_format = Format::new().set_indent(1);
@@ -99,6 +100,15 @@ pub fn create_source_entity_sheet(workbook: &mut Workbook, state: &State) -> Res
                 })
                 .collect();
 
+            let example_matches: Vec<_> = mapped_fields
+                .iter()
+                .filter(|f| {
+                    state.field_matches.get(&f.logical_name)
+                        .map(|m| m.match_type == MatchType::ExampleValue)
+                        .unwrap_or(false)
+                })
+                .collect();
+
             // Exact Matches
             if !exact_matches.is_empty() {
                 sheet.write_string_with_format(row, 0, "  Exact Name + Type Matches", &Format::new().set_bold())?;
@@ -149,6 +159,20 @@ pub fn create_source_entity_sheet(workbook: &mut Workbook, state: &State) -> Res
                 for field in type_mismatches {
                     if let Some(match_info) = state.field_matches.get(&field.logical_name) {
                         write_field_row(sheet, row, field, &match_info.target_field, "Type Mismatch", &type_mismatch_format, &indent_format)?;
+                        row += 1;
+                    }
+                }
+                row += 1;
+            }
+
+            // Example Value Matches
+            if !example_matches.is_empty() {
+                sheet.write_string_with_format(row, 0, "  Example Value Matches", &Format::new().set_bold())?;
+                row += 1;
+
+                for field in example_matches {
+                    if let Some(match_info) = state.field_matches.get(&field.logical_name) {
+                        write_field_row(sheet, row, field, &match_info.target_field, "Example", &example_value_format, &indent_format)?;
                         row += 1;
                     }
                 }
@@ -228,6 +252,7 @@ pub fn create_target_entity_sheet(workbook: &mut Workbook, state: &State) -> Res
         let manual_mapping_format = create_manual_mapping_format();
         let prefix_match_format = create_prefix_match_format();
         let type_mismatch_format = create_type_mismatch_format();
+        let example_value_format = create_example_value_format();
         let unmapped_format = create_unmapped_format();
         let required_format = create_required_format();
         let indent_format = Format::new().set_indent(1);

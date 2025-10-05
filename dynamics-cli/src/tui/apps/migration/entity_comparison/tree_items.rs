@@ -193,6 +193,7 @@ impl TreeItem for FieldNode {
                 MatchType::Exact => theme.green,        // Exact name + type match
                 MatchType::Prefix => theme.green,       // Prefix name + type match
                 MatchType::Manual => theme.green,       // User override
+                MatchType::ExampleValue => theme.sky,   // Example value match
                 MatchType::TypeMismatch => theme.yellow, // Name match but type differs
             }
         } else {
@@ -305,6 +306,7 @@ impl TreeItem for RelationshipNode {
                 MatchType::Exact => theme.green,        // Exact name + type match
                 MatchType::Prefix => theme.green,       // Prefix name + type match
                 MatchType::Manual => theme.green,       // User override
+                MatchType::ExampleValue => theme.sky,   // Example value match
                 MatchType::TypeMismatch => theme.yellow, // Name match but type differs
             }
         } else {
@@ -506,6 +508,7 @@ impl TreeItem for EntityNode {
                 MatchType::Exact => theme.green,        // Exact name match
                 MatchType::Prefix => theme.green,       // Prefix name match
                 MatchType::Manual => theme.green,       // User override
+                MatchType::ExampleValue => theme.sky,   // Example value match
                 MatchType::TypeMismatch => theme.yellow, // Should not happen for entities
             }
         } else {

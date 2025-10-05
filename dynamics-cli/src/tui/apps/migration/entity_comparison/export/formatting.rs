@@ -70,3 +70,8 @@ pub fn create_missing_data_format() -> Format {
     Format::new()
         .set_background_color(Color::RGB(0xD3D3D3))  // Light Gray
 }
+
+pub fn create_example_value_format() -> Format {
+    Format::new()
+        .set_background_color(Color::RGB(0xAFEEEE))  // Pale Turquoise/Cyan
+}

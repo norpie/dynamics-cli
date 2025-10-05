@@ -47,6 +47,9 @@ pub fn handle_create_manual_mapping(state: &mut State) -> Command<Msg> {
                     target,
                     &state.field_mappings,
                     &state.prefix_mappings,
+                    &state.examples,
+                    &state.source_entity,
+                    &state.target_entity,
                 );
             state.field_matches = field_matches;
             state.relationship_matches = relationship_matches;
@@ -97,6 +100,9 @@ pub fn handle_delete_manual_mapping(state: &mut State) -> Command<Msg> {
                         target,
                         &state.field_mappings,
                         &state.prefix_mappings,
+                        &state.examples,
+                        &state.source_entity,
+                        &state.target_entity,
                     );
                 state.field_matches = field_matches;
                 state.relationship_matches = relationship_matches;
