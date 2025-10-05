@@ -60,13 +60,16 @@ impl TreeItem for ComparisonTreeItem {
                 let indent = "  ".repeat(depth);
                 let text = format!("{}{}", indent, node.label);
 
+                // Use stored container_match_type for color (keep color even when selected)
+                let color = match node.container_match_type {
+                    ContainerMatchType::FullMatch => theme.green,
+                    ContainerMatchType::Mixed => theme.yellow,
+                    ContainerMatchType::Unmapped => theme.red,
+                };
+
                 let mut builder = Element::styled_text(Line::from(Span::styled(
                     text,
-                    if is_selected {
-                        Style::default().fg(theme.lavender).bold()
-                    } else {
-                        Style::default().fg(theme.subtext0).bold()
-                    },
+                    Style::default().fg(color).bold(),
                 )));
 
                 if is_selected {
@@ -89,6 +92,15 @@ pub struct ContainerNode {
     pub id: String,
     pub label: String,
     pub children: Vec<ComparisonTreeItem>,
+    pub container_match_type: ContainerMatchType, // Unmapped, FullMatch, or Mixed
+}
+
+/// Container match type (aggregated from children)
+#[derive(Clone, Debug, PartialEq)]
+pub enum ContainerMatchType {
+    Unmapped,   // No matches
+    FullMatch,  // All children matched
+    Mixed,      // Partial matches
 }
 
 /// Truncate a value string to a maximum length for display

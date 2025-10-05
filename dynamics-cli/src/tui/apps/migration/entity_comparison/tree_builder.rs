@@ -2,7 +2,7 @@
 
 use crate::api::EntityMetadata;
 use crate::api::metadata::FieldType;
-use super::tree_items::{ComparisonTreeItem, FieldNode, RelationshipNode, ViewNode, FormNode, ContainerNode};
+use super::tree_items::{ComparisonTreeItem, FieldNode, RelationshipNode, ViewNode, FormNode, ContainerNode, ContainerMatchType};
 use super::ActiveTab;
 use std::collections::HashMap;
 
@@ -90,6 +90,7 @@ fn build_views_tree(views: &[crate::api::metadata::ViewMetadata]) -> Vec<Compari
                 id: format!("view_{}", view.id),
                 label: format!("{} ({} columns)", view.name, view.columns.len()),
                 children: column_fields,
+                container_match_type: ContainerMatchType::Unmapped, // TODO: compute from children
             }));
         }
 
@@ -98,6 +99,7 @@ fn build_views_tree(views: &[crate::api::metadata::ViewMetadata]) -> Vec<Compari
             id: format!("viewtype_{}", view_type),
             label: format!("{} ({} views)", view_type, view_containers.len()),
             children: view_containers,
+            container_match_type: ContainerMatchType::Unmapped, // TODO: compute from children
         }));
     }
 
@@ -170,6 +172,7 @@ fn build_forms_tree(forms: &[crate::api::metadata::FormMetadata]) -> Vec<Compari
                             id: format!("section_{}_{}", form.id, section.name),
                             label: format!("{} ({} fields)", section.label, section.fields.len()),
                             children: field_nodes,
+                            container_match_type: ContainerMatchType::Unmapped, // TODO: compute from children
                         }));
                     }
 
@@ -178,6 +181,7 @@ fn build_forms_tree(forms: &[crate::api::metadata::FormMetadata]) -> Vec<Compari
                         id: format!("tab_{}_{}", form.id, tab.name),
                         label: format!("{} ({} sections)", tab.label, tab.sections.len()),
                         children: section_containers,
+                        container_match_type: ContainerMatchType::Unmapped, // TODO: compute from children
                     }));
                 }
 
@@ -196,6 +200,7 @@ fn build_forms_tree(forms: &[crate::api::metadata::FormMetadata]) -> Vec<Compari
                     format!("{} ({} tabs)", form.name, form_children.len())
                 },
                 children: form_children,
+                container_match_type: ContainerMatchType::Unmapped, // TODO: compute from children
             }));
         }
 
@@ -204,6 +209,7 @@ fn build_forms_tree(forms: &[crate::api::metadata::FormMetadata]) -> Vec<Compari
             id: format!("formtype_{}", form_type),
             label: format!("{} ({} forms)", form_type, form_containers.len()),
             children: form_containers,
+            container_match_type: ContainerMatchType::Unmapped, // TODO: compute from children
         }));
     }
 
