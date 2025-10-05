@@ -701,6 +701,9 @@ impl DynamicsClient {
             self.fetch_entity_fields_alt(entity_name)
         )?;
 
+        log::debug!("XML returned {} fields for {}", xml_fields.len(), entity_name);
+        log::debug!("API returned {} fields for {}", api_fields.len(), entity_name);
+
         // Build lookup by logical_name from API fields (better metadata)
         let api_lookup: HashMap<String, super::metadata::FieldMetadata> = api_fields
             .into_iter()
@@ -720,15 +723,21 @@ impl DynamicsClient {
 
                 if xml_is_nav && api_is_lookup {
                     // Both represent the same relationship - prefer API version (has better metadata)
+                    log::trace!("Deduplicating relationship {}: XML({:?}) + API({:?}) -> API",
+                        xml_field.logical_name, xml_field.field_type, api_field.field_type);
                     combined.insert(xml_field.logical_name.clone(), api_field.clone());
                 } else if api_field.related_entity.is_some() || api_field.display_name.is_some() {
                     // Prefer API version if it has related_entity (lookup fields) or display name
+                    log::trace!("Upgrading field {}: XML({:?}) -> API({:?})",
+                        xml_field.logical_name, xml_field.field_type, api_field.field_type);
                     combined.insert(xml_field.logical_name.clone(), api_field.clone());
                 } else {
+                    log::trace!("Keeping XML field {}: {:?}", xml_field.logical_name, xml_field.field_type);
                     combined.insert(xml_field.logical_name.clone(), xml_field);
                 }
             } else {
                 // Only in XML (NavigationProperty)
+                log::trace!("XML-only field {}: {:?}", xml_field.logical_name, xml_field.field_type);
                 combined.insert(xml_field.logical_name.clone(), xml_field);
             }
         }
@@ -740,6 +749,19 @@ impl DynamicsClient {
 
         let mut result: Vec<_> = combined.into_values().collect();
         result.sort_by(|a, b| a.logical_name.cmp(&b.logical_name));
+
+        log::debug!("Combined result has {} fields for {}", result.len(), entity_name);
+
+        // Log relationship fields specifically
+        let lookups: Vec<_> = result.iter()
+            .filter(|f| matches!(&f.field_type, super::metadata::FieldType::Lookup))
+            .map(|f| &f.logical_name)
+            .collect();
+        let nav_props: Vec<_> = result.iter()
+            .filter(|f| matches!(&f.field_type, super::metadata::FieldType::Other(t) if t.starts_with("Relationship:")))
+            .map(|f| &f.logical_name)
+            .collect();
+        log::debug!("Lookups: {}, NavigationProperties: {}", lookups.len(), nav_props.len());
 
         Ok(result)
     }

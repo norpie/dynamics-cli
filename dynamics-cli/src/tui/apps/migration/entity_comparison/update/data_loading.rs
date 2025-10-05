@@ -89,11 +89,21 @@ pub fn handle_parallel_data_loaded(
             if let Resource::Success(ref mut meta) = state.source_metadata {
                 if meta.relationships.is_empty() && !meta.fields.is_empty() {
                     meta.relationships = extract_relationships(&meta.fields);
+                    // Remove relationship fields from fields list - they should only appear in relationships
+                    meta.fields.retain(|f| {
+                        !matches!(&f.field_type, crate::api::metadata::FieldType::Lookup)
+                            && !matches!(&f.field_type, crate::api::metadata::FieldType::Other(t) if t.starts_with("Relationship:"))
+                    });
                 }
             }
             if let Resource::Success(ref mut meta) = state.target_metadata {
                 if meta.relationships.is_empty() && !meta.fields.is_empty() {
                     meta.relationships = extract_relationships(&meta.fields);
+                    // Remove relationship fields from fields list - they should only appear in relationships
+                    meta.fields.retain(|f| {
+                        !matches!(&f.field_type, crate::api::metadata::FieldType::Lookup)
+                            && !matches!(&f.field_type, crate::api::metadata::FieldType::Other(t) if t.starts_with("Relationship:"))
+                    });
                 }
             }
 

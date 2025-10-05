@@ -28,7 +28,7 @@ pub fn build_tree_items(
 }
 
 /// Build tree items for the Fields tab
-/// Filters out lookup fields (those are shown in Relationships tab)
+/// Note: Relationship fields are already filtered out in data_loading.rs
 fn build_fields_tree(
     fields: &[crate::api::metadata::FieldMetadata],
     field_matches: &HashMap<String, MatchInfo>,
@@ -37,7 +37,6 @@ fn build_fields_tree(
 ) -> Vec<ComparisonTreeItem> {
     fields
         .iter()
-        .filter(|f| !is_relationship_field(f))
         .map(|f| ComparisonTreeItem::Field(FieldNode {
             metadata: f.clone(),
             match_info: field_matches.get(&f.logical_name).cloned(),
@@ -313,15 +312,6 @@ fn build_forms_tree(
     }
 
     result
-}
-
-/// Check if a field is a relationship field (lookup or navigation property)
-fn is_relationship_field(field: &crate::api::metadata::FieldMetadata) -> bool {
-    match &field.field_type {
-        FieldType::Lookup => true,
-        FieldType::Other(t) if t.starts_with("Relationship:") => true,
-        _ => false,
-    }
 }
 
 /// Look up actual field metadata from entity's fields list by logical name
