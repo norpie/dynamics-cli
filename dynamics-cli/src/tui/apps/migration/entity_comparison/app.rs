@@ -79,6 +79,12 @@ pub struct State {
     pub(super) examples_target_input: crate::tui::widgets::TextInputField,
     pub(super) examples_label_input: crate::tui::widgets::TextInputField,
 
+    // Prefix mappings modal state
+    pub(super) show_prefix_mappings_modal: bool,
+    pub(super) prefix_mappings_list_state: crate::tui::widgets::ListState,
+    pub(super) prefix_source_input: crate::tui::widgets::TextInputField,
+    pub(super) prefix_target_input: crate::tui::widgets::TextInputField,
+
     // Modal state
     pub(super) show_back_confirmation: bool,
 }
@@ -171,6 +177,10 @@ impl App for EntityComparisonApp {
             examples_source_input: crate::tui::widgets::TextInputField::new(),
             examples_target_input: crate::tui::widgets::TextInputField::new(),
             examples_label_input: crate::tui::widgets::TextInputField::new(),
+            show_prefix_mappings_modal: false,
+            prefix_mappings_list_state: crate::tui::widgets::ListState::new(),
+            prefix_source_input: crate::tui::widgets::TextInputField::new(),
+            prefix_target_input: crate::tui::widgets::TextInputField::new(),
             show_back_confirmation: false,
         };
 
@@ -220,6 +230,10 @@ impl App for EntityComparisonApp {
             view = view.with_app_modal(render_examples_modal(state, theme), LayerAlignment::Center);
         }
 
+        if state.show_prefix_mappings_modal {
+            view = view.with_app_modal(super::view::render_prefix_mappings_modal(state, theme), LayerAlignment::Center);
+        }
+
         view
     }
 
@@ -267,6 +281,10 @@ impl App for EntityComparisonApp {
             Subscription::keyboard(KeyCode::Char('x'), "Open examples modal", Msg::OpenExamplesModal),
             Subscription::keyboard(KeyCode::Char('X'), "Open examples modal", Msg::OpenExamplesModal),
 
+            // Prefix mappings
+            Subscription::keyboard(KeyCode::Char('p'), "Open prefix mappings modal", Msg::OpenPrefixMappingsModal),
+            Subscription::keyboard(KeyCode::Char('P'), "Open prefix mappings modal", Msg::OpenPrefixMappingsModal),
+
             // Export
             Subscription::keyboard(KeyCode::F(10), "Export to Excel", Msg::ExportToExcel),
         ];
@@ -286,6 +304,14 @@ impl App for EntityComparisonApp {
             subs.push(Subscription::keyboard(KeyCode::Char('d'), "Delete example pair", Msg::DeleteExamplePair));
             subs.push(Subscription::keyboard(KeyCode::Char('c'), "Close modal", Msg::CloseExamplesModal));
             subs.push(Subscription::keyboard(KeyCode::Esc, "Close modal", Msg::CloseExamplesModal));
+        }
+
+        // When showing prefix mappings modal, add hotkeys
+        if state.show_prefix_mappings_modal {
+            subs.push(Subscription::keyboard(KeyCode::Char('a'), "Add prefix mapping", Msg::AddPrefixMapping));
+            subs.push(Subscription::keyboard(KeyCode::Char('d'), "Delete prefix mapping", Msg::DeletePrefixMapping));
+            subs.push(Subscription::keyboard(KeyCode::Char('c'), "Close modal", Msg::ClosePrefixMappingsModal));
+            subs.push(Subscription::keyboard(KeyCode::Esc, "Close modal", Msg::ClosePrefixMappingsModal));
         }
 
         subs

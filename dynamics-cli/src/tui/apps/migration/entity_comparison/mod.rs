@@ -46,6 +46,15 @@ pub enum Msg {
     CycleExamplePair,
     ToggleExamples,
 
+    // Prefix mappings modal messages
+    OpenPrefixMappingsModal,
+    ClosePrefixMappingsModal,
+    PrefixMappingsListNavigate(crossterm::event::KeyCode),
+    PrefixSourceInputEvent(crate::tui::widgets::TextInputEvent),
+    PrefixTargetInputEvent(crate::tui::widgets::TextInputEvent),
+    AddPrefixMapping,
+    DeletePrefixMapping,
+
     // Export
     ExportToExcel,
 }

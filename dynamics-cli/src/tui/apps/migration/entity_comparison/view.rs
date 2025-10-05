@@ -188,6 +188,32 @@ pub fn render_examples_modal(state: &State, theme: &Theme) -> Element<Msg> {
         .build(theme)
 }
 
+pub fn render_prefix_mappings_modal(state: &State, theme: &Theme) -> Element<Msg> {
+    use crate::tui::modals::{PrefixMappingsModal, PrefixMappingItem};
+
+    // Convert prefix mappings to list items
+    let mapping_items: Vec<PrefixMappingItem<Msg>> = state.prefix_mappings.iter().map(|(source, target)| {
+        PrefixMappingItem {
+            source_prefix: source.clone(),
+            target_prefix: target.clone(),
+            on_delete: Msg::DeletePrefixMapping,
+        }
+    }).collect();
+
+    PrefixMappingsModal::new()
+        .mappings(mapping_items)
+        .source_input_state(state.prefix_source_input.clone())
+        .target_input_state(state.prefix_target_input.clone())
+        .list_state(state.prefix_mappings_list_state.clone())
+        .on_source_input_event(Msg::PrefixSourceInputEvent)
+        .on_target_input_event(Msg::PrefixTargetInputEvent)
+        .on_list_navigate(Msg::PrefixMappingsListNavigate)
+        .on_add(Msg::AddPrefixMapping)
+        .on_delete(Msg::DeletePrefixMapping)
+        .on_close(Msg::ClosePrefixMappingsModal)
+        .build(theme)
+}
+
 /// Filter out matched items from tree based on hide_matched setting
 pub fn filter_matched_items(items: Vec<super::tree_items::ComparisonTreeItem>) -> Vec<super::tree_items::ComparisonTreeItem> {
     use super::tree_items::ComparisonTreeItem;
