@@ -24,6 +24,7 @@ pub enum Msg {
     TargetViewportHeight(usize),  // Called by renderer with actual area.height
     CreateManualMapping,  // Create mapping from selected source to selected target
     DeleteManualMapping,  // Delete mapping from selected field
+    MappingsLoaded(std::collections::HashMap<String, String>, std::collections::HashMap<String, String>), // field_mappings, prefix_mappings
 }
 
 #[derive(Clone)]

@@ -7,3 +7,4 @@ pub mod legacy;
 pub mod migrations;
 pub mod entity_cache;
 pub mod entity_metadata_cache;
+pub mod mappings;

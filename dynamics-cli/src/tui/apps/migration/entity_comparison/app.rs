@@ -217,7 +217,27 @@ impl App for EntityComparisonApp {
                 Msg::ParallelDataLoaded(task_idx, *data)
             });
 
-        (state, cmd)
+        // Also load saved field and prefix mappings
+        let mappings_cmd = Command::perform({
+            let source_entity = params.source_entity.clone();
+            let target_entity = params.target_entity.clone();
+            async move {
+                let config = crate::global_config();
+                let field_mappings = config.get_field_mappings(&source_entity, &target_entity).await
+                    .unwrap_or_else(|e| {
+                        log::error!("Failed to load field mappings: {}", e);
+                        HashMap::new()
+                    });
+                let prefix_mappings = config.get_prefix_mappings(&source_entity, &target_entity).await
+                    .unwrap_or_else(|e| {
+                        log::error!("Failed to load prefix mappings: {}", e);
+                        HashMap::new()
+                    });
+                (field_mappings, prefix_mappings)
+            }
+        }, |(field_mappings, prefix_mappings)| Msg::MappingsLoaded(field_mappings, prefix_mappings));
+
+        (state, Command::batch(vec![cmd, mappings_cmd]))
     }
 
     fn update(state: &mut Self::State, msg: Self::Msg) -> Command<Self::Msg> {
@@ -519,19 +539,43 @@ impl App for EntityComparisonApp {
                         && !source_id.starts_with("tab_") && !source_id.starts_with("section_")
                         && !source_id.starts_with("rel_") {
                         // It's a field - add to field_mappings
+                        let source_field = source_id.clone();
+                        let target_field = target_id.clone();
                         state.field_mappings.insert(source_id, target_id);
 
                         // Recompute matches
                         recompute_matches(state);
+
+                        // Save to database
+                        let source_entity = state.source_entity.clone();
+                        let target_entity = state.target_entity.clone();
+                        tokio::spawn(async move {
+                            let config = crate::global_config();
+                            if let Err(e) = config.set_field_mapping(&source_entity, &target_entity, &source_field, &target_field).await {
+                                log::error!("Failed to save field mapping: {}", e);
+                            }
+                        });
                     } else if source_id.starts_with("rel_") && target_id.starts_with("rel_") {
                         // It's a relationship - extract name and add to field_mappings
                         // (we reuse field_mappings for relationships)
                         let source_name = source_id.strip_prefix("rel_").unwrap_or(&source_id);
                         let target_name = target_id.strip_prefix("rel_").unwrap_or(&target_id);
-                        state.field_mappings.insert(source_name.to_string(), target_name.to_string());
+                        let source_field = source_name.to_string();
+                        let target_field = target_name.to_string();
+                        state.field_mappings.insert(source_field.clone(), target_field.clone());
 
                         // Recompute matches
                         recompute_matches(state);
+
+                        // Save to database
+                        let source_entity = state.source_entity.clone();
+                        let target_entity = state.target_entity.clone();
+                        tokio::spawn(async move {
+                            let config = crate::global_config();
+                            if let Err(e) = config.set_field_mapping(&source_entity, &target_entity, &source_field, &target_field).await {
+                                log::error!("Failed to save field mapping: {}", e);
+                            }
+                        });
                     }
                 }
                 Command::None
@@ -542,22 +586,47 @@ impl App for EntityComparisonApp {
 
                 if let Some(source_id) = source_id {
                     // Try to remove from field_mappings
-                    let removed = if source_id.starts_with("rel_") {
+                    let (removed, source_field) = if source_id.starts_with("rel_") {
                         let source_name = source_id.strip_prefix("rel_").unwrap_or(&source_id);
-                        state.field_mappings.remove(source_name).is_some()
+                        let removed = state.field_mappings.remove(source_name).is_some();
+                        (removed, source_name.to_string())
                     } else if !source_id.starts_with("view_") && !source_id.starts_with("form_")
                         && !source_id.starts_with("viewtype_") && !source_id.starts_with("formtype_")
                         && !source_id.starts_with("tab_") && !source_id.starts_with("section_") {
-                        state.field_mappings.remove(&source_id).is_some()
+                        let removed = state.field_mappings.remove(&source_id).is_some();
+                        (removed, source_id.clone())
                     } else {
-                        false
+                        (false, String::new())
                     };
 
                     if removed {
                         // Recompute matches
                         recompute_matches(state);
+
+                        // Delete from database
+                        let source_entity = state.source_entity.clone();
+                        let target_entity = state.target_entity.clone();
+                        tokio::spawn(async move {
+                            let config = crate::global_config();
+                            if let Err(e) = config.delete_field_mapping(&source_entity, &target_entity, &source_field).await {
+                                log::error!("Failed to delete field mapping: {}", e);
+                            }
+                        });
                     }
                 }
+                Command::None
+            }
+            Msg::MappingsLoaded(field_mappings, prefix_mappings) => {
+                // Update state with loaded mappings
+                state.field_mappings = field_mappings;
+                state.prefix_mappings = prefix_mappings;
+
+                // Recompute matches if we have metadata loaded
+                if matches!(state.source_metadata, Resource::Success(_))
+                    && matches!(state.target_metadata, Resource::Success(_)) {
+                    recompute_matches(state);
+                }
+
                 Command::None
             }
         }

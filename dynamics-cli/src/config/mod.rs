@@ -309,4 +309,29 @@ impl Config {
     pub async fn delete_all_entity_metadata_cache(&self, environment_name: &str) -> Result<()> {
         repository::entity_metadata_cache::delete_all_for_environment(&self.pool, environment_name).await
     }
+
+    // Field and prefix mapping methods
+    pub async fn get_field_mappings(&self, source_entity: &str, target_entity: &str) -> Result<std::collections::HashMap<String, String>> {
+        repository::mappings::get_field_mappings(&self.pool, source_entity, target_entity).await
+    }
+
+    pub async fn set_field_mapping(&self, source_entity: &str, target_entity: &str, source_field: &str, target_field: &str) -> Result<()> {
+        repository::mappings::set_field_mapping(&self.pool, source_entity, target_entity, source_field, target_field).await
+    }
+
+    pub async fn delete_field_mapping(&self, source_entity: &str, target_entity: &str, source_field: &str) -> Result<()> {
+        repository::mappings::delete_field_mapping(&self.pool, source_entity, target_entity, source_field).await
+    }
+
+    pub async fn get_prefix_mappings(&self, source_entity: &str, target_entity: &str) -> Result<std::collections::HashMap<String, String>> {
+        repository::mappings::get_prefix_mappings(&self.pool, source_entity, target_entity).await
+    }
+
+    pub async fn set_prefix_mapping(&self, source_entity: &str, target_entity: &str, source_prefix: &str, target_prefix: &str) -> Result<()> {
+        repository::mappings::set_prefix_mapping(&self.pool, source_entity, target_entity, source_prefix, target_prefix).await
+    }
+
+    pub async fn delete_prefix_mapping(&self, source_entity: &str, target_entity: &str, source_prefix: &str) -> Result<()> {
+        repository::mappings::delete_prefix_mapping(&self.pool, source_entity, target_entity, source_prefix).await
+    }
 }
