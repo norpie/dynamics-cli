@@ -175,8 +175,8 @@ fn build_forms_tree(
                 tabs.sort_by_key(|t| t.order);
 
                 for tab in &tabs {
-                    // Build path for this tab
-                    let tab_path = format!("{}/tab/{}", form_path, tab.name);
+                    // Build path for this tab using label (not ID)
+                    let tab_path = format!("{}/tab/{}", form_path, tab.label);
                     let mut section_containers = Vec::new();
 
                     // Sort sections by order
@@ -184,8 +184,8 @@ fn build_forms_tree(
                     sections.sort_by_key(|s| s.order);
 
                     for section in &sections {
-                        // Build path for this section
-                        let section_path = format!("{}/section/{}", tab_path, section.name);
+                        // Build path for this section using label (not ID)
+                        let section_path = format!("{}/section/{}", tab_path, section.label);
 
                         // Sort fields by row order
                         let mut fields = section.fields.clone();

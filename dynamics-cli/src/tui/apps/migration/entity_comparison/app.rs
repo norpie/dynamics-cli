@@ -360,6 +360,7 @@ impl App for EntityComparisonApp {
                                     source,
                                     target,
                                     &state.field_mappings,
+                                    &state.prefix_mappings,
                                     "forms",
                                 );
                                 all_field_matches.extend(forms_matches);
@@ -369,6 +370,7 @@ impl App for EntityComparisonApp {
                                     source,
                                     target,
                                     &state.field_mappings,
+                                    &state.prefix_mappings,
                                     "views",
                                 );
                                 all_field_matches.extend(views_matches);
@@ -824,6 +826,7 @@ fn recompute_matches(state: &mut State) {
             source,
             target,
             &state.field_mappings,
+            &state.prefix_mappings,
             "forms",
         );
         all_field_matches.extend(forms_matches);
@@ -833,6 +836,7 @@ fn recompute_matches(state: &mut State) {
             source,
             target,
             &state.field_mappings,
+            &state.prefix_mappings,
             "views",
         );
         all_field_matches.extend(views_matches);

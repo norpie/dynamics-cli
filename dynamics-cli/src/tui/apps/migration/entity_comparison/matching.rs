@@ -206,6 +206,7 @@ pub fn compute_hierarchical_field_matches(
     source_metadata: &crate::api::EntityMetadata,
     target_metadata: &crate::api::EntityMetadata,
     manual_mappings: &HashMap<String, String>,
+    prefix_mappings: &HashMap<String, String>,
     tab_type: &str, // "forms" or "views"
 ) -> HashMap<String, MatchInfo> {
     let mut matches = HashMap::new();
@@ -214,18 +215,48 @@ pub fn compute_hierarchical_field_matches(
     let source_paths = build_metadata_paths(source_metadata, tab_type);
     let target_paths = build_metadata_paths(target_metadata, tab_type);
 
-    // Create target lookup by path
-    let target_lookup: HashMap<String, PathInfo> = target_paths
-        .into_iter()
+    // Separate containers and fields
+    let mut source_containers = Vec::new();
+    let mut source_fields_by_container: HashMap<String, Vec<PathInfo>> = HashMap::new();
+
+    for path_info in source_paths {
+        if path_info.is_field {
+            // Extract parent container path (everything before last /)
+            if let Some(parent_path) = path_info.path.rfind('/').map(|i| &path_info.path[..i]) {
+                source_fields_by_container.entry(parent_path.to_string()).or_default().push(path_info);
+            }
+        } else {
+            source_containers.push(path_info);
+        }
+    }
+
+    let mut target_containers = Vec::new();
+    let mut target_fields_by_container: HashMap<String, Vec<PathInfo>> = HashMap::new();
+
+    for path_info in target_paths {
+        if path_info.is_field {
+            // Extract parent container path
+            if let Some(parent_path) = path_info.path.rfind('/').map(|i| &path_info.path[..i]) {
+                target_fields_by_container.entry(parent_path.to_string()).or_default().push(path_info);
+            }
+        } else {
+            target_containers.push(path_info);
+        }
+    }
+
+    // Create target container lookup
+    let target_container_lookup: HashMap<String, &PathInfo> = target_containers
+        .iter()
         .map(|p| (p.path.clone(), p))
         .collect();
 
-    for source_path_info in source_paths {
-        let source_path = &source_path_info.path;
+    // Match containers first (exact path only)
+    for source_container in &source_containers {
+        let source_path = &source_container.path;
 
-        // 1. Check manual mappings first (highest priority)
+        // Check manual mapping for container
         if let Some(target_path) = manual_mappings.get(source_path) {
-            if let Some(target_info) = target_lookup.get(target_path) {
+            if target_container_lookup.contains_key(target_path) {
                 matches.insert(
                     source_path.clone(),
                     MatchInfo {
@@ -238,16 +269,67 @@ pub fn compute_hierarchical_field_matches(
             }
         }
 
-        // 2. Check exact path match
-        if let Some(target_info) = target_lookup.get(source_path) {
-            // Paths match - check if it's a field or container
-            if source_path_info.is_field && target_info.is_field {
-                // It's a field - compare types
-                let types_match = source_path_info.field_type == target_info.field_type;
+        // Check exact path match
+        if target_container_lookup.contains_key(source_path) {
+            matches.insert(
+                source_path.clone(),
+                MatchInfo {
+                    target_field: source_path.clone(),
+                    match_type: MatchType::Exact,
+                    confidence: 1.0,
+                },
+            );
+        }
+    }
+
+    // Match fields within containers
+    for (container_path, source_fields) in &source_fields_by_container {
+        // Only match fields if their container matched
+        if !matches.contains_key(container_path) {
+            continue;
+        }
+
+        // Get corresponding target container path
+        let target_container_path = &matches.get(container_path).unwrap().target_field;
+
+        // Get fields in target container
+        let target_fields = match target_fields_by_container.get(target_container_path) {
+            Some(fields) => fields,
+            None => continue,
+        };
+
+        // Build lookup for target fields by name
+        let target_field_lookup: HashMap<String, &PathInfo> = target_fields
+            .iter()
+            .filter_map(|p| {
+                p.path.rfind('/').map(|i| (p.path[i+1..].to_string(), p))
+            })
+            .collect();
+
+        // Match each source field
+        for source_field in source_fields {
+            let source_field_name = source_field.path.rfind('/').map(|i| &source_field.path[i+1..]).unwrap_or(&source_field.path);
+
+            // 1. Check manual mapping
+            if let Some(target_path) = manual_mappings.get(&source_field.path) {
                 matches.insert(
-                    source_path.clone(),
+                    source_field.path.clone(),
                     MatchInfo {
-                        target_field: source_path.clone(),
+                        target_field: target_path.clone(),
+                        match_type: MatchType::Manual,
+                        confidence: 1.0,
+                    },
+                );
+                continue;
+            }
+
+            // 2. Check exact name match
+            if let Some(target_field) = target_field_lookup.get(source_field_name as &str) {
+                let types_match = source_field.field_type == target_field.field_type;
+                matches.insert(
+                    source_field.path.clone(),
+                    MatchInfo {
+                        target_field: target_field.path.clone(),
                         match_type: if types_match {
                             MatchType::Exact
                         } else {
@@ -256,16 +338,26 @@ pub fn compute_hierarchical_field_matches(
                         confidence: if types_match { 1.0 } else { 0.7 },
                     },
                 );
-            } else if !source_path_info.is_field && !target_info.is_field {
-                // It's a container - mark as exact match
-                matches.insert(
-                    source_path.clone(),
-                    MatchInfo {
-                        target_field: source_path.clone(),
-                        match_type: MatchType::Exact,
-                        confidence: 1.0,
-                    },
-                );
+                continue;
+            }
+
+            // 3. Check prefix-transformed matches
+            if let Some(transformed_name) = apply_prefix_transform(source_field_name, prefix_mappings) {
+                if let Some(target_field) = target_field_lookup.get(&transformed_name) {
+                    let types_match = source_field.field_type == target_field.field_type;
+                    matches.insert(
+                        source_field.path.clone(),
+                        MatchInfo {
+                            target_field: target_field.path.clone(),
+                            match_type: if types_match {
+                                MatchType::Prefix
+                            } else {
+                                MatchType::TypeMismatch
+                            },
+                            confidence: if types_match { 0.9 } else { 0.6 },
+                        },
+                    );
+                }
             }
         }
     }
@@ -307,7 +399,7 @@ fn build_metadata_paths(metadata: &crate::api::EntityMetadata, tab_type: &str) -
 
                 if let Some(structure) = &form.form_structure {
                     for tab in &structure.tabs {
-                        let tab_path = format!("{}/tab/{}", form_path, tab.name);
+                        let tab_path = format!("{}/tab/{}", form_path, tab.label);
                         // Add tab container
                         paths.push(PathInfo {
                             path: tab_path.clone(),
@@ -316,7 +408,7 @@ fn build_metadata_paths(metadata: &crate::api::EntityMetadata, tab_type: &str) -
                         });
 
                         for section in &tab.sections {
-                            let section_path = format!("{}/section/{}", tab_path, section.name);
+                            let section_path = format!("{}/section/{}", tab_path, section.label);
                             // Add section container
                             paths.push(PathInfo {
                                 path: section_path.clone(),
