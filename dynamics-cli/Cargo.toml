@@ -60,3 +60,5 @@ once_cell = "1.19"
 futures = "0.3.31"
 fuzzy-matcher = "0.3"
 include_dir = "0.7"
+self_update = { version = "0.40", default-features = false, features = ["archive-tar", "archive-zip", "compression-flate2", "rustls"] }
+semver = "1.0"

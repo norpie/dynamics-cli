@@ -5,6 +5,7 @@ use super::commands::migration::MigrationCommands;
 use super::commands::query::QueryCommands;
 use super::commands::settings::SettingsCommands;
 use super::commands::tui::TuiCommands;
+use super::commands::update::UpdateCommands;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -31,4 +32,6 @@ pub enum Commands {
     Deadlines(DeadlinesCommands),
     /// Launch interactive TUI interface
     Tui(TuiCommands),
+    /// Check for updates and install new versions
+    Update(UpdateCommands),
 }

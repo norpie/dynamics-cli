@@ -16,6 +16,7 @@ mod config;
 mod fql;
 mod tui;
 mod ui;
+mod update;
 
 // Global ClientManager instance
 static CLIENT_MANAGER: OnceCell<api::ClientManager> = OnceCell::new();
@@ -134,9 +135,12 @@ async fn main() -> Result<()> {
         Commands::Tui(tui_args) => {
             cli::commands::tui_command(tui_args).await?;
         }
+        Commands::Update(update_args) => {
+            cli::commands::handle_update_command(update_args).await?;
+        }
         _ => {
             println!("Some commands are temporarily disabled during the config system rewrite.");
-            println!("Available commands: auth, query, tui");
+            println!("Available commands: auth, query, tui, update");
             println!("Use --help with any command for more information.");
         }
     }
