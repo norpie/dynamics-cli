@@ -662,6 +662,10 @@ impl App for EntityComparisonApp {
                 }
                 Command::None
             }
+            Msg::ToggleHideMatched => {
+                state.hide_matched = !state.hide_matched;
+                Command::None
+            }
             Msg::MappingsLoaded(field_mappings, prefix_mappings) => {
                 // Update state with loaded mappings
                 state.field_mappings = field_mappings;
@@ -715,6 +719,10 @@ impl App for EntityComparisonApp {
             // Manual mapping actions
             Subscription::keyboard(KeyCode::Char('m'), "Create manual mapping", Msg::CreateManualMapping),
             Subscription::keyboard(KeyCode::Char('d'), "Delete manual mapping", Msg::DeleteManualMapping),
+
+            // Hide matched toggle
+            Subscription::keyboard(KeyCode::Char('h'), "Toggle hide matched", Msg::ToggleHideMatched),
+            Subscription::keyboard(KeyCode::Char('H'), "Toggle hide matched", Msg::ToggleHideMatched),
         ];
 
         // When showing confirmation modal, add y/n hotkeys
@@ -773,7 +781,8 @@ fn render_main_layout(state: &mut State, theme: &Theme) -> Element<Msg> {
 
     // Build tree items for the active tab from metadata
     let active_tab = state.active_tab;
-    let source_items = if let Resource::Success(ref metadata) = state.source_metadata {
+    let hide_matched = state.hide_matched;
+    let mut source_items = if let Resource::Success(ref metadata) = state.source_metadata {
         build_tree_items(
             metadata,
             active_tab,
@@ -786,7 +795,12 @@ fn render_main_layout(state: &mut State, theme: &Theme) -> Element<Msg> {
         vec![]
     };
 
-    let target_items = if let Resource::Success(ref metadata) = state.target_metadata {
+    // Filter out matched items if hide_matched is enabled
+    if hide_matched {
+        source_items = filter_matched_items(source_items);
+    }
+
+    let mut target_items = if let Resource::Success(ref metadata) = state.target_metadata {
         // Create reverse matches for target side (target_field -> source_field)
         let reverse_field_matches: HashMap<String, MatchInfo> = state.field_matches.iter()
             .map(|(source_field, match_info)| {
@@ -829,6 +843,11 @@ fn render_main_layout(state: &mut State, theme: &Theme) -> Element<Msg> {
     } else {
         vec![]
     };
+
+    // Filter out matched items if hide_matched is enabled
+    if hide_matched {
+        target_items = filter_matched_items(target_items);
+    }
 
     // Cache entity names before borrowing tree states
     let source_entity_name = state.source_entity.clone();
@@ -939,4 +958,57 @@ fn recompute_matches(state: &mut State) {
             &state.entity_matches,  // Pass entity matches for entity-aware matching
         );
     }
+}
+
+/// Filter out matched items from tree based on hide_matched setting
+fn filter_matched_items(items: Vec<super::tree_items::ComparisonTreeItem>) -> Vec<super::tree_items::ComparisonTreeItem> {
+    use super::tree_items::ComparisonTreeItem;
+
+    items.into_iter().filter_map(|item| {
+        match item {
+            ComparisonTreeItem::Field(ref node) => {
+                // Keep if no match (unmatched field)
+                if node.match_info.is_none() {
+                    Some(item)
+                } else {
+                    None
+                }
+            }
+            ComparisonTreeItem::Relationship(ref node) => {
+                // Keep if no match (unmatched relationship)
+                if node.match_info.is_none() {
+                    Some(item)
+                } else {
+                    None
+                }
+            }
+            ComparisonTreeItem::Entity(ref node) => {
+                // Keep if no match (unmatched entity)
+                if node.match_info.is_none() {
+                    Some(item)
+                } else {
+                    None
+                }
+            }
+            ComparisonTreeItem::Container(node) => {
+                // Recursively filter container children
+                let filtered_children = filter_matched_items(node.children.clone());
+
+                // Keep container if it has any unmatched children OR if container itself is unmatched
+                if !filtered_children.is_empty() || node.match_info.is_none() {
+                    Some(ComparisonTreeItem::Container(super::tree_items::ContainerNode {
+                        id: node.id,
+                        label: node.label,
+                        children: filtered_children,
+                        container_match_type: node.container_match_type,
+                        match_info: node.match_info,
+                    }))
+                } else {
+                    None
+                }
+            }
+            // Keep View and Form nodes (they don't have match info)
+            ComparisonTreeItem::View(_) | ComparisonTreeItem::Form(_) => Some(item),
+        }
+    }).collect()
 }

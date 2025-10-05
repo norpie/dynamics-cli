@@ -3,7 +3,7 @@
 ## Next Steps (Priority Order)
 
 ### High Priority - User Experience
-1. **Hide matched filtering** - Toggle to show only unmatched items, critical for focusing on work remaining
+1. ~~**Hide matched filtering**~~ - ✅ DONE - Toggle with 'h' key to show only unmatched items
 2. **Mirrored selection** - Highlight corresponding item on other side when selecting a match
 3. **Field value display from examples** - Show actual data to verify mappings are correct
 
@@ -80,9 +80,11 @@
 - [ ] Display match confidence score
 
 ### **Hide Matched Filtering**
-- [ ] Filter out matched items from tree when toggle enabled
-- [ ] Show only unmatched fields/items
-- [ ] Toggle for containers vs just fields
+- [x] Filter out matched items from tree when toggle enabled
+- [x] Show only unmatched fields/items
+- [x] Toggle with 'h' key (state.hide_matched bool)
+- [x] Recursively filter container children
+- [x] Keep containers if they have unmatched children
 
 ### **Field Mapping Actions**
 - [x] Create manual mapping (m key with selections on both sides)
