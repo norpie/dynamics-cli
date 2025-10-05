@@ -8,6 +8,7 @@ use super::models::{MatchInfo, MatchType};
 /// Unified tree item that can represent any metadata type
 #[derive(Clone)]
 pub enum ComparisonTreeItem {
+    Container(ContainerNode),
     Field(FieldNode),
     Relationship(RelationshipNode),
     View(ViewNode),
@@ -19,6 +20,7 @@ impl TreeItem for ComparisonTreeItem {
 
     fn id(&self) -> String {
         match self {
+            Self::Container(node) => node.id.clone(),
             Self::Field(node) => node.id(),
             Self::Relationship(node) => node.id(),
             Self::View(node) => node.id(),
@@ -28,6 +30,7 @@ impl TreeItem for ComparisonTreeItem {
 
     fn has_children(&self) -> bool {
         match self {
+            Self::Container(node) => !node.children.is_empty(),
             Self::Field(node) => node.has_children(),
             Self::Relationship(node) => node.has_children(),
             Self::View(node) => node.has_children(),
@@ -37,6 +40,7 @@ impl TreeItem for ComparisonTreeItem {
 
     fn children(&self) -> Vec<Self> {
         match self {
+            Self::Container(node) => node.children.clone(),
             Self::Field(node) => node.children().into_iter().map(Self::Field).collect(),
             Self::Relationship(node) => node.children().into_iter().map(Self::Relationship).collect(),
             Self::View(node) => node.children().into_iter().map(Self::View).collect(),
@@ -52,12 +56,39 @@ impl TreeItem for ComparisonTreeItem {
         is_expanded: bool,
     ) -> Element<Self::Msg> {
         match self {
+            Self::Container(node) => {
+                let indent = "  ".repeat(depth);
+                let text = format!("{}{}", indent, node.label);
+
+                let mut builder = Element::styled_text(Line::from(Span::styled(
+                    text,
+                    if is_selected {
+                        Style::default().fg(theme.lavender).bold()
+                    } else {
+                        Style::default().fg(theme.subtext0).bold()
+                    },
+                )));
+
+                if is_selected {
+                    builder = builder.background(Style::default().bg(theme.surface0));
+                }
+
+                builder.build()
+            }
             Self::Field(node) => node.to_element(theme, depth, is_selected, is_expanded),
             Self::Relationship(node) => node.to_element(theme, depth, is_selected, is_expanded),
             Self::View(node) => node.to_element(theme, depth, is_selected, is_expanded),
             Self::Form(node) => node.to_element(theme, depth, is_selected, is_expanded),
         }
     }
+}
+
+/// Generic container node (for FormType, Form, Tab, Section, ViewType, View, etc.)
+#[derive(Clone)]
+pub struct ContainerNode {
+    pub id: String,
+    pub label: String,
+    pub children: Vec<ComparisonTreeItem>,
 }
 
 /// Truncate a value string to a maximum length for display
