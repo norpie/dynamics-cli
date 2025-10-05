@@ -6,6 +6,7 @@ mod tree_builder;
 mod matching;
 mod view;
 mod tree_sync;
+mod update;
 
 pub use app::{EntityComparisonApp, EntityComparisonParams, State as EntityComparisonState};
 pub use models::*;
