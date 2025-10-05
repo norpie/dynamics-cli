@@ -19,7 +19,7 @@ use ratatui::{
 };
 use std::collections::HashMap;
 use crate::{col, row, use_constraints};
-use super::{Msg, Side, ExamplesState, ActiveTab, FetchType, fetch_with_cache, extract_relationships, extract_entities};
+use super::{Msg, Side, ExamplesState, ExamplePair, ActiveTab, FetchType, fetch_with_cache, extract_relationships, extract_entities};
 use super::tree_builder::build_tree_items;
 use super::matching::{compute_field_matches, compute_relationship_matches, compute_hierarchical_field_matches, compute_entity_matches};
 use super::models::MatchInfo;
@@ -71,6 +71,13 @@ pub struct State {
 
     // Examples
     examples: ExamplesState,
+
+    // Examples modal state
+    show_examples_modal: bool,
+    examples_list_state: crate::tui::widgets::ListState,
+    examples_source_input: crate::tui::widgets::TextInputField,
+    examples_target_input: crate::tui::widgets::TextInputField,
+    examples_label_input: crate::tui::widgets::TextInputField,
 
     // Modal state
     show_back_confirmation: bool,
@@ -157,6 +164,11 @@ impl App for EntityComparisonApp {
             target_entities_tree: TreeState::with_selection(),
             focused_side: Side::Source,
             examples: ExamplesState::new(),
+            show_examples_modal: false,
+            examples_list_state: crate::tui::widgets::ListState::new(),
+            examples_source_input: crate::tui::widgets::TextInputField::new(),
+            examples_target_input: crate::tui::widgets::TextInputField::new(),
+            examples_label_input: crate::tui::widgets::TextInputField::new(),
             show_back_confirmation: false,
         };
 
@@ -712,6 +724,106 @@ impl App for EntityComparisonApp {
 
                 Command::None
             }
+
+            // Examples modal messages
+            Msg::OpenExamplesModal => {
+                state.show_examples_modal = true;
+                Command::None
+            }
+            Msg::CloseExamplesModal => {
+                state.show_examples_modal = false;
+                Command::None
+            }
+            Msg::ExamplesListEvent(_event) => {
+                // TODO: Handle list navigation
+                Command::None
+            }
+            Msg::SourceInputEvent(event) => {
+                state.examples_source_input.handle_event(event, None);
+                Command::None
+            }
+            Msg::TargetInputEvent(event) => {
+                state.examples_target_input.handle_event(event, None);
+                Command::None
+            }
+            Msg::LabelInputEvent(event) => {
+                state.examples_label_input.handle_event(event, None);
+                Command::None
+            }
+            Msg::AddExamplePair => {
+                // Create new example pair from inputs
+                let source_id = state.examples_source_input.value().trim().to_string();
+                let target_id = state.examples_target_input.value().trim().to_string();
+                let label = state.examples_label_input.value().trim().to_string();
+
+                if !source_id.is_empty() && !target_id.is_empty() {
+                    let mut pair = ExamplePair::new(source_id, target_id);
+                    if !label.is_empty() {
+                        pair = pair.with_label(label);
+                    }
+
+                    state.examples.pairs.push(pair.clone());
+
+                    // Clear inputs
+                    state.examples_source_input.set_value(String::new());
+                    state.examples_target_input.set_value(String::new());
+                    state.examples_label_input.set_value(String::new());
+
+                    // TODO: Persist to database
+                    // TODO: Auto-fetch data for new pair
+                }
+
+                Command::None
+            }
+            Msg::DeleteExamplePair => {
+                // Delete selected pair from list
+                if let Some(selected_idx) = state.examples_list_state.selected() {
+                    if selected_idx < state.examples.pairs.len() {
+                        state.examples.pairs.remove(selected_idx);
+                        // TODO: Persist to database
+                    }
+                }
+                Command::None
+            }
+            Msg::FetchExampleData => {
+                // Fetch data for selected pair
+                // TODO: Implement API fetch
+                Command::None
+            }
+            Msg::ExampleDataFetched(_pair_id, _result) => {
+                // Store fetched data in cache
+                // TODO: Implement
+                Command::None
+            }
+            Msg::CycleExamplePair => {
+                // Move to next pair or toggle off if at end
+                if state.examples.pairs.is_empty() {
+                    state.examples.enabled = false;
+                    state.examples.active_pair_id = None;
+                } else if let Some(active_id) = &state.examples.active_pair_id {
+                    // Find current pair index
+                    let current_idx = state.examples.pairs.iter()
+                        .position(|p| &p.id == active_id);
+
+                    if let Some(idx) = current_idx {
+                        // Move to next, or wrap to first
+                        let next_idx = (idx + 1) % state.examples.pairs.len();
+                        state.examples.active_pair_id = Some(state.examples.pairs[next_idx].id.clone());
+                    } else {
+                        // Active ID not found, select first
+                        state.examples.active_pair_id = state.examples.pairs.first().map(|p| p.id.clone());
+                    }
+                } else {
+                    // No active pair, select first
+                    state.examples.active_pair_id = state.examples.pairs.first().map(|p| p.id.clone());
+                    state.examples.enabled = true;
+                }
+                Command::None
+            }
+            Msg::ToggleExamples => {
+                state.examples.toggle();
+                Command::None
+            }
         }
     }
 
@@ -721,6 +833,10 @@ impl App for EntityComparisonApp {
 
         if state.show_back_confirmation {
             view = view.with_app_modal(render_back_confirmation_modal(theme), LayerAlignment::Center);
+        }
+
+        if state.show_examples_modal {
+            view = view.with_app_modal(render_examples_modal(state, theme), LayerAlignment::Center);
         }
 
         view
@@ -756,6 +872,10 @@ impl App for EntityComparisonApp {
             // Hide matched toggle
             Subscription::keyboard(KeyCode::Char('h'), "Toggle hide matched", Msg::ToggleHideMatched),
             Subscription::keyboard(KeyCode::Char('H'), "Toggle hide matched", Msg::ToggleHideMatched),
+
+            // Examples management
+            Subscription::keyboard(KeyCode::Char('e'), "Manage examples / cycle pairs", Msg::CycleExamplePair),
+            Subscription::keyboard(KeyCode::Char('E'), "Open examples modal", Msg::OpenExamplesModal),
         ];
 
         // When showing confirmation modal, add y/n hotkeys
@@ -765,6 +885,15 @@ impl App for EntityComparisonApp {
             subs.push(Subscription::keyboard(KeyCode::Char('n'), "Cancel", Msg::CancelBack));
             subs.push(Subscription::keyboard(KeyCode::Char('N'), "Cancel", Msg::CancelBack));
             subs.push(Subscription::keyboard(KeyCode::Enter, "Confirm", Msg::ConfirmBack));
+        }
+
+        // When showing examples modal, add hotkeys
+        if state.show_examples_modal {
+            subs.push(Subscription::keyboard(KeyCode::Char('a'), "Add example pair", Msg::AddExamplePair));
+            subs.push(Subscription::keyboard(KeyCode::Char('d'), "Delete example pair", Msg::DeleteExamplePair));
+            subs.push(Subscription::keyboard(KeyCode::Char('f'), "Fetch example data", Msg::FetchExampleData));
+            subs.push(Subscription::keyboard(KeyCode::Char('c'), "Close modal", Msg::CloseExamplesModal));
+            subs.push(Subscription::keyboard(KeyCode::Esc, "Close modal", Msg::CloseExamplesModal));
         }
 
         subs
@@ -932,6 +1061,36 @@ fn render_back_confirmation_modal(theme: &Theme) -> Element<Msg> {
         .on_cancel(Msg::CancelBack)
         .width(60)
         .height(10)
+        .build(theme)
+}
+
+fn render_examples_modal(state: &State, theme: &Theme) -> Element<Msg> {
+    use crate::tui::modals::{ExamplesModal, ExamplePairItem};
+
+    // Convert example pairs to list items
+    let pair_items: Vec<ExamplePairItem<Msg>> = state.examples.pairs.iter().map(|pair| {
+        ExamplePairItem {
+            id: pair.id.clone(),
+            source_id: pair.source_record_id.clone(),
+            target_id: pair.target_record_id.clone(),
+            label: pair.label.clone(),
+            on_delete: Msg::DeleteExamplePair,
+        }
+    }).collect();
+
+    ExamplesModal::new()
+        .pairs(pair_items)
+        .source_input_state(state.examples_source_input.clone())
+        .target_input_state(state.examples_target_input.clone())
+        .label_input_state(state.examples_label_input.clone())
+        .list_state(state.examples_list_state.clone())
+        .on_source_input_event(Msg::SourceInputEvent)
+        .on_target_input_event(Msg::TargetInputEvent)
+        .on_label_input_event(Msg::LabelInputEvent)
+        .on_add(Msg::AddExamplePair)
+        .on_delete(Msg::DeleteExamplePair)
+        .on_fetch(Msg::FetchExampleData)
+        .on_close(Msg::CloseExamplesModal)
         .build(theme)
 }
 

@@ -199,23 +199,17 @@ impl<Msg: Clone> ExamplesModal<Msg> {
         ])).build();
 
         // Existing pairs list
-        let list_label = Element::text("Existing Pairs:").build();
+        let list_label = Element::text("Existing Pairs:");
 
         let pairs_list = if !self.pairs.is_empty() {
-            let mut list_builder = Element::list(
+            Element::list(
                 FocusId::new("examples-list"),
                 &self.pairs,
-                self.list_state.clone(),
+                &self.list_state,
                 theme,
-            );
-
-            if let Some(handler) = self.on_list_event {
-                list_builder = list_builder.on_event(handler);
-            }
-
-            list_builder.build()
+            ).build()
         } else {
-            Element::text("  (no pairs yet)").build()
+            Element::text("  (no pairs yet)")
         };
 
         // Form section

@@ -26,6 +26,20 @@ pub enum Msg {
     DeleteManualMapping,  // Delete mapping from selected field
     ToggleHideMatched,    // Toggle showing/hiding matched items in trees
     MappingsLoaded(std::collections::HashMap<String, String>, std::collections::HashMap<String, String>), // field_mappings, prefix_mappings
+
+    // Examples modal messages
+    OpenExamplesModal,
+    CloseExamplesModal,
+    ExamplesListEvent(crate::tui::widgets::ListEvent),
+    SourceInputEvent(crate::tui::widgets::TextInputEvent),
+    TargetInputEvent(crate::tui::widgets::TextInputEvent),
+    LabelInputEvent(crate::tui::widgets::TextInputEvent),
+    AddExamplePair,
+    DeleteExamplePair,
+    FetchExampleData,
+    ExampleDataFetched(String, Result<(serde_json::Value, serde_json::Value), String>), // pair_id, (source_data, target_data)
+    CycleExamplePair,
+    ToggleExamples,
 }
 
 #[derive(Clone)]
