@@ -4,6 +4,8 @@ mod tree_items;
 mod fetch;
 mod tree_builder;
 mod matching;
+mod view;
+mod tree_sync;
 
 pub use app::{EntityComparisonApp, EntityComparisonParams, State as EntityComparisonState};
 pub use models::*;

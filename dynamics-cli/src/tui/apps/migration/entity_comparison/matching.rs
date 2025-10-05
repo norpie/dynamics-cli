@@ -548,3 +548,69 @@ fn build_metadata_paths(metadata: &crate::api::EntityMetadata, tab_type: &str) -
 
     paths
 }
+
+/// Recompute field and relationship matches based on current mappings
+/// Call this after manual mappings or prefix mappings change
+pub fn recompute_all_matches(
+    source_metadata: &crate::api::EntityMetadata,
+    target_metadata: &crate::api::EntityMetadata,
+    field_mappings: &HashMap<String, String>,
+    prefix_mappings: &HashMap<String, String>,
+) -> (
+    HashMap<String, MatchInfo>,  // field_matches
+    HashMap<String, MatchInfo>,  // relationship_matches
+    HashMap<String, MatchInfo>,  // entity_matches
+    Vec<(String, usize)>,        // source_entities
+    Vec<(String, usize)>,        // target_entities
+) {
+    // Flat matching for Fields tab
+    let mut all_field_matches = compute_field_matches(
+        &source_metadata.fields,
+        &target_metadata.fields,
+        field_mappings,
+        prefix_mappings,
+    );
+
+    // Hierarchical matching for Forms tab
+    let forms_matches = compute_hierarchical_field_matches(
+        source_metadata,
+        target_metadata,
+        field_mappings,
+        prefix_mappings,
+        "forms",
+    );
+    all_field_matches.extend(forms_matches);
+
+    // Hierarchical matching for Views tab
+    let views_matches = compute_hierarchical_field_matches(
+        source_metadata,
+        target_metadata,
+        field_mappings,
+        prefix_mappings,
+        "views",
+    );
+    all_field_matches.extend(views_matches);
+
+    // Extract entities from relationships
+    let source_entities = super::extract_entities(&source_metadata.relationships);
+    let target_entities = super::extract_entities(&target_metadata.relationships);
+
+    // Compute entity matches (uses same mappings as fields)
+    let entity_matches = compute_entity_matches(
+        &source_entities,
+        &target_entities,
+        field_mappings,
+        prefix_mappings,
+    );
+
+    // Relationship matching (now entity-aware)
+    let relationship_matches = compute_relationship_matches(
+        &source_metadata.relationships,
+        &target_metadata.relationships,
+        field_mappings,
+        prefix_mappings,
+        &entity_matches,
+    );
+
+    (all_field_matches, relationship_matches, entity_matches, source_entities, target_entities)
+}
