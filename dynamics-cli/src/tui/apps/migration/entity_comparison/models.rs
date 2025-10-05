@@ -258,10 +258,34 @@ impl ExamplesState {
                 }
             }
         } else {
-            log::debug!("Field '{}' not found in cached data", extracted_field_name);
-            if let Some(obj) = record_data.as_object() {
-                log::debug!("Available fields in cached data: {:?}", obj.keys().collect::<Vec<_>>());
+            // Field not found directly - check if it's a Virtual display field (e.g., organizationidname, createdbyyominame)
+            // These are formatted as _field_value@FormattedValue in the API response
+
+            // Try common patterns for virtual display fields:
+            // Pattern: {field}yominame -> _{field}_value@FormattedValue
+            // Pattern: {field}name -> _{field}_value@FormattedValue
+            let lookup_formatted_key = if extracted_field_name.ends_with("yominame") {
+                // Remove "yominame" suffix
+                let base = extracted_field_name.strip_suffix("yominame").unwrap_or(extracted_field_name);
+                format!("_{}_value@OData.Community.Display.V1.FormattedValue", base)
+            } else if extracted_field_name.ends_with("name") {
+                // Remove "name" suffix
+                let base = extracted_field_name.strip_suffix("name").unwrap_or(extracted_field_name);
+                format!("_{}_value@OData.Community.Display.V1.FormattedValue", base)
+            } else {
+                String::new()
+            };
+
+            if !lookup_formatted_key.is_empty() {
+                if let Some(formatted_value) = record_data.get(&lookup_formatted_key) {
+                    log::debug!("Found formatted value for virtual field '{}' at key '{}'", extracted_field_name, lookup_formatted_key);
+                    if let Some(s) = formatted_value.as_str() {
+                        return Some(format!("\"{}\"", s));
+                    }
+                }
             }
+
+            log::debug!("Field '{}' not found in cached data (tried lookup key: '{}')", extracted_field_name, lookup_formatted_key);
             None
         }
     }
