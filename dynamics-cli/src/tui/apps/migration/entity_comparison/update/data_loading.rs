@@ -350,6 +350,8 @@ pub fn handle_mappings_loaded(
     builder
         .with_title("Loading Entity Comparison")
         .on_complete(AppId::EntityComparison)
+        .on_cancel(AppId::MigrationComparisonSelect)
+        .cancellable(true)
         .build(|_task_idx, result| {
             let data = result.downcast::<Result<FetchedData, String>>().unwrap();
             Msg::ParallelDataLoaded(0, *data)
@@ -458,6 +460,8 @@ pub fn handle_refresh(state: &mut State) -> Command<Msg> {
     builder
         .with_title("Refreshing Entity Comparison")
         .on_complete(AppId::EntityComparison)
+        .on_cancel(AppId::MigrationComparisonSelect)
+        .cancellable(true)
         .build(|_task_idx, result| {
             let data = result.downcast::<Result<FetchedData, String>>().unwrap();
             Msg::ParallelDataLoaded(0, *data)

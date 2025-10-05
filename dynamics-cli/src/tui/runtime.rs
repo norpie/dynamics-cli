@@ -726,8 +726,8 @@ impl<A: App> Runtime<A> {
                     Box::new(LoadingScreenParams {
                         tasks: task_names.clone(),
                         target: config.on_complete,
-                        caller: None,
-                        cancellable: false,
+                        caller: config.caller,
+                        cancellable: config.cancellable,
                     })
                 ));
                 self.navigation_target = Some(AppId::LoadingScreen);

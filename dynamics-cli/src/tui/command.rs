@@ -83,6 +83,8 @@ pub struct ParallelTask {
 pub struct ParallelConfig {
     pub title: Option<String>,
     pub on_complete: Option<AppId>,
+    pub caller: Option<AppId>,
+    pub cancellable: bool,
 }
 
 impl Default for ParallelConfig {
@@ -90,6 +92,8 @@ impl Default for ParallelConfig {
         Self {
             title: None,
             on_complete: None,
+            caller: None,
+            cancellable: false,
         }
     }
 }
@@ -229,6 +233,18 @@ impl<Msg: Send + 'static> ParallelBuilder<Msg> {
     /// Set the app to navigate to when all tasks complete
     pub fn on_complete(mut self, app_id: AppId) -> Self {
         self.config.on_complete = Some(app_id);
+        self
+    }
+
+    /// Set the app to navigate to when loading is cancelled
+    pub fn on_cancel(mut self, app_id: AppId) -> Self {
+        self.config.caller = Some(app_id);
+        self
+    }
+
+    /// Enable or disable cancellation (ESC key on loading screen)
+    pub fn cancellable(mut self, cancellable: bool) -> Self {
+        self.config.cancellable = cancellable;
         self
     }
 
