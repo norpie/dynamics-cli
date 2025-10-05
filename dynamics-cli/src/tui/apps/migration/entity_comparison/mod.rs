@@ -3,6 +3,7 @@ mod models;
 mod tree_items;
 mod fetch;
 mod tree_builder;
+mod matching;
 
 pub use app::{EntityComparisonApp, EntityComparisonParams, State as EntityComparisonState};
 pub use models::*;
@@ -21,6 +22,8 @@ pub enum Msg {
     TargetTreeEvent(crate::tui::widgets::TreeEvent),
     SourceViewportHeight(usize),  // Called by renderer with actual area.height
     TargetViewportHeight(usize),  // Called by renderer with actual area.height
+    CreateManualMapping,  // Create mapping from selected source to selected target
+    DeleteManualMapping,  // Delete mapping from selected field
 }
 
 #[derive(Clone)]

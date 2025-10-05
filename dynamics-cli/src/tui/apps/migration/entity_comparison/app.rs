@@ -21,6 +21,8 @@ use std::collections::HashMap;
 use crate::{col, row, use_constraints};
 use super::{Msg, Side, ExamplesState, ActiveTab, FetchType, fetch_with_cache, extract_relationships};
 use super::tree_builder::build_tree_items;
+use super::matching::{compute_field_matches, compute_relationship_matches};
+use super::models::MatchInfo;
 
 pub struct EntityComparisonApp;
 
@@ -41,9 +43,13 @@ pub struct State {
     target_metadata: Resource<EntityMetadata>,
 
     // Mapping state
-    field_mappings: HashMap<String, String>,  // source -> target
+    field_mappings: HashMap<String, String>,  // source -> target (manual)
     prefix_mappings: HashMap<String, String>, // source_prefix -> target_prefix
     hide_matched: bool,
+
+    // Computed matches (cached)
+    field_matches: HashMap<String, MatchInfo>,        // source_field -> match_info
+    relationship_matches: HashMap<String, MatchInfo>, // source_relationship -> match_info
 
     // Tree UI state - one tree state per tab per side
     source_fields_tree: TreeState,
@@ -125,6 +131,8 @@ impl App for EntityComparisonApp {
             field_mappings: HashMap::new(),
             prefix_mappings: HashMap::new(),
             hide_matched: false,
+            field_matches: HashMap::new(),
+            relationship_matches: HashMap::new(),
             source_fields_tree: TreeState::with_selection(),
             source_relationships_tree: TreeState::with_selection(),
             source_views_tree: TreeState::with_selection(),
@@ -318,6 +326,20 @@ impl App for EntityComparisonApp {
                                 && !source.forms.is_empty() && !target.forms.is_empty()
                                 && !source.views.is_empty() && !target.views.is_empty() {
 
+                                // Compute field and relationship matches
+                                state.field_matches = compute_field_matches(
+                                    &source.fields,
+                                    &target.fields,
+                                    &state.field_mappings,
+                                    &state.prefix_mappings,
+                                );
+                                state.relationship_matches = compute_relationship_matches(
+                                    &source.relationships,
+                                    &target.relationships,
+                                    &state.field_mappings, // Reuse field mappings for relationships
+                                    &state.prefix_mappings,
+                                );
+
                                 // Cache both metadata objects asynchronously
                                 let source_env = state.source_env.clone();
                                 let source_entity = state.source_entity.clone();
@@ -481,6 +503,63 @@ impl App for EntityComparisonApp {
                         Msg::ParallelDataLoaded(task_idx, *data)
                     })
             }
+            Msg::CreateManualMapping => {
+                // Get selected items from both source and target trees
+                let source_id = state.source_tree_for_tab().selected().map(|s| s.to_string());
+                let target_id = state.target_tree_for_tab().selected().map(|s| s.to_string());
+
+                if let (Some(source_id), Some(target_id)) = (source_id, target_id) {
+                    // Extract the field/relationship name from the ID
+                    // For now, IDs are the logical names for fields and relationships
+                    // For containers, we skip manual mapping
+
+                    // Only create mappings for fields and relationships
+                    if !source_id.starts_with("view_") && !source_id.starts_with("form_")
+                        && !source_id.starts_with("viewtype_") && !source_id.starts_with("formtype_")
+                        && !source_id.starts_with("tab_") && !source_id.starts_with("section_")
+                        && !source_id.starts_with("rel_") {
+                        // It's a field - add to field_mappings
+                        state.field_mappings.insert(source_id, target_id);
+
+                        // Recompute matches
+                        recompute_matches(state);
+                    } else if source_id.starts_with("rel_") && target_id.starts_with("rel_") {
+                        // It's a relationship - extract name and add to field_mappings
+                        // (we reuse field_mappings for relationships)
+                        let source_name = source_id.strip_prefix("rel_").unwrap_or(&source_id);
+                        let target_name = target_id.strip_prefix("rel_").unwrap_or(&target_id);
+                        state.field_mappings.insert(source_name.to_string(), target_name.to_string());
+
+                        // Recompute matches
+                        recompute_matches(state);
+                    }
+                }
+                Command::None
+            }
+            Msg::DeleteManualMapping => {
+                // Get selected item from source tree
+                let source_id = state.source_tree_for_tab().selected().map(|s| s.to_string());
+
+                if let Some(source_id) = source_id {
+                    // Try to remove from field_mappings
+                    let removed = if source_id.starts_with("rel_") {
+                        let source_name = source_id.strip_prefix("rel_").unwrap_or(&source_id);
+                        state.field_mappings.remove(source_name).is_some()
+                    } else if !source_id.starts_with("view_") && !source_id.starts_with("form_")
+                        && !source_id.starts_with("viewtype_") && !source_id.starts_with("formtype_")
+                        && !source_id.starts_with("tab_") && !source_id.starts_with("section_") {
+                        state.field_mappings.remove(&source_id).is_some()
+                    } else {
+                        false
+                    };
+
+                    if removed {
+                        // Recompute matches
+                        recompute_matches(state);
+                    }
+                }
+                Command::None
+            }
         }
     }
 
@@ -509,6 +588,10 @@ impl App for EntityComparisonApp {
 
             // Refresh metadata
             Subscription::keyboard(KeyCode::F(5), "Refresh metadata", Msg::Refresh),
+
+            // Manual mapping actions
+            Subscription::keyboard(KeyCode::Char('m'), "Create manual mapping", Msg::CreateManualMapping),
+            Subscription::keyboard(KeyCode::Char('d'), "Delete manual mapping", Msg::DeleteManualMapping),
         ];
 
         // When showing confirmation modal, add y/n hotkeys
@@ -567,13 +650,16 @@ fn render_main_layout(state: &mut State, theme: &Theme) -> Element<Msg> {
     // Build tree items for the active tab from metadata
     let active_tab = state.active_tab;
     let source_items = if let Resource::Success(ref metadata) = state.source_metadata {
-        build_tree_items(metadata, active_tab)
+        build_tree_items(metadata, active_tab, &state.field_matches, &state.relationship_matches)
     } else {
         vec![]
     };
 
     let target_items = if let Resource::Success(ref metadata) = state.target_metadata {
-        build_tree_items(metadata, active_tab)
+        // Target tree doesn't need matches (or could use reverse matches in the future)
+        let empty_field_matches = HashMap::new();
+        let empty_relationship_matches = HashMap::new();
+        build_tree_items(metadata, active_tab, &empty_field_matches, &empty_relationship_matches)
     } else {
         vec![]
     };
@@ -628,4 +714,24 @@ fn render_back_confirmation_modal(theme: &Theme) -> Element<Msg> {
         .width(60)
         .height(10)
         .build(theme)
+}
+
+/// Recompute field and relationship matches based on current mappings
+fn recompute_matches(state: &mut State) {
+    if let (Resource::Success(source), Resource::Success(target)) =
+        (&state.source_metadata, &state.target_metadata)
+    {
+        state.field_matches = compute_field_matches(
+            &source.fields,
+            &target.fields,
+            &state.field_mappings,
+            &state.prefix_mappings,
+        );
+        state.relationship_matches = compute_relationship_matches(
+            &source.relationships,
+            &target.relationships,
+            &state.field_mappings,
+            &state.prefix_mappings,
+        );
+    }
 }

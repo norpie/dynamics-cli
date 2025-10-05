@@ -64,7 +64,7 @@ impl TreeItem for ComparisonTreeItem {
                 let color = match node.container_match_type {
                     ContainerMatchType::FullMatch => theme.green,
                     ContainerMatchType::Mixed => theme.yellow,
-                    ContainerMatchType::Unmapped => theme.red,
+                    ContainerMatchType::NoMatch => theme.red,
                 };
 
                 let mut builder = Element::styled_text(Line::from(Span::styled(
@@ -98,9 +98,9 @@ pub struct ContainerNode {
 /// Container match type (aggregated from children)
 #[derive(Clone, Debug, PartialEq)]
 pub enum ContainerMatchType {
-    Unmapped,   // No matches
-    FullMatch,  // All children matched
-    Mixed,      // Partial matches
+    NoMatch,    // Container not matched
+    FullMatch,  // Container matched AND all children matched
+    Mixed,      // Container matched BUT not all children matched
 }
 
 /// Truncate a value string to a maximum length for display

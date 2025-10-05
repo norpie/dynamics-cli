@@ -4,46 +4,61 @@ use crate::api::EntityMetadata;
 use crate::api::metadata::FieldType;
 use super::tree_items::{ComparisonTreeItem, FieldNode, RelationshipNode, ViewNode, FormNode, ContainerNode, ContainerMatchType};
 use super::ActiveTab;
+use super::models::MatchInfo;
 use std::collections::HashMap;
 
-/// Build tree items for the active tab from metadata
-pub fn build_tree_items(metadata: &EntityMetadata, active_tab: ActiveTab) -> Vec<ComparisonTreeItem> {
+/// Build tree items for the active tab from metadata with match information
+pub fn build_tree_items(
+    metadata: &EntityMetadata,
+    active_tab: ActiveTab,
+    field_matches: &HashMap<String, MatchInfo>,
+    relationship_matches: &HashMap<String, MatchInfo>,
+) -> Vec<ComparisonTreeItem> {
     match active_tab {
-        ActiveTab::Fields => build_fields_tree(&metadata.fields),
-        ActiveTab::Relationships => build_relationships_tree(&metadata.relationships),
-        ActiveTab::Views => build_views_tree(&metadata.views),
-        ActiveTab::Forms => build_forms_tree(&metadata.forms),
+        ActiveTab::Fields => build_fields_tree(&metadata.fields, field_matches),
+        ActiveTab::Relationships => build_relationships_tree(&metadata.relationships, relationship_matches),
+        ActiveTab::Views => build_views_tree(&metadata.views, field_matches),
+        ActiveTab::Forms => build_forms_tree(&metadata.forms, field_matches),
     }
 }
 
 /// Build tree items for the Fields tab
 /// Filters out lookup fields (those are shown in Relationships tab)
-fn build_fields_tree(fields: &[crate::api::metadata::FieldMetadata]) -> Vec<ComparisonTreeItem> {
+fn build_fields_tree(
+    fields: &[crate::api::metadata::FieldMetadata],
+    field_matches: &HashMap<String, MatchInfo>,
+) -> Vec<ComparisonTreeItem> {
     fields
         .iter()
         .filter(|f| !is_relationship_field(f))
         .map(|f| ComparisonTreeItem::Field(FieldNode {
             metadata: f.clone(),
-            match_info: None,  // TODO: Add matching logic
+            match_info: field_matches.get(&f.logical_name).cloned(),
             example_value: None,  // TODO: Add from examples state
         }))
         .collect()
 }
 
 /// Build tree items for the Relationships tab
-fn build_relationships_tree(relationships: &[crate::api::metadata::RelationshipMetadata]) -> Vec<ComparisonTreeItem> {
+fn build_relationships_tree(
+    relationships: &[crate::api::metadata::RelationshipMetadata],
+    relationship_matches: &HashMap<String, MatchInfo>,
+) -> Vec<ComparisonTreeItem> {
     relationships
         .iter()
         .map(|r| ComparisonTreeItem::Relationship(RelationshipNode {
             metadata: r.clone(),
-            match_info: None,  // TODO: Add matching logic
+            match_info: relationship_matches.get(&r.name).cloned(),
         }))
         .collect()
 }
 
 /// Build tree items for the Views tab
 /// Hierarchy: ViewType → View → Column (as field reference)
-fn build_views_tree(views: &[crate::api::metadata::ViewMetadata]) -> Vec<ComparisonTreeItem> {
+fn build_views_tree(
+    views: &[crate::api::metadata::ViewMetadata],
+    field_matches: &HashMap<String, MatchInfo>,
+) -> Vec<ComparisonTreeItem> {
     // Group views by type
     let mut grouped: HashMap<String, Vec<&crate::api::metadata::ViewMetadata>> = HashMap::new();
     for view in views {
@@ -79,27 +94,29 @@ fn build_views_tree(views: &[crate::api::metadata::ViewMetadata]) -> Vec<Compari
                             max_length: None,
                             related_entity: None,
                         },
-                        match_info: None,
+                        match_info: field_matches.get(&col.name).cloned(),
                         example_value: None,
                     })
                 })
                 .collect();
 
             // Create container for this view
+            let container_match_type = compute_container_match_type(&column_fields);
             view_containers.push(ComparisonTreeItem::Container(ContainerNode {
                 id: format!("view_{}", view.id),
                 label: format!("{} ({} columns)", view.name, view.columns.len()),
                 children: column_fields,
-                container_match_type: ContainerMatchType::Unmapped, // TODO: compute from children
+                container_match_type,
             }));
         }
 
         // Create container for this view type
+        let container_match_type = compute_container_match_type(&view_containers);
         result.push(ComparisonTreeItem::Container(ContainerNode {
             id: format!("viewtype_{}", view_type),
             label: format!("{} ({} views)", view_type, view_containers.len()),
             children: view_containers,
-            container_match_type: ContainerMatchType::Unmapped, // TODO: compute from children
+            container_match_type,
         }));
     }
 
@@ -108,7 +125,10 @@ fn build_views_tree(views: &[crate::api::metadata::ViewMetadata]) -> Vec<Compari
 
 /// Build tree items for the Forms tab
 /// Hierarchy: FormType → Form → Tab → Section → Field
-fn build_forms_tree(forms: &[crate::api::metadata::FormMetadata]) -> Vec<ComparisonTreeItem> {
+fn build_forms_tree(
+    forms: &[crate::api::metadata::FormMetadata],
+    field_matches: &HashMap<String, MatchInfo>,
+) -> Vec<ComparisonTreeItem> {
     // Group forms by type
     let mut grouped: HashMap<String, Vec<&crate::api::metadata::FormMetadata>> = HashMap::new();
     for form in forms {
@@ -161,27 +181,29 @@ fn build_forms_tree(forms: &[crate::api::metadata::FormMetadata]) -> Vec<Compari
                                         max_length: None,
                                         related_entity: None,
                                     },
-                                    match_info: None,
+                                    match_info: field_matches.get(&field.logical_name).cloned(),
                                     example_value: None,
                                 })
                             })
                             .collect();
 
                         // Create container for section
+                        let container_match_type = compute_container_match_type(&field_nodes);
                         section_containers.push(ComparisonTreeItem::Container(ContainerNode {
                             id: format!("section_{}_{}", form.id, section.name),
                             label: format!("{} ({} fields)", section.label, section.fields.len()),
                             children: field_nodes,
-                            container_match_type: ContainerMatchType::Unmapped, // TODO: compute from children
+                            container_match_type,
                         }));
                     }
 
                     // Create container for tab
+                    let container_match_type = compute_container_match_type(&section_containers);
                     tab_containers.push(ComparisonTreeItem::Container(ContainerNode {
                         id: format!("tab_{}_{}", form.id, tab.name),
                         label: format!("{} ({} sections)", tab.label, tab.sections.len()),
                         children: section_containers,
-                        container_match_type: ContainerMatchType::Unmapped, // TODO: compute from children
+                        container_match_type,
                     }));
                 }
 
@@ -192,6 +214,7 @@ fn build_forms_tree(forms: &[crate::api::metadata::FormMetadata]) -> Vec<Compari
             };
 
             // Create container for this form
+            let container_match_type = compute_container_match_type(&form_children);
             form_containers.push(ComparisonTreeItem::Container(ContainerNode {
                 id: format!("form_{}", form.id),
                 label: if form_children.is_empty() {
@@ -200,16 +223,17 @@ fn build_forms_tree(forms: &[crate::api::metadata::FormMetadata]) -> Vec<Compari
                     format!("{} ({} tabs)", form.name, form_children.len())
                 },
                 children: form_children,
-                container_match_type: ContainerMatchType::Unmapped, // TODO: compute from children
+                container_match_type,
             }));
         }
 
         // Create container for this form type
+        let container_match_type = compute_container_match_type(&form_containers);
         result.push(ComparisonTreeItem::Container(ContainerNode {
             id: format!("formtype_{}", form_type),
             label: format!("{} ({} forms)", form_type, form_containers.len()),
             children: form_containers,
-            container_match_type: ContainerMatchType::Unmapped, // TODO: compute from children
+            container_match_type,
         }));
     }
 
@@ -219,4 +243,46 @@ fn build_forms_tree(forms: &[crate::api::metadata::FormMetadata]) -> Vec<Compari
 /// Check if a field is a relationship field (lookup)
 fn is_relationship_field(field: &crate::api::metadata::FieldMetadata) -> bool {
     matches!(field.field_type, FieldType::Lookup)
+}
+
+/// Compute ContainerMatchType based on children's match status
+/// For now, this only looks at children (not container-level matching)
+fn compute_container_match_type(children: &[ComparisonTreeItem]) -> ContainerMatchType {
+    if children.is_empty() {
+        return ContainerMatchType::NoMatch;
+    }
+
+    let mut has_matched = false;
+    let mut has_unmatched = false;
+
+    for child in children {
+        let child_has_match = match child {
+            ComparisonTreeItem::Field(node) => node.match_info.is_some(),
+            ComparisonTreeItem::Relationship(node) => node.match_info.is_some(),
+            ComparisonTreeItem::Container(node) => {
+                // Recursively check container status
+                node.container_match_type != ContainerMatchType::NoMatch
+            }
+            _ => false,
+        };
+
+        if child_has_match {
+            has_matched = true;
+        } else {
+            has_unmatched = true;
+        }
+
+        // Early exit if we know it's mixed
+        if has_matched && has_unmatched {
+            return ContainerMatchType::Mixed;
+        }
+    }
+
+    if has_matched && !has_unmatched {
+        ContainerMatchType::FullMatch
+    } else if has_matched {
+        ContainerMatchType::Mixed
+    } else {
+        ContainerMatchType::NoMatch
+    }
 }
