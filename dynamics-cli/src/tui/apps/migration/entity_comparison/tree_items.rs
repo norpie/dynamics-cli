@@ -154,6 +154,7 @@ pub struct FieldNode {
     pub metadata: FieldMetadata,
     pub match_info: Option<MatchInfo>,
     pub example_value: Option<String>,
+    pub display_name: String, // Computed name to display (technical or friendly)
 }
 
 impl TreeItem for FieldNode {
@@ -200,18 +201,9 @@ impl TreeItem for FieldNode {
 
         let field_name_style = Style::default().fg(field_name_color);
 
-        // Extract field name from logical_name (which may be a path)
-        // For Forms/Views tabs: paths like "formtype/Main/form/Information/tab/General/section/Details/cr6ab_name"
-        // extract just the last component
-        // For Fields tab: always use logical_name (technical name), not display_name
-        let field_name = self.metadata.logical_name
-            .split('/')
-            .last()
-            .unwrap_or(&self.metadata.logical_name)
-            .to_string();
-
+        // Use the pre-computed display name (which can be either technical/logical or user-friendly)
         spans.push(Span::styled(
-            field_name,
+            self.display_name.clone(),
             field_name_style,
         ));
 

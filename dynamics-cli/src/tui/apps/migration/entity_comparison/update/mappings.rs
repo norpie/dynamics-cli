@@ -128,3 +128,8 @@ pub fn handle_toggle_sort_mode(state: &mut State) -> Command<Msg> {
     state.sort_mode = state.sort_mode.toggle();
     Command::None
 }
+
+pub fn handle_toggle_technical_names(state: &mut State) -> Command<Msg> {
+    state.show_technical_names = !state.show_technical_names;
+    Command::None
+}

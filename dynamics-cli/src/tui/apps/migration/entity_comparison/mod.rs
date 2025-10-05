@@ -29,6 +29,7 @@ pub enum Msg {
     DeleteManualMapping,  // Delete mapping from selected field
     ToggleHideMatched,    // Toggle showing/hiding matched items in trees
     ToggleSortMode,       // Toggle between Alphabetical and MatchesFirst sorting
+    ToggleTechnicalNames, // Toggle between technical (logical) and display names
     MappingsLoaded(std::collections::HashMap<String, String>, std::collections::HashMap<String, String>, Vec<ExamplePair>), // field_mappings, prefix_mappings, example_pairs
 
     // Examples modal messages

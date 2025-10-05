@@ -45,6 +45,7 @@ pub struct State {
     pub(super) prefix_mappings: HashMap<String, String>, // source_prefix -> target_prefix
     pub(super) hide_matched: bool,
     pub(super) sort_mode: super::models::SortMode,
+    pub(super) show_technical_names: bool, // true = logical names, false = display names
 
     // Computed matches (cached)
     pub(super) field_matches: HashMap<String, MatchInfo>,        // source_field -> match_info
@@ -147,6 +148,7 @@ impl App for EntityComparisonApp {
             prefix_mappings: HashMap::new(),
             hide_matched: false,
             sort_mode: super::models::SortMode::default(),
+            show_technical_names: true, // Default to showing logical/technical names
             field_matches: HashMap::new(),
             relationship_matches: HashMap::new(),
             entity_matches: HashMap::new(),
@@ -256,6 +258,10 @@ impl App for EntityComparisonApp {
             Subscription::keyboard(KeyCode::Char('s'), "Toggle sort mode", Msg::ToggleSortMode),
             Subscription::keyboard(KeyCode::Char('S'), "Toggle sort mode", Msg::ToggleSortMode),
 
+            // Technical/display name toggle
+            Subscription::keyboard(KeyCode::Char('t'), "Toggle technical names", Msg::ToggleTechnicalNames),
+            Subscription::keyboard(KeyCode::Char('T'), "Toggle technical names", Msg::ToggleTechnicalNames),
+
             // Examples management
             Subscription::keyboard(KeyCode::Char('e'), "Cycle example pairs", Msg::CycleExamplePair),
             Subscription::keyboard(KeyCode::Char('x'), "Open examples modal", Msg::OpenExamplesModal),
@@ -336,6 +342,13 @@ impl App for EntityComparisonApp {
         spans.push(Span::styled(" | ", Style::default().fg(theme.overlay1)));
         spans.push(Span::styled(
             format!("Sort: {}", state.sort_mode.label()),
+            Style::default().fg(theme.subtext1),
+        ));
+
+        // Technical/display names indicator
+        spans.push(Span::styled(" | ", Style::default().fg(theme.overlay1)));
+        spans.push(Span::styled(
+            if state.show_technical_names { "Names: Technical" } else { "Names: Display" },
             Style::default().fg(theme.subtext1),
         ));
 

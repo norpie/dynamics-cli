@@ -18,13 +18,14 @@ pub fn build_tree_items(
     examples: &super::models::ExamplesState,
     is_source: bool,
     entity_name: &str,
+    show_technical_names: bool,
     sort_mode: super::models::SortMode,
 ) -> Vec<ComparisonTreeItem> {
     match active_tab {
-        ActiveTab::Fields => build_fields_tree(&metadata.fields, field_matches, examples, is_source, entity_name, sort_mode),
+        ActiveTab::Fields => build_fields_tree(&metadata.fields, field_matches, examples, is_source, entity_name, show_technical_names, sort_mode),
         ActiveTab::Relationships => build_relationships_tree(&metadata.relationships, relationship_matches, sort_mode),
-        ActiveTab::Views => build_views_tree(&metadata.views, field_matches, &metadata.fields, examples, is_source, entity_name),
-        ActiveTab::Forms => build_forms_tree(&metadata.forms, field_matches, &metadata.fields, examples, is_source, entity_name),
+        ActiveTab::Views => build_views_tree(&metadata.views, field_matches, &metadata.fields, examples, is_source, entity_name, show_technical_names),
+        ActiveTab::Forms => build_forms_tree(&metadata.forms, field_matches, &metadata.fields, examples, is_source, entity_name, show_technical_names),
         ActiveTab::Entities => build_entities_tree(entities, entity_matches, sort_mode),
     }
 }
@@ -37,15 +38,26 @@ fn build_fields_tree(
     examples: &super::models::ExamplesState,
     is_source: bool,
     entity_name: &str,
+    show_technical_names: bool,
     sort_mode: super::models::SortMode,
 ) -> Vec<ComparisonTreeItem> {
     let mut items: Vec<ComparisonTreeItem> = fields
         .iter()
-        .map(|f| ComparisonTreeItem::Field(FieldNode {
-            metadata: f.clone(),
-            match_info: field_matches.get(&f.logical_name).cloned(),
-            example_value: examples.get_field_value(&f.logical_name, is_source, entity_name),
-        }))
+        .map(|f| {
+            // Compute display name: technical (logical) or friendly (display_name)
+            let display_name = if show_technical_names {
+                f.logical_name.clone()
+            } else {
+                f.display_name.clone().unwrap_or_else(|| f.logical_name.clone())
+            };
+
+            ComparisonTreeItem::Field(FieldNode {
+                metadata: f.clone(),
+                match_info: field_matches.get(&f.logical_name).cloned(),
+                example_value: examples.get_field_value(&f.logical_name, is_source, entity_name),
+                display_name,
+            })
+        })
         .collect();
 
     sort_items(&mut items, sort_mode);
@@ -80,6 +92,7 @@ fn build_views_tree(
     examples: &super::models::ExamplesState,
     is_source: bool,
     entity_name: &str,
+    show_technical_names: bool,
 ) -> Vec<ComparisonTreeItem> {
     // Group views by type
     let mut grouped: HashMap<String, Vec<&crate::api::metadata::ViewMetadata>> = HashMap::new();
@@ -138,10 +151,21 @@ fn build_views_tree(
                         }
                     };
 
+                    // Compute display name for the field
+                    let display_name = if show_technical_names {
+                        // For views: extract just the field name from the path
+                        column_path.split('/').last().unwrap_or(&column_path).to_string()
+                    } else {
+                        field_metadata.display_name.clone().unwrap_or_else(|| {
+                            column_path.split('/').last().unwrap_or(&column_path).to_string()
+                        })
+                    };
+
                     ComparisonTreeItem::Field(FieldNode {
                         metadata: field_metadata,
                         match_info: field_matches.get(&column_path).cloned(),
                         example_value: examples.get_field_value(&column_path, is_source, entity_name),
+                        display_name,
                     })
                 })
                 .collect();
@@ -181,6 +205,7 @@ fn build_forms_tree(
     examples: &super::models::ExamplesState,
     is_source: bool,
     entity_name: &str,
+    show_technical_names: bool,
 ) -> Vec<ComparisonTreeItem> {
     // Group forms by type
     let mut grouped: HashMap<String, Vec<&crate::api::metadata::FormMetadata>> = HashMap::new();
@@ -262,10 +287,21 @@ fn build_forms_tree(
                                     }
                                 };
 
+                                // Compute display name for the field
+                                let display_name = if show_technical_names {
+                                    // For forms: extract just the field name from the path
+                                    field_path.split('/').last().unwrap_or(&field_path).to_string()
+                                } else {
+                                    field_metadata.display_name.clone().unwrap_or_else(|| {
+                                        field_path.split('/').last().unwrap_or(&field_path).to_string()
+                                    })
+                                };
+
                                 ComparisonTreeItem::Field(FieldNode {
                                     metadata: field_metadata,
                                     match_info: field_matches.get(&field_path).cloned(),
                                     example_value: examples.get_field_value(&field_path, is_source, entity_name),
+                                    display_name,
                                 })
                             })
                             .collect();

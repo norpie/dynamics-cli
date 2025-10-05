@@ -32,6 +32,7 @@ pub fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         Msg::DeleteManualMapping => mappings::handle_delete_manual_mapping(state),
         Msg::ToggleHideMatched => mappings::handle_toggle_hide_matched(state),
         Msg::ToggleSortMode => mappings::handle_toggle_sort_mode(state),
+        Msg::ToggleTechnicalNames => mappings::handle_toggle_technical_names(state),
 
         // Examples
         Msg::OpenExamplesModal => examples::handle_open_modal(state),

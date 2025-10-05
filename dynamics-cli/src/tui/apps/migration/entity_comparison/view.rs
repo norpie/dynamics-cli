@@ -34,6 +34,7 @@ pub fn render_main_layout(state: &mut State, theme: &Theme) -> Element<Msg> {
             &state.examples,
             true, // is_source
             &state.source_entity,
+            state.show_technical_names,
             sort_mode,
         )
     } else {
@@ -87,6 +88,7 @@ pub fn render_main_layout(state: &mut State, theme: &Theme) -> Element<Msg> {
             &state.examples,
             false, // is_source
             &state.target_entity,
+            state.show_technical_names,
             sort_mode,
         )
     } else {
