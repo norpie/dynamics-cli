@@ -385,7 +385,8 @@ impl<A: App> Runtime<A> {
         for sub in subscriptions {
             match sub {
                 Subscription::Keyboard { key, msg, description } => {
-                    log::debug!("  Registering keyboard subscription: {:?} -> {}", key, description);
+                    log::debug!("  Registering keyboard subscription: code={:?}, modifiers={:?} -> {}",
+                                key.code, key.modifiers, description);
                     // description is used for help menus, not for runtime lookup
                     self.key_subscriptions.insert(key, msg);
                 }
@@ -454,6 +455,17 @@ impl<A: App> Runtime<A> {
 
         // No focused element handled it (or it returned PassThrough), check global subscriptions
         let binding = KeyBinding::with_modifiers(key_event.code, key_event.modifiers);
+        log::debug!("🔍 Key event received: code={:?}, modifiers={:?}, created binding={:?}",
+                    key_event.code, key_event.modifiers, binding);
+        log::debug!("🔍 Registered subscriptions count: {}", self.key_subscriptions.len());
+
+        // Debug: show some registered keys for comparison
+        if self.key_subscriptions.len() < 20 {
+            for (kb, _) in self.key_subscriptions.iter() {
+                log::debug!("  - Registered: code={:?}, modifiers={:?}", kb.code, kb.modifiers);
+            }
+        }
+
         if let Some(msg) = self.key_subscriptions.get(&binding).cloned() {
             log::debug!("✓ Runtime - global subscription matched key {:?}", binding);
             let command = A::update(&mut self.state, msg);

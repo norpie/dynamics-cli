@@ -109,13 +109,15 @@ impl std::fmt::Display for KeyBinding {
 }
 
 /// Convert KeyCode to KeyBinding for backward compatibility
-/// Automatically converts uppercase letters to lowercase + SHIFT modifier
+/// Automatically adds SHIFT modifier to uppercase letters
+/// because crossterm sends uppercase letters WITH the SHIFT modifier set
 impl From<KeyCode> for KeyBinding {
     fn from(code: KeyCode) -> Self {
         match code {
-            // Convert uppercase letters to lowercase + SHIFT
+            // Add SHIFT modifier to uppercase letters (keep them uppercase)
+            // This is necessary because crossterm sends Char('M') WITH SHIFT modifier
             KeyCode::Char(c) if c.is_ascii_uppercase() => {
-                Self::shift(KeyCode::Char(c.to_ascii_lowercase()))
+                Self::shift(KeyCode::Char(c))
             }
             // Everything else: no modifiers
             _ => Self::new(code),
