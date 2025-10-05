@@ -4,6 +4,73 @@ use super::models::{MatchInfo, MatchType};
 use crate::api::metadata::{FieldMetadata, RelationshipMetadata};
 use std::collections::HashMap;
 
+/// Compute entity matches between source and target
+/// Returns map of source_entity_name -> MatchInfo
+/// Uses identical logic to field matching: manual → exact → prefix
+pub fn compute_entity_matches(
+    source_entities: &[(String, usize)],
+    target_entities: &[(String, usize)],
+    manual_mappings: &HashMap<String, String>,
+    prefix_mappings: &HashMap<String, String>,
+) -> HashMap<String, MatchInfo> {
+    let mut matches = HashMap::new();
+
+    // Build target entity lookup
+    let target_lookup: HashMap<String, ()> = target_entities
+        .iter()
+        .map(|(name, _count)| (name.clone(), ()))
+        .collect();
+
+    for (source_name, _count) in source_entities {
+        // 1. Check manual mappings first (highest priority)
+        if let Some(target_name) = manual_mappings.get(source_name) {
+            if target_lookup.contains_key(target_name) {
+                matches.insert(
+                    source_name.clone(),
+                    MatchInfo {
+                        target_field: target_name.clone(),
+                        match_type: MatchType::Manual,
+                        confidence: 1.0,
+                    },
+                );
+                continue;
+            }
+        }
+
+        // 2. Check exact name match
+        if target_lookup.contains_key(source_name) {
+            matches.insert(
+                source_name.clone(),
+                MatchInfo {
+                    target_field: source_name.clone(),
+                    match_type: MatchType::Exact,
+                    confidence: 1.0,
+                },
+            );
+            continue;
+        }
+
+        // 3. Check prefix-transformed matches
+        if let Some(transformed) = apply_prefix_transform(source_name, prefix_mappings) {
+            if target_lookup.contains_key(&transformed) {
+                matches.insert(
+                    source_name.clone(),
+                    MatchInfo {
+                        target_field: transformed,
+                        match_type: MatchType::Prefix,
+                        confidence: 0.9,
+                    },
+                );
+                continue;
+            }
+        }
+
+        // No match found - don't insert anything
+    }
+
+    matches
+}
+
 /// Compute field matches between source and target
 /// Returns map of source_field_name -> MatchInfo
 pub fn compute_field_matches(
@@ -82,13 +149,29 @@ pub fn compute_field_matches(
     matches
 }
 
+/// Check if two entity names match, considering entity mappings
+fn entities_match(
+    source_entity: &str,
+    target_entity: &str,
+    entity_matches: &HashMap<String, MatchInfo>,
+) -> bool {
+    // Check if source entity has a match that points to target
+    if let Some(match_info) = entity_matches.get(source_entity) {
+        return &match_info.target_field == target_entity;
+    }
+    // Fallback to exact match
+    source_entity == target_entity
+}
+
 /// Compute relationship matches between source and target
 /// Returns map of source_relationship_name -> MatchInfo
+/// Now entity-aware: uses entity_matches to resolve entity type mappings
 pub fn compute_relationship_matches(
     source_relationships: &[RelationshipMetadata],
     target_relationships: &[RelationshipMetadata],
     manual_mappings: &HashMap<String, String>,
     prefix_mappings: &HashMap<String, String>,
+    entity_matches: &HashMap<String, MatchInfo>,
 ) -> HashMap<String, MatchInfo> {
     let mut matches = HashMap::new();
 
@@ -118,9 +201,9 @@ pub fn compute_relationship_matches(
 
         // 2. Check exact name match
         if let Some(target_rel) = target_lookup.get(source_name) {
-            // Compare relationship type and related entity
+            // Compare relationship type and related entity (entity-aware)
             let types_match = source_rel.relationship_type == target_rel.relationship_type
-                && source_rel.related_entity == target_rel.related_entity;
+                && entities_match(&source_rel.related_entity, &target_rel.related_entity, entity_matches);
             matches.insert(
                 source_name.clone(),
                 MatchInfo {
@@ -139,9 +222,9 @@ pub fn compute_relationship_matches(
         // 3. Check prefix-transformed matches
         if let Some(transformed) = apply_prefix_transform(source_name, prefix_mappings) {
             if let Some(target_rel) = target_lookup.get(&transformed) {
-                // Compare relationship type and related entity
+                // Compare relationship type and related entity (entity-aware)
                 let types_match = source_rel.relationship_type == target_rel.relationship_type
-                    && source_rel.related_entity == target_rel.related_entity;
+                    && entities_match(&source_rel.related_entity, &target_rel.related_entity, entity_matches);
                 matches.insert(
                     source_name.clone(),
                     MatchInfo {

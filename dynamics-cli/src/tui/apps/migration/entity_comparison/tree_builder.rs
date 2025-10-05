@@ -2,7 +2,7 @@
 
 use crate::api::EntityMetadata;
 use crate::api::metadata::FieldType;
-use super::tree_items::{ComparisonTreeItem, FieldNode, RelationshipNode, ViewNode, FormNode, ContainerNode, ContainerMatchType};
+use super::tree_items::{ComparisonTreeItem, FieldNode, RelationshipNode, ViewNode, FormNode, ContainerNode, ContainerMatchType, EntityNode};
 use super::ActiveTab;
 use super::models::MatchInfo;
 use std::collections::HashMap;
@@ -13,12 +13,15 @@ pub fn build_tree_items(
     active_tab: ActiveTab,
     field_matches: &HashMap<String, MatchInfo>,
     relationship_matches: &HashMap<String, MatchInfo>,
+    entity_matches: &HashMap<String, MatchInfo>,
+    entities: &[(String, usize)],
 ) -> Vec<ComparisonTreeItem> {
     match active_tab {
         ActiveTab::Fields => build_fields_tree(&metadata.fields, field_matches),
         ActiveTab::Relationships => build_relationships_tree(&metadata.relationships, relationship_matches),
         ActiveTab::Views => build_views_tree(&metadata.views, field_matches),
         ActiveTab::Forms => build_forms_tree(&metadata.forms, field_matches),
+        ActiveTab::Entities => build_entities_tree(entities, entity_matches),
     }
 }
 
@@ -337,4 +340,19 @@ fn compute_container_match_type(
     } else {
         (ContainerMatchType::Mixed, match_info)  // Container matched but some/all children didn't
     }
+}
+
+/// Build tree items for the Entities tab
+fn build_entities_tree(
+    entities: &[(String, usize)],
+    entity_matches: &HashMap<String, MatchInfo>,
+) -> Vec<ComparisonTreeItem> {
+    entities
+        .iter()
+        .map(|(name, usage_count)| ComparisonTreeItem::Entity(EntityNode {
+            name: name.clone(),
+            match_info: entity_matches.get(name).cloned(),
+            usage_count: *usage_count,
+        }))
+        .collect()
 }

@@ -13,6 +13,7 @@ pub enum ComparisonTreeItem {
     Relationship(RelationshipNode),
     View(ViewNode),
     Form(FormNode),
+    Entity(EntityNode),
 }
 
 impl TreeItem for ComparisonTreeItem {
@@ -25,6 +26,7 @@ impl TreeItem for ComparisonTreeItem {
             Self::Relationship(node) => node.id(),
             Self::View(node) => node.id(),
             Self::Form(node) => node.id(),
+            Self::Entity(node) => node.id(),
         }
     }
 
@@ -35,6 +37,7 @@ impl TreeItem for ComparisonTreeItem {
             Self::Relationship(node) => node.has_children(),
             Self::View(node) => node.has_children(),
             Self::Form(node) => node.has_children(),
+            Self::Entity(node) => node.has_children(),
         }
     }
 
@@ -45,6 +48,7 @@ impl TreeItem for ComparisonTreeItem {
             Self::Relationship(node) => node.children().into_iter().map(Self::Relationship).collect(),
             Self::View(node) => node.children().into_iter().map(Self::View).collect(),
             Self::Form(node) => node.children().into_iter().map(Self::Form).collect(),
+            Self::Entity(node) => node.children().into_iter().map(Self::Entity).collect(),
         }
     }
 
@@ -112,6 +116,7 @@ impl TreeItem for ComparisonTreeItem {
             Self::Relationship(node) => node.to_element(theme, depth, is_selected, is_expanded),
             Self::View(node) => node.to_element(theme, depth, is_selected, is_expanded),
             Self::Form(node) => node.to_element(theme, depth, is_selected, is_expanded),
+            Self::Entity(node) => node.to_element(theme, depth, is_selected, is_expanded),
         }
     }
 }
@@ -456,6 +461,96 @@ impl TreeItem for FormNode {
                 Style::default().fg(theme.text)
             },
         )));
+
+        if is_selected {
+            builder = builder.background(Style::default().bg(theme.surface0));
+        }
+
+        builder.build()
+    }
+}
+
+/// Entity node in the tree (for entity type mapping)
+#[derive(Clone)]
+pub struct EntityNode {
+    pub name: String,
+    pub match_info: Option<MatchInfo>,
+    pub usage_count: usize,
+}
+
+impl TreeItem for EntityNode {
+    type Msg = super::Msg;
+
+    fn id(&self) -> String {
+        format!("entity_{}", self.name)
+    }
+
+    fn has_children(&self) -> bool {
+        false
+    }
+
+    fn children(&self) -> Vec<Self> {
+        vec![]
+    }
+
+    fn to_element(
+        &self,
+        theme: &Theme,
+        depth: usize,
+        is_selected: bool,
+        _is_expanded: bool,
+    ) -> Element<Self::Msg> {
+        let indent = "  ".repeat(depth);
+        let mut spans = Vec::new();
+
+        // Indent
+        if depth > 0 {
+            spans.push(Span::styled(indent, Style::default()));
+        }
+
+        // Entity name - colored by match state (keep color even when selected)
+        let entity_name_color = if let Some(match_info) = &self.match_info {
+            match match_info.match_type {
+                MatchType::Exact => theme.green,        // Exact name match
+                MatchType::Prefix => theme.green,       // Prefix name match
+                MatchType::Manual => theme.green,       // User override
+                MatchType::TypeMismatch => theme.yellow, // Should not happen for entities
+            }
+        } else {
+            theme.red  // No match
+        };
+
+        let entity_name_style = Style::default().fg(entity_name_color);
+
+        spans.push(Span::styled(
+            self.name.clone(),
+            entity_name_style,
+        ));
+
+        // Usage count
+        spans.push(Span::styled(
+            format!(" ({} uses)", self.usage_count),
+            Style::default().fg(theme.overlay1),
+        ));
+
+        // Mapping arrow and target entity (if mapped)
+        if let Some(match_info) = &self.match_info {
+            spans.push(Span::styled(" → ", Style::default().fg(theme.overlay1)));
+            spans.push(Span::styled(
+                match_info.target_field.clone(),
+                Style::default().fg(theme.blue),
+            ));
+        }
+
+        // Mapping source badge (if mapped)
+        if let Some(match_info) = &self.match_info {
+            spans.push(Span::styled(
+                format!(" {}", match_info.match_type.label()),
+                Style::default().fg(theme.overlay1),
+            ));
+        }
+
+        let mut builder = Element::styled_text(Line::from(spans));
 
         if is_selected {
             builder = builder.background(Style::default().bg(theme.surface0));

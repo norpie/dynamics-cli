@@ -11,6 +11,7 @@ pub enum ActiveTab {
     Relationships,
     Views,
     Forms,
+    Entities,
 }
 
 impl ActiveTab {
@@ -21,6 +22,7 @@ impl ActiveTab {
             ActiveTab::Relationships => "Relationships",
             ActiveTab::Views => "Views",
             ActiveTab::Forms => "Forms",
+            ActiveTab::Entities => "Entities",
         }
     }
 
@@ -31,6 +33,7 @@ impl ActiveTab {
             ActiveTab::Relationships => 2,
             ActiveTab::Views => 3,
             ActiveTab::Forms => 4,
+            ActiveTab::Entities => 5,
         }
     }
 
@@ -41,6 +44,7 @@ impl ActiveTab {
             2 => Some(ActiveTab::Relationships),
             3 => Some(ActiveTab::Views),
             4 => Some(ActiveTab::Forms),
+            5 => Some(ActiveTab::Entities),
             _ => None,
         }
     }

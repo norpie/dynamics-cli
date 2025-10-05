@@ -22,20 +22,22 @@
 - [x] Create entity comparison app module structure
 - [x] Set up API metadata models (FieldMetadata, EntityMetadata, etc.)
 - [x] Set up app state models (Side, ActiveTab, ExamplesState, MatchInfo, etc.)
-- [x] Create TreeItem implementations (FieldNode, RelationshipNode, ViewNode, FormNode, ContainerNode)
-- [x] Implement tab system (Fields, Relationships, Views, Forms)
-- [x] Add tab switching with 1-4 keyboard shortcuts
+- [x] Create TreeItem implementations (FieldNode, RelationshipNode, ViewNode, FormNode, ContainerNode, EntityNode)
+- [x] Implement tab system (Fields, Relationships, Views, Forms, Entities)
+- [x] Add tab switching with 1-5 keyboard shortcuts
 - [x] Create tab indicator in status bar
 - [x] Add separator between title and status in header
+- [x] Add Entities tab (tab 5) for entity type mapping
 
 ## Matching System
 - [x] Basic field matching (exact name, prefix transformation)
-- [x] Relationship matching
+- [x] Relationship matching (entity-aware)
+- [x] Entity matching (exact name, prefix transformation, manual)
 - [x] Hierarchical path-based matching for Forms/Views tabs
 - [x] Container matching with aggregated status (FullMatch, Mixed, NoMatch)
 - [x] Field matching within containers using normal logic (exact, prefix)
-- [x] Manual mapping support for fields, relationships, and containers
-- [x] Database persistence for manual mappings (SQLite)
+- [x] Manual mapping support for fields, relationships, entities, and containers
+- [x] Database persistence for manual mappings (SQLite, reuses field_mappings table)
 - [x] Load saved mappings on app init
 - [x] Type mismatch detection (yellow color)
 - [x] Reverse match mapping for target tree
@@ -53,6 +55,17 @@
 - [x] Infer relationship cardinality from XML Type attribute (Collection = 1:N)
 - [x] Display relationship type alongside entity name (e.g., `<systemuser N:1>` or `<1:N>`)
 - [ ] Show formatted display names in examples for lookup fields
+
+## Entities Tab Implementation (Completed)
+- [x] Update ActiveTab enum with Entities variant (models.rs)
+- [x] Create EntityNode TreeItem implementation (tree_items.rs)
+- [x] Add entity extraction function (fetch.rs)
+- [x] Implement entity matching logic (matching.rs)
+- [x] Update relationship matching to be entity-aware (matching.rs)
+- [x] Create entities tree builder (tree_builder.rs)
+- [x] Update State with entities trees and matches (app.rs)
+- [x] Add tab 5 keyboard shortcut (app.rs - works automatically via from_number)
+- [x] Integrate entity matching into recompute flow (app.rs)
 
 ## Features to Implement in Tree Component Context
 

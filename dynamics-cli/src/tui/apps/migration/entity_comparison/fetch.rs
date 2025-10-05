@@ -81,6 +81,28 @@ pub async fn fetch_with_cache(
     }
 }
 
+/// Extract unique entity types from relationships with usage counts
+/// Returns list of (entity_name, usage_count) tuples, sorted by name
+pub fn extract_entities(relationships: &[crate::api::metadata::RelationshipMetadata]) -> Vec<(String, usize)> {
+    use std::collections::HashMap;
+
+    let mut entity_counts: HashMap<String, usize> = HashMap::new();
+
+    for rel in relationships {
+        // Skip unknown/empty entity names
+        if rel.related_entity.is_empty() || rel.related_entity == "unknown" {
+            continue;
+        }
+
+        *entity_counts.entry(rel.related_entity.clone()).or_insert(0) += 1;
+    }
+
+    let mut entities: Vec<(String, usize)> = entity_counts.into_iter().collect();
+    entities.sort_by(|a, b| a.0.cmp(&b.0));
+
+    entities
+}
+
 /// Extract relationships from field list
 /// Includes all Lookup fields and NavigationProperties (collection relationships)
 pub fn extract_relationships(fields: &[crate::api::metadata::FieldMetadata]) -> Vec<crate::api::metadata::RelationshipMetadata> {

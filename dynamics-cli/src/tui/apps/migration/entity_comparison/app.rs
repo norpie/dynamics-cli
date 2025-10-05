@@ -19,9 +19,9 @@ use ratatui::{
 };
 use std::collections::HashMap;
 use crate::{col, row, use_constraints};
-use super::{Msg, Side, ExamplesState, ActiveTab, FetchType, fetch_with_cache, extract_relationships};
+use super::{Msg, Side, ExamplesState, ActiveTab, FetchType, fetch_with_cache, extract_relationships, extract_entities};
 use super::tree_builder::build_tree_items;
-use super::matching::{compute_field_matches, compute_relationship_matches, compute_hierarchical_field_matches};
+use super::matching::{compute_field_matches, compute_relationship_matches, compute_hierarchical_field_matches, compute_entity_matches};
 use super::models::MatchInfo;
 
 pub struct EntityComparisonApp;
@@ -50,16 +50,23 @@ pub struct State {
     // Computed matches (cached)
     field_matches: HashMap<String, MatchInfo>,        // source_field -> match_info
     relationship_matches: HashMap<String, MatchInfo>, // source_relationship -> match_info
+    entity_matches: HashMap<String, MatchInfo>,       // source_entity -> match_info
+
+    // Entity lists (extracted from relationships)
+    source_entities: Vec<(String, usize)>,  // (entity_name, usage_count)
+    target_entities: Vec<(String, usize)>,
 
     // Tree UI state - one tree state per tab per side
     source_fields_tree: TreeState,
     source_relationships_tree: TreeState,
     source_views_tree: TreeState,
     source_forms_tree: TreeState,
+    source_entities_tree: TreeState,
     target_fields_tree: TreeState,
     target_relationships_tree: TreeState,
     target_views_tree: TreeState,
     target_forms_tree: TreeState,
+    target_entities_tree: TreeState,
     focused_side: Side,
 
     // Examples
@@ -99,6 +106,7 @@ impl State {
             ActiveTab::Relationships => &mut self.source_relationships_tree,
             ActiveTab::Views => &mut self.source_views_tree,
             ActiveTab::Forms => &mut self.source_forms_tree,
+            ActiveTab::Entities => &mut self.source_entities_tree,
         }
     }
 
@@ -109,6 +117,7 @@ impl State {
             ActiveTab::Relationships => &mut self.target_relationships_tree,
             ActiveTab::Views => &mut self.target_views_tree,
             ActiveTab::Forms => &mut self.target_forms_tree,
+            ActiveTab::Entities => &mut self.target_entities_tree,
         }
     }
 }
@@ -133,14 +142,19 @@ impl App for EntityComparisonApp {
             hide_matched: false,
             field_matches: HashMap::new(),
             relationship_matches: HashMap::new(),
+            entity_matches: HashMap::new(),
+            source_entities: Vec::new(),
+            target_entities: Vec::new(),
             source_fields_tree: TreeState::with_selection(),
             source_relationships_tree: TreeState::with_selection(),
             source_views_tree: TreeState::with_selection(),
             source_forms_tree: TreeState::with_selection(),
+            source_entities_tree: TreeState::with_selection(),
             target_fields_tree: TreeState::with_selection(),
             target_relationships_tree: TreeState::with_selection(),
             target_views_tree: TreeState::with_selection(),
             target_forms_tree: TreeState::with_selection(),
+            target_entities_tree: TreeState::with_selection(),
             focused_side: Side::Source,
             examples: ExamplesState::new(),
             show_back_confirmation: false,
@@ -377,11 +391,25 @@ impl App for EntityComparisonApp {
 
                                 state.field_matches = all_field_matches;
 
+                                // Extract entities from relationships
+                                state.source_entities = extract_entities(&source.relationships);
+                                state.target_entities = extract_entities(&target.relationships);
+
+                                // Compute entity matches (uses same mappings as fields)
+                                state.entity_matches = compute_entity_matches(
+                                    &state.source_entities,
+                                    &state.target_entities,
+                                    &state.field_mappings,  // Reuse field mappings for entities
+                                    &state.prefix_mappings,
+                                );
+
+                                // Relationship matching (now entity-aware)
                                 state.relationship_matches = compute_relationship_matches(
                                     &source.relationships,
                                     &target.relationships,
                                     &state.field_mappings, // Reuse field mappings for relationships
                                     &state.prefix_mappings,
+                                    &state.entity_matches,  // Pass entity matches for entity-aware matching
                                 );
 
                                 // Cache both metadata objects asynchronously
@@ -435,6 +463,7 @@ impl App for EntityComparisonApp {
                     ActiveTab::Relationships => &mut state.source_relationships_tree,
                     ActiveTab::Views => &mut state.source_views_tree,
                     ActiveTab::Forms => &mut state.source_forms_tree,
+                    ActiveTab::Entities => &mut state.source_entities_tree,
                 };
                 tree_state.handle_event(event);
                 Command::None
@@ -446,6 +475,7 @@ impl App for EntityComparisonApp {
                     ActiveTab::Relationships => &mut state.target_relationships_tree,
                     ActiveTab::Views => &mut state.target_views_tree,
                     ActiveTab::Forms => &mut state.target_forms_tree,
+                    ActiveTab::Entities => &mut state.target_entities_tree,
                 };
                 tree_state.handle_event(event);
                 Command::None
@@ -457,6 +487,7 @@ impl App for EntityComparisonApp {
                     ActiveTab::Relationships => &mut state.source_relationships_tree,
                     ActiveTab::Views => &mut state.source_views_tree,
                     ActiveTab::Forms => &mut state.source_forms_tree,
+                    ActiveTab::Entities => &mut state.source_entities_tree,
                 };
                 tree_state.set_viewport_height(height);
                 Command::None
@@ -468,6 +499,7 @@ impl App for EntityComparisonApp {
                     ActiveTab::Relationships => &mut state.target_relationships_tree,
                     ActiveTab::Views => &mut state.target_views_tree,
                     ActiveTab::Forms => &mut state.target_forms_tree,
+                    ActiveTab::Entities => &mut state.target_entities_tree,
                 };
                 tree_state.set_viewport_height(height);
                 Command::None
@@ -565,6 +597,12 @@ impl App for EntityComparisonApp {
                             let target_name = target_id.strip_prefix("rel_").unwrap_or(&target_id).to_string();
                             (source_name, target_name)
                         }
+                        ActiveTab::Entities => {
+                            // Entities tab: IDs have "entity_" prefix
+                            let source_name = source_id.strip_prefix("entity_").unwrap_or(&source_id).to_string();
+                            let target_name = target_id.strip_prefix("entity_").unwrap_or(&target_id).to_string();
+                            (source_name, target_name)
+                        }
                         ActiveTab::Forms | ActiveTab::Views => {
                             // Forms/Views tabs: IDs are paths, support both fields and containers
                             (source_id.clone(), target_id.clone())
@@ -599,6 +637,9 @@ impl App for EntityComparisonApp {
                         ActiveTab::Fields => source_id.clone(),
                         ActiveTab::Relationships => {
                             source_id.strip_prefix("rel_").unwrap_or(&source_id).to_string()
+                        }
+                        ActiveTab::Entities => {
+                            source_id.strip_prefix("entity_").unwrap_or(&source_id).to_string()
                         }
                         ActiveTab::Forms | ActiveTab::Views => source_id.clone(),
                     };
@@ -659,6 +700,7 @@ impl App for EntityComparisonApp {
             Subscription::keyboard(KeyCode::Char('2'), "Switch to Relationships", Msg::SwitchTab(2)),
             Subscription::keyboard(KeyCode::Char('3'), "Switch to Views", Msg::SwitchTab(3)),
             Subscription::keyboard(KeyCode::Char('4'), "Switch to Forms", Msg::SwitchTab(4)),
+            Subscription::keyboard(KeyCode::Char('5'), "Switch to Entities", Msg::SwitchTab(5)),
 
             // Refresh metadata
             Subscription::keyboard(KeyCode::F(5), "Refresh metadata", Msg::Refresh),
@@ -691,6 +733,7 @@ impl App for EntityComparisonApp {
             ActiveTab::Relationships,
             ActiveTab::Views,
             ActiveTab::Forms,
+            ActiveTab::Entities,
         ];
 
         let mut spans = vec![];
@@ -724,7 +767,14 @@ fn render_main_layout(state: &mut State, theme: &Theme) -> Element<Msg> {
     // Build tree items for the active tab from metadata
     let active_tab = state.active_tab;
     let source_items = if let Resource::Success(ref metadata) = state.source_metadata {
-        build_tree_items(metadata, active_tab, &state.field_matches, &state.relationship_matches)
+        build_tree_items(
+            metadata,
+            active_tab,
+            &state.field_matches,
+            &state.relationship_matches,
+            &state.entity_matches,
+            &state.source_entities,
+        )
     } else {
         vec![]
     };
@@ -751,7 +801,24 @@ fn render_main_layout(state: &mut State, theme: &Theme) -> Element<Msg> {
             })
             .collect();
 
-        build_tree_items(metadata, active_tab, &reverse_field_matches, &reverse_relationship_matches)
+        let reverse_entity_matches: HashMap<String, MatchInfo> = state.entity_matches.iter()
+            .map(|(source_entity, match_info)| {
+                (match_info.target_field.clone(), MatchInfo {
+                    target_field: source_entity.clone(),  // Points back to source
+                    match_type: match_info.match_type,
+                    confidence: match_info.confidence,
+                })
+            })
+            .collect();
+
+        build_tree_items(
+            metadata,
+            active_tab,
+            &reverse_field_matches,
+            &reverse_relationship_matches,
+            &reverse_entity_matches,
+            &state.target_entities,
+        )
     } else {
         vec![]
     };
@@ -766,6 +833,7 @@ fn render_main_layout(state: &mut State, theme: &Theme) -> Element<Msg> {
         ActiveTab::Relationships => (&mut state.source_relationships_tree, &mut state.target_relationships_tree),
         ActiveTab::Views => (&mut state.source_views_tree, &mut state.target_views_tree),
         ActiveTab::Forms => (&mut state.source_forms_tree, &mut state.target_forms_tree),
+        ActiveTab::Entities => (&mut state.source_entities_tree, &mut state.target_entities_tree),
     };
 
     // Source panel with tree - renderer will call on_render with actual area.height
@@ -843,12 +911,25 @@ fn recompute_matches(state: &mut State) {
 
         state.field_matches = all_field_matches;
 
-        // Relationship matching (flat)
+        // Extract entities from relationships
+        state.source_entities = extract_entities(&source.relationships);
+        state.target_entities = extract_entities(&target.relationships);
+
+        // Compute entity matches (uses same mappings as fields)
+        state.entity_matches = compute_entity_matches(
+            &state.source_entities,
+            &state.target_entities,
+            &state.field_mappings,  // Reuse field mappings for entities
+            &state.prefix_mappings,
+        );
+
+        // Relationship matching (now entity-aware)
         state.relationship_matches = compute_relationship_matches(
             &source.relationships,
             &target.relationships,
             &state.field_mappings,
             &state.prefix_mappings,
+            &state.entity_matches,  // Pass entity matches for entity-aware matching
         );
     }
 }

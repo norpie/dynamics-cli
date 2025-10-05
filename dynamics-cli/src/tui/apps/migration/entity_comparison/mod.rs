@@ -7,7 +7,7 @@ mod matching;
 
 pub use app::{EntityComparisonApp, EntityComparisonParams, State as EntityComparisonState};
 pub use models::*;
-pub use fetch::{FetchType, fetch_with_cache, extract_relationships};
+pub use fetch::{FetchType, fetch_with_cache, extract_relationships, extract_entities};
 
 // Internal message type for the app
 #[derive(Clone)]
