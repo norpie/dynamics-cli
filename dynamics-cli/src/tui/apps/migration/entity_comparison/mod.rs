@@ -30,7 +30,7 @@ pub enum Msg {
     // Examples modal messages
     OpenExamplesModal,
     CloseExamplesModal,
-    ExamplesListEvent(crate::tui::widgets::ListEvent),
+    ExamplesListNavigate(crossterm::event::KeyCode),
     SourceInputEvent(crate::tui::widgets::TextInputEvent),
     TargetInputEvent(crate::tui::widgets::TextInputEvent),
     LabelInputEvent(crate::tui::widgets::TextInputEvent),

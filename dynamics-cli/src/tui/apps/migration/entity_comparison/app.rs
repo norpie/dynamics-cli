@@ -747,8 +747,8 @@ impl App for EntityComparisonApp {
                 state.show_examples_modal = false;
                 Command::None
             }
-            Msg::ExamplesListEvent(_event) => {
-                // TODO: Handle list navigation
+            Msg::ExamplesListNavigate(key) => {
+                state.examples_list_state.handle_key(key, state.examples.pairs.len(), 10);
                 Command::None
             }
             Msg::SourceInputEvent(event) => {
@@ -816,7 +816,7 @@ impl App for EntityComparisonApp {
                 Command::None
             }
             Msg::FetchExampleData => {
-                // Fetch data for selected pair
+                // Fetch data for selected pair with loading screen
                 if let Some(selected_idx) = state.examples_list_state.selected() {
                     if let Some(pair) = state.examples.pairs.get(selected_idx) {
                         let pair_id = pair.id.clone();
@@ -827,20 +827,29 @@ impl App for EntityComparisonApp {
                         let target_entity = state.target_entity.clone();
                         let target_record_id = pair.target_record_id.clone();
 
-                        return Command::perform(
-                            async move {
-                                let result = super::fetch_example_pair_data(
-                                    &source_env,
-                                    &source_entity,
-                                    &source_record_id,
-                                    &target_env,
-                                    &target_entity,
-                                    &target_record_id,
-                                ).await;
-                                (pair_id, result)
-                            },
-                            |(pair_id, result)| Msg::ExampleDataFetched(pair_id, result)
-                        );
+                        return Command::perform_parallel()
+                            .add_task(
+                                format!("Fetching example data for pair {}", pair.display_name()),
+                                async move {
+                                    super::fetch_example_pair_data(
+                                        &source_env,
+                                        &source_entity,
+                                        &source_record_id,
+                                        &target_env,
+                                        &target_entity,
+                                        &target_record_id,
+                                    ).await.map(|(source, target)| (pair_id, source, target))
+                                }
+                            )
+                            .with_title("Fetching Example Data")
+                            .on_complete(AppId::EntityComparison)
+                            .build(|_task_idx, result| {
+                                let data = result.downcast::<Result<(String, serde_json::Value, serde_json::Value), String>>().unwrap();
+                                match *data {
+                                    Ok((pair_id, source, target)) => Msg::ExampleDataFetched(pair_id, Ok((source, target))),
+                                    Err(e) => Msg::ExampleDataFetched(String::new(), Err(e)),
+                                }
+                            });
                     }
                 }
                 Command::None
@@ -864,27 +873,38 @@ impl App for EntityComparisonApp {
                 Command::None
             }
             Msg::CycleExamplePair => {
-                // Move to next pair or toggle off if at end
+                // Cycle through pairs, or toggle off if at end
                 if state.examples.pairs.is_empty() {
-                    state.examples.enabled = false;
+                    // No pairs, just toggle
+                    state.examples.enabled = !state.examples.enabled;
                     state.examples.active_pair_id = None;
+                } else if !state.examples.enabled {
+                    // Not enabled, enable and select first
+                    state.examples.enabled = true;
+                    state.examples.active_pair_id = state.examples.pairs.first().map(|p| p.id.clone());
                 } else if let Some(active_id) = &state.examples.active_pair_id {
                     // Find current pair index
                     let current_idx = state.examples.pairs.iter()
                         .position(|p| &p.id == active_id);
 
                     if let Some(idx) = current_idx {
-                        // Move to next, or wrap to first
-                        let next_idx = (idx + 1) % state.examples.pairs.len();
-                        state.examples.active_pair_id = Some(state.examples.pairs[next_idx].id.clone());
+                        // Move to next, or toggle off if at end
+                        let next_idx = idx + 1;
+                        if next_idx >= state.examples.pairs.len() {
+                            // At end, toggle off
+                            state.examples.enabled = false;
+                            state.examples.active_pair_id = None;
+                        } else {
+                            // Move to next
+                            state.examples.active_pair_id = Some(state.examples.pairs[next_idx].id.clone());
+                        }
                     } else {
                         // Active ID not found, select first
                         state.examples.active_pair_id = state.examples.pairs.first().map(|p| p.id.clone());
                     }
                 } else {
-                    // No active pair, select first
+                    // Enabled but no active pair, select first
                     state.examples.active_pair_id = state.examples.pairs.first().map(|p| p.id.clone());
-                    state.examples.enabled = true;
                 }
                 Command::None
             }
@@ -1160,6 +1180,7 @@ fn render_examples_modal(state: &State, theme: &Theme) -> Element<Msg> {
         .on_source_input_event(Msg::SourceInputEvent)
         .on_target_input_event(Msg::TargetInputEvent)
         .on_label_input_event(Msg::LabelInputEvent)
+        .on_list_navigate(Msg::ExamplesListNavigate)
         .on_add(Msg::AddExamplePair)
         .on_delete(Msg::DeleteExamplePair)
         .on_fetch(Msg::FetchExampleData)

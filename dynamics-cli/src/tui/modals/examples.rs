@@ -34,15 +34,15 @@ impl<Msg: Clone> ListItem for ExamplePairItem<Msg> {
             )
         };
 
-        let style = if is_selected {
-            Style::default().fg(theme.lavender).bold()
-        } else {
-            Style::default().fg(theme.text)
-        };
+        let mut builder = Element::styled_text(Line::from(vec![
+            Span::styled(display, Style::default().fg(theme.text))
+        ]));
 
-        Element::styled_text(Line::from(vec![
-            Span::styled(display, style)
-        ])).build()
+        if is_selected {
+            builder = builder.background(Style::default().bg(theme.surface0));
+        }
+
+        builder.build()
     }
 }
 
@@ -71,7 +71,7 @@ pub struct ExamplesModal<Msg> {
     on_source_input_event: Option<fn(crate::tui::widgets::TextInputEvent) -> Msg>,
     on_target_input_event: Option<fn(crate::tui::widgets::TextInputEvent) -> Msg>,
     on_label_input_event: Option<fn(crate::tui::widgets::TextInputEvent) -> Msg>,
-    on_list_event: Option<fn(crate::tui::widgets::ListEvent) -> Msg>,
+    on_list_navigate: Option<fn(crossterm::event::KeyCode) -> Msg>,
     on_add: Option<Msg>,
     on_delete: Option<Msg>,
     on_fetch: Option<Msg>,
@@ -92,7 +92,7 @@ impl<Msg: Clone> ExamplesModal<Msg> {
             on_source_input_event: None,
             on_target_input_event: None,
             on_label_input_event: None,
-            on_list_event: None,
+            on_list_navigate: None,
             on_add: None,
             on_delete: None,
             on_fetch: None,
@@ -150,9 +150,9 @@ impl<Msg: Clone> ExamplesModal<Msg> {
         self
     }
 
-    /// Set list event handler
-    pub fn on_list_event(mut self, handler: fn(crate::tui::widgets::ListEvent) -> Msg) -> Self {
-        self.on_list_event = Some(handler);
+    /// Set list navigation handler
+    pub fn on_list_navigate(mut self, handler: fn(crossterm::event::KeyCode) -> Msg) -> Self {
+        self.on_list_navigate = Some(handler);
         self
     }
 
@@ -231,12 +231,16 @@ impl<Msg: Clone> ExamplesModal<Msg> {
         .build();
 
         // Build list
+        let list_handler = self.on_list_navigate
+            .expect("ExamplesModal requires on_list_navigate");
         let pairs_list = Element::list(
             FocusId::new("examples-list"),
             &self.pairs,
             &self.list_state,
             theme,
-        ).build();
+        )
+        .on_navigate(list_handler)
+        .build();
 
         // Input panels
         let source_panel = Element::panel(source_input)
