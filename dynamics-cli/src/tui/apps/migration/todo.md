@@ -43,8 +43,15 @@
 
 ## Data Processing
 - [x] Filter out `_*_value` virtual lookup fields
+- [x] Filter out `Virtual` type fields (formatted display values like *name, *yominame)
 - [x] Consolidate lookup field metadata (detect lookups from _value pattern)
 - [x] Mark base fields as Lookup type when _*_value field exists
+- [x] Combined metadata fetch (XML + EntityDefinitions API) for complete field data
+- [x] Merge NavigationProperties with Lookup attributes to get related entity info
+- [x] Always show logical_name (technical name) in Fields tab, not display_name
+- [x] Show all relationships (ManyToOne, OneToMany, ManyToMany)
+- [x] Infer relationship cardinality from XML Type attribute (Collection = 1:N)
+- [x] Display relationship type alongside entity name (e.g., `<systemuser N:1>` or `<1:N>`)
 - [ ] Show formatted display names in examples for lookup fields
 
 ## Features to Implement in Tree Component Context

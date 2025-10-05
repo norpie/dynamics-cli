@@ -53,7 +53,7 @@ pub async fn fetch_with_cache(
 
     match fetch_type {
         FetchType::SourceFields => {
-            let mut fields = client.fetch_entity_fields(entity_name).await.map_err(|e| e.to_string())?;
+            let mut fields = client.fetch_entity_fields_combined(entity_name).await.map_err(|e| e.to_string())?;
             fields = process_lookup_fields(fields);
             Ok(FetchedData::SourceFields(fields))
         }
@@ -66,7 +66,7 @@ pub async fn fetch_with_cache(
             Ok(FetchedData::SourceViews(views))
         }
         FetchType::TargetFields => {
-            let mut fields = client.fetch_entity_fields(entity_name).await.map_err(|e| e.to_string())?;
+            let mut fields = client.fetch_entity_fields_combined(entity_name).await.map_err(|e| e.to_string())?;
             fields = process_lookup_fields(fields);
             Ok(FetchedData::TargetFields(fields))
         }
@@ -82,14 +82,34 @@ pub async fn fetch_with_cache(
 }
 
 /// Extract relationships from field list
+/// Includes all Lookup fields and NavigationProperties (collection relationships)
 pub fn extract_relationships(fields: &[crate::api::metadata::FieldMetadata]) -> Vec<crate::api::metadata::RelationshipMetadata> {
     fields.iter()
-        .filter(|f| matches!(f.field_type, crate::api::metadata::FieldType::Lookup))
-        .map(|f| crate::api::metadata::RelationshipMetadata {
-            name: f.logical_name.clone(),
-            relationship_type: crate::api::metadata::RelationshipType::ManyToOne,
-            related_entity: f.related_entity.clone().unwrap_or_default(),
-            related_attribute: f.logical_name.clone(),
+        .filter_map(|f| {
+            // Check for Lookup (ManyToOne) or Relationship:* (OneToMany/ManyToMany)
+            let relationship_type = match &f.field_type {
+                crate::api::metadata::FieldType::Lookup => {
+                    Some(crate::api::metadata::RelationshipType::ManyToOne)
+                }
+                crate::api::metadata::FieldType::Other(t) if t.starts_with("Relationship:") => {
+                    // Extract relationship type from "Relationship:OneToMany"
+                    if t.contains("OneToMany") {
+                        Some(crate::api::metadata::RelationshipType::OneToMany)
+                    } else if t.contains("ManyToMany") {
+                        Some(crate::api::metadata::RelationshipType::ManyToMany)
+                    } else {
+                        Some(crate::api::metadata::RelationshipType::ManyToOne)
+                    }
+                }
+                _ => None,
+            };
+
+            relationship_type.map(|rel_type| crate::api::metadata::RelationshipMetadata {
+                name: f.logical_name.clone(),
+                relationship_type: rel_type,
+                related_entity: f.related_entity.clone().unwrap_or_else(|| "unknown".to_string()),
+                related_attribute: f.logical_name.clone(),
+            })
         })
         .collect()
 }
@@ -121,6 +141,13 @@ fn process_lookup_fields(fields: Vec<crate::api::metadata::FieldMetadata>) -> Ve
             // Filter out _*_value fields
             if field.logical_name.starts_with('_') && field.logical_name.ends_with("_value") {
                 log::debug!("Filtering out virtual lookup value field: {}", field.logical_name);
+                return None;
+            }
+
+            // Filter out Virtual type fields (formatted display values)
+            // These include *name, *yominame suffixes for lookups and optionsets
+            if matches!(field.field_type, crate::api::metadata::FieldType::Other(ref t) if t == "Virtual") {
+                log::debug!("Filtering out virtual display field: {}", field.logical_name);
                 return None;
             }
 

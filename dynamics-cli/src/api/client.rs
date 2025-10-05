@@ -543,7 +543,7 @@ impl DynamicsClient {
             }
         }
 
-        // Parse NavigationProperty elements (relationships like _value fields)
+        // Parse NavigationProperty elements (relationships)
         for nav_prop in entity_type.children().filter(|n| n.has_tag_name("NavigationProperty")) {
             if let Some(field_name) = nav_prop.attribute("Name") {
                 let field_type_str = nav_prop.attribute("Type").unwrap_or("unknown");
@@ -556,11 +556,30 @@ impl DynamicsClient {
                     .or_else(|| field_type_str.strip_prefix("Microsoft.Dynamics.CRM."))
                     .map(|s| s.to_string());
 
-                // Navigation properties are lookups/relationships
+                // Determine relationship type from Type attribute format
+                // Collection(...) = OneToMany or ManyToMany
+                // Non-collection = ManyToOne (lookup)
+                let is_collection = field_type_str.starts_with("Collection(");
+
+                // Store relationship cardinality in a pseudo-field type
+                // We'll extract this later when building relationships
+                let relationship_cardinality = if is_collection {
+                    "OneToMany"  // Collection relationship
+                } else {
+                    "ManyToOne"  // Lookup relationship
+                };
+
+                // Use Other type to store cardinality for collection relationships
+                let field_type = if is_collection {
+                    super::metadata::FieldType::Other(format!("Relationship:{}", relationship_cardinality))
+                } else {
+                    super::metadata::FieldType::Lookup  // ManyToOne stays as Lookup
+                };
+
                 fields.push(super::metadata::FieldMetadata {
                     logical_name: field_name.to_string(),
                     display_name: None,
-                    field_type: super::metadata::FieldType::Lookup,
+                    field_type,
                     is_required: false,
                     is_primary_key: false,
                     max_length: None,
@@ -668,6 +687,53 @@ impl DynamicsClient {
             let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
             anyhow::bail!("Field metadata fetch failed with status {}: {}", status, error_text)
         }
+    }
+
+    /// Fetch entity fields by combining both metadata sources
+    /// - XML metadata: NavigationProperties (relationships)
+    /// - EntityDefinitions API: Attributes with proper lookup targets
+    pub async fn fetch_entity_fields_combined(&self, entity_name: &str) -> anyhow::Result<Vec<super::metadata::FieldMetadata>> {
+        use std::collections::HashMap;
+
+        // Fetch from both sources in parallel
+        let (xml_fields, api_fields) = tokio::try_join!(
+            self.fetch_entity_fields(entity_name),
+            self.fetch_entity_fields_alt(entity_name)
+        )?;
+
+        // Build lookup by logical_name from API fields (better metadata)
+        let api_lookup: HashMap<String, super::metadata::FieldMetadata> = api_fields
+            .into_iter()
+            .map(|f| (f.logical_name.clone(), f))
+            .collect();
+
+        // Start with XML fields, but upgrade any that have better data from API
+        let mut combined: HashMap<String, super::metadata::FieldMetadata> = HashMap::new();
+
+        for xml_field in xml_fields {
+            // If API has this field with better data, prefer it
+            if let Some(api_field) = api_lookup.get(&xml_field.logical_name) {
+                // Prefer API version if it has related_entity (lookup fields)
+                if api_field.related_entity.is_some() || api_field.display_name.is_some() {
+                    combined.insert(xml_field.logical_name.clone(), api_field.clone());
+                } else {
+                    combined.insert(xml_field.logical_name.clone(), xml_field);
+                }
+            } else {
+                // Only in XML (NavigationProperty)
+                combined.insert(xml_field.logical_name.clone(), xml_field);
+            }
+        }
+
+        // Add any API-only fields that weren't in XML
+        for (name, api_field) in api_lookup {
+            combined.entry(name).or_insert(api_field);
+        }
+
+        let mut result: Vec<_> = combined.into_values().collect();
+        result.sort_by(|a, b| a.logical_name.cmp(&b.logical_name));
+
+        Ok(result)
     }
 
     /// Fetch entity forms from systemforms endpoint

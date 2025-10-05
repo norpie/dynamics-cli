@@ -195,21 +195,18 @@ impl TreeItem for FieldNode {
 
         let field_name_style = Style::default().fg(field_name_color);
 
-        // Extract display name from logical_name (which may be a path)
-        let display_name = if let Some(display) = &self.metadata.display_name {
-            display.clone()
-        } else {
-            // For paths like "formtype/Main/form/Information/tab/General/section/Details/cr6ab_name",
-            // extract just the last component
-            self.metadata.logical_name
-                .split('/')
-                .last()
-                .unwrap_or(&self.metadata.logical_name)
-                .to_string()
-        };
+        // Extract field name from logical_name (which may be a path)
+        // For Forms/Views tabs: paths like "formtype/Main/form/Information/tab/General/section/Details/cr6ab_name"
+        // extract just the last component
+        // For Fields tab: always use logical_name (technical name), not display_name
+        let field_name = self.metadata.logical_name
+            .split('/')
+            .last()
+            .unwrap_or(&self.metadata.logical_name)
+            .to_string();
 
         spans.push(Span::styled(
-            display_name,
+            field_name,
             field_name_style,
         ));
 
@@ -331,9 +328,22 @@ impl TreeItem for RelationshipNode {
             ));
         }
 
-        // Related entity in angle brackets
+        // Related entity and relationship type in angle brackets
+        // Format: <entity [ManyToOne]> or <unknown [OneToMany]>
+        let rel_type_label = match self.metadata.relationship_type {
+            crate::api::metadata::RelationshipType::ManyToOne => "N:1",
+            crate::api::metadata::RelationshipType::OneToMany => "1:N",
+            crate::api::metadata::RelationshipType::ManyToMany => "N:N",
+        };
+
+        let entity_display = if self.metadata.related_entity == "unknown" || self.metadata.related_entity.is_empty() {
+            format!(" <{}>", rel_type_label)
+        } else {
+            format!(" <{} {}>", self.metadata.related_entity, rel_type_label)
+        };
+
         spans.push(Span::styled(
-            format!(" <{}>", self.metadata.related_entity),
+            entity_display,
             Style::default().fg(theme.overlay1),
         ));
 
