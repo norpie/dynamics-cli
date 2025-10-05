@@ -860,9 +860,16 @@ impl App for EntityComparisonApp {
                     Ok((source_data, target_data)) => {
                         // Find the pair and store its record IDs as cache keys
                         if let Some(pair) = state.examples.pairs.iter().find(|p| p.id == pair_id) {
+                            log::info!("Fetched example data for pair {}: source_id={}, target_id={}",
+                                pair_id, pair.source_record_id, pair.target_record_id);
+                            log::debug!("Source data keys: {:?}", source_data.as_object().map(|o| o.keys().collect::<Vec<_>>()));
+                            log::debug!("Target data keys: {:?}", target_data.as_object().map(|o| o.keys().collect::<Vec<_>>()));
+
                             state.examples.cache.insert(pair.source_record_id.clone(), source_data);
                             state.examples.cache.insert(pair.target_record_id.clone(), target_data);
-                            log::info!("Fetched and cached example data for pair {}", pair_id);
+                            log::info!("Cached example data for pair {}", pair_id);
+                        } else {
+                            log::error!("Pair {} not found in examples.pairs", pair_id);
                         }
                     }
                     Err(err) => {

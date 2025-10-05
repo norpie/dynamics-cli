@@ -1006,7 +1006,7 @@ impl DynamicsClient {
     }
 
     /// Fetch a single record by ID
-    /// Returns the full record as JSON
+    /// Returns the full record as JSON with all fields and formatted values
     pub async fn fetch_record_by_id(
         &self,
         entity_name: &str,
@@ -1017,8 +1017,9 @@ impl DynamicsClient {
         // Pluralize entity name for the endpoint
         let plural_entity = super::pluralization::pluralize_entity_name(entity_name);
 
-        // Build URL: /api/data/v9.2/accounts(id)
-        let url = format!("{}{}/{}({})",
+        // Build URL with $select=* to get all fields
+        // Also add Prefer header to include formatted values and lookup properties
+        let url = format!("{}{}/{}({})?$select=*",
             self.base_url,
             constants::api_path(),
             plural_entity,
@@ -1031,6 +1032,7 @@ impl DynamicsClient {
                 .bearer_auth(&self.access_token)
                 .header("Accept", headers::CONTENT_TYPE_JSON)
                 .header("OData-Version", headers::ODATA_VERSION)
+                .header("Prefer", "odata.include-annotations=\"OData.Community.Display.V1.FormattedValue\"")
                 .send()
                 .await
         }).await?;

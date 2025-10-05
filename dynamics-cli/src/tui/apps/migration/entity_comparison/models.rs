@@ -191,7 +191,15 @@ impl ExamplesState {
         };
 
         // Get the cached record data
-        let record_data = self.cache.get(record_id)?;
+        let record_data = self.cache.get(record_id);
+
+        if record_data.is_none() {
+            log::warn!("No cached data for record_id: {} (is_source: {})", record_id, is_source);
+            log::warn!("Cache keys: {:?}", self.cache.keys().collect::<Vec<_>>());
+            return None;
+        }
+
+        let record_data = record_data.unwrap();
 
         // Extract just the field name from hierarchical path if present
         // e.g., "formtype/main/form/MainForm/tab/General/accountname" -> "accountname"
