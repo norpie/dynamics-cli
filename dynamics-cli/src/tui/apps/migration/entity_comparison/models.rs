@@ -105,9 +105,10 @@ pub struct MatchInfo {
 /// Type of field match/mapping
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MatchType {
-    Exact,      // Exact name match
-    Prefix,     // Prefix transformation applied
-    Manual,     // User-created mapping
+    Exact,        // Exact name match, types match
+    Prefix,       // Prefix name match, types match
+    TypeMismatch, // Name match but types differ
+    Manual,       // User-created mapping (overrides type checking)
 }
 
 impl MatchType {
@@ -116,6 +117,7 @@ impl MatchType {
         match self {
             MatchType::Exact => "[Exact]",
             MatchType::Prefix => "[Prefix]",
+            MatchType::TypeMismatch => "[Type Mismatch]",
             MatchType::Manual => "[Manual]",
         }
     }

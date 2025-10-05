@@ -153,9 +153,10 @@ impl TreeItem for FieldNode {
         // Field name - colored by match state (keep color even when selected)
         let field_name_color = if let Some(match_info) = &self.match_info {
             match match_info.match_type {
-                MatchType::Exact => theme.green,      // Full match
-                MatchType::Prefix => theme.yellow,    // Prefix match
-                MatchType::Manual => theme.yellow,    // Manual mapping
+                MatchType::Exact => theme.green,        // Exact name + type match
+                MatchType::Prefix => theme.green,       // Prefix name + type match
+                MatchType::Manual => theme.green,       // User override
+                MatchType::TypeMismatch => theme.yellow, // Name match but type differs
             }
         } else {
             theme.red  // No match
@@ -255,9 +256,10 @@ impl TreeItem for RelationshipNode {
         // Relationship name - colored by match state
         let rel_name_color = if let Some(match_info) = &self.match_info {
             match match_info.match_type {
-                MatchType::Exact => theme.green,      // Full match
-                MatchType::Prefix => theme.yellow,    // Prefix match
-                MatchType::Manual => theme.yellow,    // Manual mapping
+                MatchType::Exact => theme.green,        // Exact name + type match
+                MatchType::Prefix => theme.green,       // Prefix name + type match
+                MatchType::Manual => theme.green,       // User override
+                MatchType::TypeMismatch => theme.yellow, // Name match but type differs
             }
         } else {
             theme.red  // No match

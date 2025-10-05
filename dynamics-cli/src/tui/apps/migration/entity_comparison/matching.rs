@@ -39,13 +39,18 @@ pub fn compute_field_matches(
         }
 
         // 2. Check exact name match
-        if target_lookup.contains_key(source_name) {
+        if let Some(target_field) = target_lookup.get(source_name) {
+            let types_match = source_field.field_type == target_field.field_type;
             matches.insert(
                 source_name.clone(),
                 MatchInfo {
                     target_field: source_name.clone(),
-                    match_type: MatchType::Exact,
-                    confidence: 1.0,
+                    match_type: if types_match {
+                        MatchType::Exact
+                    } else {
+                        MatchType::TypeMismatch
+                    },
+                    confidence: if types_match { 1.0 } else { 0.7 },
                 },
             );
             continue;
@@ -53,13 +58,18 @@ pub fn compute_field_matches(
 
         // 3. Check prefix-transformed matches
         if let Some(transformed) = apply_prefix_transform(source_name, prefix_mappings) {
-            if target_lookup.contains_key(&transformed) {
+            if let Some(target_field) = target_lookup.get(&transformed) {
+                let types_match = source_field.field_type == target_field.field_type;
                 matches.insert(
                     source_name.clone(),
                     MatchInfo {
                         target_field: transformed,
-                        match_type: MatchType::Prefix,
-                        confidence: 0.9,
+                        match_type: if types_match {
+                            MatchType::Prefix
+                        } else {
+                            MatchType::TypeMismatch
+                        },
+                        confidence: if types_match { 0.9 } else { 0.6 },
                     },
                 );
                 continue;
@@ -107,13 +117,20 @@ pub fn compute_relationship_matches(
         }
 
         // 2. Check exact name match
-        if target_lookup.contains_key(source_name) {
+        if let Some(target_rel) = target_lookup.get(source_name) {
+            // Compare relationship type and related entity
+            let types_match = source_rel.relationship_type == target_rel.relationship_type
+                && source_rel.related_entity == target_rel.related_entity;
             matches.insert(
                 source_name.clone(),
                 MatchInfo {
                     target_field: source_name.clone(),
-                    match_type: MatchType::Exact,
-                    confidence: 1.0,
+                    match_type: if types_match {
+                        MatchType::Exact
+                    } else {
+                        MatchType::TypeMismatch
+                    },
+                    confidence: if types_match { 1.0 } else { 0.7 },
                 },
             );
             continue;
@@ -121,13 +138,20 @@ pub fn compute_relationship_matches(
 
         // 3. Check prefix-transformed matches
         if let Some(transformed) = apply_prefix_transform(source_name, prefix_mappings) {
-            if target_lookup.contains_key(&transformed) {
+            if let Some(target_rel) = target_lookup.get(&transformed) {
+                // Compare relationship type and related entity
+                let types_match = source_rel.relationship_type == target_rel.relationship_type
+                    && source_rel.related_entity == target_rel.related_entity;
                 matches.insert(
                     source_name.clone(),
                     MatchInfo {
                         target_field: transformed,
-                        match_type: MatchType::Prefix,
-                        confidence: 0.9,
+                        match_type: if types_match {
+                            MatchType::Prefix
+                        } else {
+                            MatchType::TypeMismatch
+                        },
+                        confidence: if types_match { 0.9 } else { 0.6 },
                     },
                 );
                 continue;

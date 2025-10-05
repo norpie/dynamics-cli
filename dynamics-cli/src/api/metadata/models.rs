@@ -15,7 +15,7 @@ pub struct FieldMetadata {
 }
 
 /// Field data types in Dynamics 365
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum FieldType {
     String,
     Integer,
@@ -40,7 +40,7 @@ pub struct RelationshipMetadata {
 }
 
 /// Relationship types
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum RelationshipType {
     OneToMany,
     ManyToOne,
