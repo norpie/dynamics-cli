@@ -912,8 +912,9 @@ impl App for EntityComparisonApp {
             Subscription::keyboard(KeyCode::Char('H'), "Toggle hide matched", Msg::ToggleHideMatched),
 
             // Examples management
-            Subscription::keyboard(KeyCode::Char('e'), "Manage examples / cycle pairs", Msg::CycleExamplePair),
-            Subscription::keyboard(KeyCode::Char('E'), "Open examples modal", Msg::OpenExamplesModal),
+            Subscription::keyboard(KeyCode::Char('e'), "Cycle example pairs", Msg::CycleExamplePair),
+            Subscription::keyboard(KeyCode::Char('x'), "Open examples modal", Msg::OpenExamplesModal),
+            Subscription::keyboard(KeyCode::Char('X'), "Open examples modal", Msg::OpenExamplesModal),
         ];
 
         // When showing confirmation modal, add y/n hotkeys
