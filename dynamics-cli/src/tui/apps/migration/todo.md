@@ -8,15 +8,12 @@
 3. ~~**Field value display from examples**~~ - ✅ DONE - Show actual data to verify mappings are correct
 
 ### Medium Priority - Quality of Life
-4. **Visual prefix indicator** - Distinguish `[Prefix]` matches from `[Exact]` matches visually
-5. **Undo/redo mapping actions** - Recover from mistakes without restarting
-6. ~~**Sorting modes**~~ - ✅ DONE - Alphabetical, Matches First, Source Matches modes with 's' key toggle
-7. **Match confidence scores** - Numeric confidence in fuzzy/partial matches
+4. ~~**Visual prefix indicator**~~ - ✅ DONE - Shows `[Prefix]` label to distinguish from `[Exact]` matches
+5. ~~**Sorting modes**~~ - ✅ DONE - Alphabetical, Matches First, Source Matches modes with 's' key toggle
 
 ### Low Priority - Advanced Features
-8. **CRM shortcuts** - Open fields/entities/records directly in browser
-9. **Context menu** - Right-click actions for mapping operations
-10. **Display name vs logical name toggle** - Switch between technical and user-friendly names
+6. **CRM shortcuts** - Open fields/entities/records directly in browser
+7. **Display name vs logical name toggle** - Switch between technical and user-friendly names
 
 ## Infrastructure (Setup)
 - [x] Create entity comparison app module structure
@@ -78,7 +75,6 @@
 ### **Match Status Indicators**
 - [x] Show mapping type badge/icon: `[Exact]`, `[Prefix]`, `[Manual]`, `[TypeMismatch]`
 - [x] Color code by match type (green=match, yellow=type mismatch, red=no match)
-- [ ] Display match confidence score
 
 ### **Hide Matched Filtering**
 - [x] Filter out matched items from tree when toggle enabled
@@ -93,7 +89,6 @@
 - [x] Show which target field a source maps to (arrow with target name)
 - [x] Display match type label for containers and fields
 - [x] **Preserve tree position after creating/deleting manual mapping**
-- [ ] Undo/redo mapping actions
 
 ### **Prefix Mapping Effects**
 - [x] Prefix transformations applied in hierarchical matching
@@ -106,12 +101,6 @@
 - [x] Works for all tab types (Fields, Relationships, Entities, Forms, Views)
 - [x] Hierarchical path expansion for Forms/Views tabs
 - [x] Mirror container expand/collapse - toggling a container in source also toggles it in target
-
-### **Context Menu / Actions**
-- [ ] Create manual mapping (requires selection on both sides)
-- [ ] Delete manual mapping
-- [ ] Add to examples (for specific records)
-- [ ] Show mapping details
 
 ### **Node Metadata Display**
 - [x] Field type information (shown in angle brackets)
