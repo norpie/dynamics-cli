@@ -713,8 +713,16 @@ impl DynamicsClient {
         for xml_field in xml_fields {
             // If API has this field with better data, prefer it
             if let Some(api_field) = api_lookup.get(&xml_field.logical_name) {
-                // Prefer API version if it has related_entity (lookup fields)
-                if api_field.related_entity.is_some() || api_field.display_name.is_some() {
+                // Check if both are NavigationProperties/relationships
+                let xml_is_nav = matches!(&xml_field.field_type, super::metadata::FieldType::Other(t) if t.starts_with("Relationship:"))
+                    || matches!(&xml_field.field_type, super::metadata::FieldType::Lookup);
+                let api_is_lookup = matches!(&api_field.field_type, super::metadata::FieldType::Lookup);
+
+                if xml_is_nav && api_is_lookup {
+                    // Both represent the same relationship - prefer API version (has better metadata)
+                    combined.insert(xml_field.logical_name.clone(), api_field.clone());
+                } else if api_field.related_entity.is_some() || api_field.display_name.is_some() {
+                    // Prefer API version if it has related_entity (lookup fields) or display name
                     combined.insert(xml_field.logical_name.clone(), api_field.clone());
                 } else {
                     combined.insert(xml_field.logical_name.clone(), xml_field);

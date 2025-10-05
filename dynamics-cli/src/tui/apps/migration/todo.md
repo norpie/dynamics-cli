@@ -5,7 +5,7 @@
 ### High Priority - User Experience
 1. ~~**Hide matched filtering**~~ - ✅ DONE - Toggle with 'h' key to show only unmatched items
 2. ~~**Mirrored selection**~~ - ✅ DONE - Highlight corresponding item on target side when selecting in source tree
-3. **Field value display from examples** - Show actual data to verify mappings are correct
+3. ~~**Field value display from examples**~~ - ✅ DONE - Show actual data to verify mappings are correct
 
 ### Medium Priority - Quality of Life
 4. **Visual prefix indicator** - Distinguish `[Prefix]` matches from `[Exact]` matches visually
@@ -71,9 +71,9 @@
 ## Features to Implement in Tree Component Context
 
 ### **Field Value Display from Examples**
-- [ ] Show live record data inline next to field names when examples mode enabled
-- [ ] Format: `field_name: "actual value from API"`
-- [ ] Handle missing data gracefully (`[no data]`, `[no value]`, `[null]`, `[empty]`)
+- [x] Show live record data inline next to field names when examples mode enabled
+- [x] Format: `field_name: "actual value from API"`
+- [x] Handle missing data gracefully (`[no data]`, `[no value]`, `[null]`, `[empty]`)
 
 ### **Match Status Indicators**
 - [x] Show mapping type badge/icon: `[Exact]`, `[Prefix]`, `[Manual]`, `[TypeMismatch]`

@@ -315,9 +315,13 @@ fn build_forms_tree(
     result
 }
 
-/// Check if a field is a relationship field (lookup)
+/// Check if a field is a relationship field (lookup or navigation property)
 fn is_relationship_field(field: &crate::api::metadata::FieldMetadata) -> bool {
-    matches!(field.field_type, FieldType::Lookup)
+    match &field.field_type {
+        FieldType::Lookup => true,
+        FieldType::Other(t) if t.starts_with("Relationship:") => true,
+        _ => false,
+    }
 }
 
 /// Look up actual field metadata from entity's fields list by logical name
