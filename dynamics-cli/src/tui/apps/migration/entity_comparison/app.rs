@@ -725,10 +725,28 @@ fn render_main_layout(state: &mut State, theme: &Theme) -> Element<Msg> {
     };
 
     let target_items = if let Resource::Success(ref metadata) = state.target_metadata {
-        // Target tree doesn't need matches (or could use reverse matches in the future)
-        let empty_field_matches = HashMap::new();
-        let empty_relationship_matches = HashMap::new();
-        build_tree_items(metadata, active_tab, &empty_field_matches, &empty_relationship_matches)
+        // Create reverse matches for target side (target_field -> source_field)
+        let reverse_field_matches: HashMap<String, MatchInfo> = state.field_matches.iter()
+            .map(|(source_field, match_info)| {
+                (match_info.target_field.clone(), MatchInfo {
+                    target_field: source_field.clone(),  // Points back to source
+                    match_type: match_info.match_type,
+                    confidence: match_info.confidence,
+                })
+            })
+            .collect();
+
+        let reverse_relationship_matches: HashMap<String, MatchInfo> = state.relationship_matches.iter()
+            .map(|(source_rel, match_info)| {
+                (match_info.target_field.clone(), MatchInfo {
+                    target_field: source_rel.clone(),  // Points back to source
+                    match_type: match_info.match_type,
+                    confidence: match_info.confidence,
+                })
+            })
+            .collect();
+
+        build_tree_items(metadata, active_tab, &reverse_field_matches, &reverse_relationship_matches)
     } else {
         vec![]
     };
