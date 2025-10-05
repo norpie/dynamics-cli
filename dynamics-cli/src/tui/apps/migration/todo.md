@@ -10,7 +10,7 @@
 ### Medium Priority - Quality of Life
 4. **Visual prefix indicator** - Distinguish `[Prefix]` matches from `[Exact]` matches visually
 5. **Undo/redo mapping actions** - Recover from mistakes without restarting
-6. **Sorting modes** - "Matches first" to see progress, alphabetical for scanning
+6. ~~**Sorting modes**~~ - ✅ DONE - Alphabetical, Matches First, Source Matches modes with 's' key toggle
 7. **Match confidence scores** - Numeric confidence in fuzzy/partial matches
 
 ### Low Priority - Advanced Features
@@ -125,9 +125,12 @@
 - [x] Show loading indicator during refresh
 
 ### **Sorting Modes**
-- [ ] **Matches first**: Matched items at top (alphabetically), unmatched at bottom (alphabetically)
-- [ ] Preserve sort order across refreshes
-- [ ] Update sort when match status changes
+- [x] **Matches first**: Matched items at top (alphabetically), unmatched at bottom (alphabetically)
+- [x] **Source Matches**: Source side matches first, target side aligned by index with source matches
+- [x] **Alphabetical**: Default alphabetical sorting by name
+- [x] Toggle with 's' key between modes
+- [x] Status line indicator showing current sort mode
+- [x] Sort updates when match status changes (via tree rebuilds)
 
 ### **CRM Shortcuts**
 - [ ] Open field in CRM customization page
