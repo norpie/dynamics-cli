@@ -199,3 +199,177 @@ pub fn match_container_names(
 
     matches
 }
+
+/// Compute hierarchical field matches for Forms/Views tabs
+/// Uses full path matching: fields only match if their container paths also match
+pub fn compute_hierarchical_field_matches(
+    source_metadata: &crate::api::EntityMetadata,
+    target_metadata: &crate::api::EntityMetadata,
+    manual_mappings: &HashMap<String, String>,
+    tab_type: &str, // "forms" or "views"
+) -> HashMap<String, MatchInfo> {
+    let mut matches = HashMap::new();
+
+    // Build path maps for source and target
+    let source_paths = build_metadata_paths(source_metadata, tab_type);
+    let target_paths = build_metadata_paths(target_metadata, tab_type);
+
+    // Create target lookup by path
+    let target_lookup: HashMap<String, PathInfo> = target_paths
+        .into_iter()
+        .map(|p| (p.path.clone(), p))
+        .collect();
+
+    for source_path_info in source_paths {
+        let source_path = &source_path_info.path;
+
+        // 1. Check manual mappings first (highest priority)
+        if let Some(target_path) = manual_mappings.get(source_path) {
+            if let Some(target_info) = target_lookup.get(target_path) {
+                matches.insert(
+                    source_path.clone(),
+                    MatchInfo {
+                        target_field: target_path.clone(),
+                        match_type: MatchType::Manual,
+                        confidence: 1.0,
+                    },
+                );
+                continue;
+            }
+        }
+
+        // 2. Check exact path match
+        if let Some(target_info) = target_lookup.get(source_path) {
+            // Paths match - check if it's a field or container
+            if source_path_info.is_field && target_info.is_field {
+                // It's a field - compare types
+                let types_match = source_path_info.field_type == target_info.field_type;
+                matches.insert(
+                    source_path.clone(),
+                    MatchInfo {
+                        target_field: source_path.clone(),
+                        match_type: if types_match {
+                            MatchType::Exact
+                        } else {
+                            MatchType::TypeMismatch
+                        },
+                        confidence: if types_match { 1.0 } else { 0.7 },
+                    },
+                );
+            } else if !source_path_info.is_field && !target_info.is_field {
+                // It's a container - mark as exact match
+                matches.insert(
+                    source_path.clone(),
+                    MatchInfo {
+                        target_field: source_path.clone(),
+                        match_type: MatchType::Exact,
+                        confidence: 1.0,
+                    },
+                );
+            }
+        }
+    }
+
+    matches
+}
+
+/// Information about a path in the metadata tree
+#[derive(Clone, Debug)]
+struct PathInfo {
+    path: String,
+    is_field: bool,
+    field_type: Option<crate::api::metadata::FieldType>,
+}
+
+/// Build paths from metadata for a specific tab type
+fn build_metadata_paths(metadata: &crate::api::EntityMetadata, tab_type: &str) -> Vec<PathInfo> {
+    let mut paths = Vec::new();
+
+    match tab_type {
+        "forms" => {
+            // Build paths for forms
+            for form in &metadata.forms {
+                let formtype_path = format!("formtype/{}", form.form_type);
+                // Add formtype container
+                paths.push(PathInfo {
+                    path: formtype_path.clone(),
+                    is_field: false,
+                    field_type: None,
+                });
+
+                let form_path = format!("{}/form/{}", formtype_path, form.name);
+                // Add form container
+                paths.push(PathInfo {
+                    path: form_path.clone(),
+                    is_field: false,
+                    field_type: None,
+                });
+
+                if let Some(structure) = &form.form_structure {
+                    for tab in &structure.tabs {
+                        let tab_path = format!("{}/tab/{}", form_path, tab.name);
+                        // Add tab container
+                        paths.push(PathInfo {
+                            path: tab_path.clone(),
+                            is_field: false,
+                            field_type: None,
+                        });
+
+                        for section in &tab.sections {
+                            let section_path = format!("{}/section/{}", tab_path, section.name);
+                            // Add section container
+                            paths.push(PathInfo {
+                                path: section_path.clone(),
+                                is_field: false,
+                                field_type: None,
+                            });
+
+                            for field in &section.fields {
+                                let field_path = format!("{}/{}", section_path, field.logical_name);
+                                // Add field
+                                paths.push(PathInfo {
+                                    path: field_path,
+                                    is_field: true,
+                                    field_type: Some(crate::api::metadata::FieldType::Other("FormField".to_string())),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        "views" => {
+            // Build paths for views
+            for view in &metadata.views {
+                let viewtype_path = format!("viewtype/{}", view.view_type);
+                // Add viewtype container
+                paths.push(PathInfo {
+                    path: viewtype_path.clone(),
+                    is_field: false,
+                    field_type: None,
+                });
+
+                let view_path = format!("{}/view/{}", viewtype_path, view.name);
+                // Add view container
+                paths.push(PathInfo {
+                    path: view_path.clone(),
+                    is_field: false,
+                    field_type: None,
+                });
+
+                for column in &view.columns {
+                    let column_path = format!("{}/{}", view_path, column.name);
+                    // Add column
+                    paths.push(PathInfo {
+                        path: column_path,
+                        is_field: true,
+                        field_type: Some(crate::api::metadata::FieldType::Other("Column".to_string())),
+                    });
+                }
+            }
+        }
+        _ => {}
+    }
+
+    paths
+}

@@ -21,7 +21,7 @@ use std::collections::HashMap;
 use crate::{col, row, use_constraints};
 use super::{Msg, Side, ExamplesState, ActiveTab, FetchType, fetch_with_cache, extract_relationships};
 use super::tree_builder::build_tree_items;
-use super::matching::{compute_field_matches, compute_relationship_matches};
+use super::matching::{compute_field_matches, compute_relationship_matches, compute_hierarchical_field_matches};
 use super::models::MatchInfo;
 
 pub struct EntityComparisonApp;
@@ -347,12 +347,34 @@ impl App for EntityComparisonApp {
                                 && !source.views.is_empty() && !target.views.is_empty() {
 
                                 // Compute field and relationship matches
-                                state.field_matches = compute_field_matches(
+                                // Use the same logic as recompute_matches
+                                let mut all_field_matches = compute_field_matches(
                                     &source.fields,
                                     &target.fields,
                                     &state.field_mappings,
                                     &state.prefix_mappings,
                                 );
+
+                                // Hierarchical matching for Forms tab
+                                let forms_matches = compute_hierarchical_field_matches(
+                                    source,
+                                    target,
+                                    &state.field_mappings,
+                                    "forms",
+                                );
+                                all_field_matches.extend(forms_matches);
+
+                                // Hierarchical matching for Views tab
+                                let views_matches = compute_hierarchical_field_matches(
+                                    source,
+                                    target,
+                                    &state.field_mappings,
+                                    "views",
+                                );
+                                all_field_matches.extend(views_matches);
+
+                                state.field_matches = all_field_matches;
+
                                 state.relationship_matches = compute_relationship_matches(
                                     &source.relationships,
                                     &target.relationships,
@@ -529,54 +551,39 @@ impl App for EntityComparisonApp {
                 let target_id = state.target_tree_for_tab().selected().map(|s| s.to_string());
 
                 if let (Some(source_id), Some(target_id)) = (source_id, target_id) {
-                    // Extract the field/relationship name from the ID
-                    // For now, IDs are the logical names for fields and relationships
-                    // For containers, we skip manual mapping
+                    // Handle different ID formats based on tab type
+                    let (source_key, target_key) = match state.active_tab {
+                        ActiveTab::Fields => {
+                            // Fields tab: IDs are simple field names
+                            (source_id.clone(), target_id.clone())
+                        }
+                        ActiveTab::Relationships => {
+                            // Relationships tab: IDs have "rel_" prefix
+                            let source_name = source_id.strip_prefix("rel_").unwrap_or(&source_id).to_string();
+                            let target_name = target_id.strip_prefix("rel_").unwrap_or(&target_id).to_string();
+                            (source_name, target_name)
+                        }
+                        ActiveTab::Forms | ActiveTab::Views => {
+                            // Forms/Views tabs: IDs are paths, support both fields and containers
+                            (source_id.clone(), target_id.clone())
+                        }
+                    };
 
-                    // Only create mappings for fields and relationships
-                    if !source_id.starts_with("view_") && !source_id.starts_with("form_")
-                        && !source_id.starts_with("viewtype_") && !source_id.starts_with("formtype_")
-                        && !source_id.starts_with("tab_") && !source_id.starts_with("section_")
-                        && !source_id.starts_with("rel_") {
-                        // It's a field - add to field_mappings
-                        let source_field = source_id.clone();
-                        let target_field = target_id.clone();
-                        state.field_mappings.insert(source_id, target_id);
+                    // Add to state mappings
+                    state.field_mappings.insert(source_key.clone(), target_key.clone());
 
-                        // Recompute matches
-                        recompute_matches(state);
+                    // Recompute matches
+                    recompute_matches(state);
 
-                        // Save to database
-                        let source_entity = state.source_entity.clone();
-                        let target_entity = state.target_entity.clone();
-                        tokio::spawn(async move {
-                            let config = crate::global_config();
-                            if let Err(e) = config.set_field_mapping(&source_entity, &target_entity, &source_field, &target_field).await {
-                                log::error!("Failed to save field mapping: {}", e);
-                            }
-                        });
-                    } else if source_id.starts_with("rel_") && target_id.starts_with("rel_") {
-                        // It's a relationship - extract name and add to field_mappings
-                        // (we reuse field_mappings for relationships)
-                        let source_name = source_id.strip_prefix("rel_").unwrap_or(&source_id);
-                        let target_name = target_id.strip_prefix("rel_").unwrap_or(&target_id);
-                        let source_field = source_name.to_string();
-                        let target_field = target_name.to_string();
-                        state.field_mappings.insert(source_field.clone(), target_field.clone());
-
-                        // Recompute matches
-                        recompute_matches(state);
-
-                        // Save to database
-                        let source_entity = state.source_entity.clone();
-                        let target_entity = state.target_entity.clone();
-                        tokio::spawn(async move {
-                            let config = crate::global_config();
-                            if let Err(e) = config.set_field_mapping(&source_entity, &target_entity, &source_field, &target_field).await {
-                                log::error!("Failed to save field mapping: {}", e);
-                            }
-                        });
-                    }
+                    // Save to database
+                    let source_entity = state.source_entity.clone();
+                    let target_entity = state.target_entity.clone();
+                    tokio::spawn(async move {
+                        let config = crate::global_config();
+                        if let Err(e) = config.set_field_mapping(&source_entity, &target_entity, &source_key, &target_key).await {
+                            log::error!("Failed to save field mapping: {}", e);
+                        }
+                    });
                 }
                 Command::None
             }
@@ -585,21 +592,17 @@ impl App for EntityComparisonApp {
                 let source_id = state.source_tree_for_tab().selected().map(|s| s.to_string());
 
                 if let Some(source_id) = source_id {
-                    // Try to remove from field_mappings
-                    let (removed, source_field) = if source_id.starts_with("rel_") {
-                        let source_name = source_id.strip_prefix("rel_").unwrap_or(&source_id);
-                        let removed = state.field_mappings.remove(source_name).is_some();
-                        (removed, source_name.to_string())
-                    } else if !source_id.starts_with("view_") && !source_id.starts_with("form_")
-                        && !source_id.starts_with("viewtype_") && !source_id.starts_with("formtype_")
-                        && !source_id.starts_with("tab_") && !source_id.starts_with("section_") {
-                        let removed = state.field_mappings.remove(&source_id).is_some();
-                        (removed, source_id.clone())
-                    } else {
-                        (false, String::new())
+                    // Extract the key based on tab type (same logic as CreateManualMapping)
+                    let source_key = match state.active_tab {
+                        ActiveTab::Fields => source_id.clone(),
+                        ActiveTab::Relationships => {
+                            source_id.strip_prefix("rel_").unwrap_or(&source_id).to_string()
+                        }
+                        ActiveTab::Forms | ActiveTab::Views => source_id.clone(),
                     };
 
-                    if removed {
+                    // Try to remove from field_mappings
+                    if state.field_mappings.remove(&source_key).is_some() {
                         // Recompute matches
                         recompute_matches(state);
 
@@ -608,7 +611,7 @@ impl App for EntityComparisonApp {
                         let target_entity = state.target_entity.clone();
                         tokio::spawn(async move {
                             let config = crate::global_config();
-                            if let Err(e) = config.delete_field_mapping(&source_entity, &target_entity, &source_field).await {
+                            if let Err(e) = config.delete_field_mapping(&source_entity, &target_entity, &source_key).await {
                                 log::error!("Failed to delete field mapping: {}", e);
                             }
                         });
@@ -808,12 +811,35 @@ fn recompute_matches(state: &mut State) {
     if let (Resource::Success(source), Resource::Success(target)) =
         (&state.source_metadata, &state.target_metadata)
     {
-        state.field_matches = compute_field_matches(
+        // Flat matching for Fields tab
+        let mut all_field_matches = compute_field_matches(
             &source.fields,
             &target.fields,
             &state.field_mappings,
             &state.prefix_mappings,
         );
+
+        // Hierarchical matching for Forms tab
+        let forms_matches = compute_hierarchical_field_matches(
+            source,
+            target,
+            &state.field_mappings,
+            "forms",
+        );
+        all_field_matches.extend(forms_matches);
+
+        // Hierarchical matching for Views tab
+        let views_matches = compute_hierarchical_field_matches(
+            source,
+            target,
+            &state.field_mappings,
+            "views",
+        );
+        all_field_matches.extend(views_matches);
+
+        state.field_matches = all_field_matches;
+
+        // Relationship matching (flat)
         state.relationship_matches = compute_relationship_matches(
             &source.relationships,
             &target.relationships,

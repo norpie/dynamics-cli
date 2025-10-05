@@ -164,8 +164,21 @@ impl TreeItem for FieldNode {
 
         let field_name_style = Style::default().fg(field_name_color);
 
+        // Extract display name from logical_name (which may be a path)
+        let display_name = if let Some(display) = &self.metadata.display_name {
+            display.clone()
+        } else {
+            // For paths like "formtype/Main/form/Information/tab/General/section/Details/cr6ab_name",
+            // extract just the last component
+            self.metadata.logical_name
+                .split('/')
+                .last()
+                .unwrap_or(&self.metadata.logical_name)
+                .to_string()
+        };
+
         spans.push(Span::styled(
-            self.metadata.logical_name.clone(),
+            display_name,
             field_name_style,
         ));
 
@@ -177,8 +190,16 @@ impl TreeItem for FieldNode {
         // Mapping arrow and target field (if mapped)
         if let Some(match_info) = &self.match_info {
             spans.push(Span::styled(" → ", Style::default().fg(theme.overlay1)));
+
+            // Extract just the field name from target path
+            let target_display = match_info.target_field
+                .split('/')
+                .last()
+                .unwrap_or(&match_info.target_field)
+                .to_string();
+
             spans.push(Span::styled(
-                match_info.target_field.clone(),
+                target_display,
                 Style::default().fg(theme.blue),
             ));
         }

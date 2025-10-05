@@ -55,6 +55,7 @@ fn build_relationships_tree(
 
 /// Build tree items for the Views tab
 /// Hierarchy: ViewType → View → Column (as field reference)
+/// Uses path-based IDs for hierarchical matching
 fn build_views_tree(
     views: &[crate::api::metadata::ViewMetadata],
     field_matches: &HashMap<String, MatchInfo>,
@@ -78,15 +79,23 @@ fn build_views_tree(
 
         let mut view_containers = Vec::new();
 
+        // Build path for this view type
+        let viewtype_path = format!("viewtype/{}", view_type);
+
         for view in type_views {
+            // Build path for this view
+            let view_path = format!("{}/view/{}", viewtype_path, view.name);
+
             // Create field nodes for each column
             let column_fields: Vec<ComparisonTreeItem> = view.columns.iter()
                 .map(|col| {
+                    // Build full path for this column
+                    let column_path = format!("{}/{}", view_path, col.name);
+
                     // Create a placeholder FieldNode for the column
-                    // TODO: Look up actual field metadata by column name
                     ComparisonTreeItem::Field(FieldNode {
                         metadata: crate::api::metadata::FieldMetadata {
-                            logical_name: col.name.clone(),
+                            logical_name: column_path.clone(), // Use full path as ID
                             display_name: None,
                             field_type: FieldType::Other("Column".to_string()),
                             is_required: false,
@@ -94,16 +103,16 @@ fn build_views_tree(
                             max_length: None,
                             related_entity: None,
                         },
-                        match_info: field_matches.get(&col.name).cloned(),
+                        match_info: field_matches.get(&column_path).cloned(),
                         example_value: None,
                     })
                 })
                 .collect();
 
             // Create container for this view
-            let container_match_type = compute_container_match_type(&column_fields);
+            let container_match_type = compute_container_match_type(&view_path, &column_fields, field_matches);
             view_containers.push(ComparisonTreeItem::Container(ContainerNode {
-                id: format!("view_{}", view.id),
+                id: view_path.clone(),
                 label: format!("{} ({} columns)", view.name, view.columns.len()),
                 children: column_fields,
                 container_match_type,
@@ -111,9 +120,9 @@ fn build_views_tree(
         }
 
         // Create container for this view type
-        let container_match_type = compute_container_match_type(&view_containers);
+        let container_match_type = compute_container_match_type(&viewtype_path, &view_containers, field_matches);
         result.push(ComparisonTreeItem::Container(ContainerNode {
-            id: format!("viewtype_{}", view_type),
+            id: viewtype_path.clone(),
             label: format!("{} ({} views)", view_type, view_containers.len()),
             children: view_containers,
             container_match_type,
@@ -125,6 +134,7 @@ fn build_views_tree(
 
 /// Build tree items for the Forms tab
 /// Hierarchy: FormType → Form → Tab → Section → Field
+/// Uses path-based IDs for hierarchical matching
 fn build_forms_tree(
     forms: &[crate::api::metadata::FormMetadata],
     field_matches: &HashMap<String, MatchInfo>,
@@ -147,7 +157,13 @@ fn build_forms_tree(
         type_forms.sort_by(|a, b| a.name.cmp(&b.name));
         let mut form_containers = Vec::new();
 
+        // Build path for this form type
+        let formtype_path = format!("formtype/{}", form_type);
+
         for form in type_forms {
+            // Build path for this form
+            let form_path = format!("{}/form/{}", formtype_path, form.name);
+
             // If form has structure, build nested hierarchy
             let form_children = if let Some(structure) = &form.form_structure {
                 let mut tab_containers = Vec::new();
@@ -157,6 +173,8 @@ fn build_forms_tree(
                 tabs.sort_by_key(|t| t.order);
 
                 for tab in &tabs {
+                    // Build path for this tab
+                    let tab_path = format!("{}/tab/{}", form_path, tab.name);
                     let mut section_containers = Vec::new();
 
                     // Sort sections by order
@@ -164,16 +182,22 @@ fn build_forms_tree(
                     sections.sort_by_key(|s| s.order);
 
                     for section in &sections {
+                        // Build path for this section
+                        let section_path = format!("{}/section/{}", tab_path, section.name);
+
                         // Sort fields by row order
                         let mut fields = section.fields.clone();
                         fields.sort_by_key(|f| (f.row, f.column));
 
                         let field_nodes: Vec<ComparisonTreeItem> = fields.iter()
                             .map(|field| {
-                                // Create FieldNode from FormField
+                                // Build full path for this field
+                                let field_path = format!("{}/{}", section_path, field.logical_name);
+
+                                // Create FieldNode from FormField with path-based ID
                                 ComparisonTreeItem::Field(FieldNode {
                                     metadata: crate::api::metadata::FieldMetadata {
-                                        logical_name: field.logical_name.clone(),
+                                        logical_name: field_path.clone(), // Use full path as ID
                                         display_name: Some(field.label.clone()),
                                         field_type: FieldType::Other("FormField".to_string()),
                                         is_required: field.required_level != "None",
@@ -181,16 +205,16 @@ fn build_forms_tree(
                                         max_length: None,
                                         related_entity: None,
                                     },
-                                    match_info: field_matches.get(&field.logical_name).cloned(),
+                                    match_info: field_matches.get(&field_path).cloned(),
                                     example_value: None,
                                 })
                             })
                             .collect();
 
                         // Create container for section
-                        let container_match_type = compute_container_match_type(&field_nodes);
+                        let container_match_type = compute_container_match_type(&section_path, &field_nodes, field_matches);
                         section_containers.push(ComparisonTreeItem::Container(ContainerNode {
-                            id: format!("section_{}_{}", form.id, section.name),
+                            id: section_path.clone(),
                             label: format!("{} ({} fields)", section.label, section.fields.len()),
                             children: field_nodes,
                             container_match_type,
@@ -198,9 +222,9 @@ fn build_forms_tree(
                     }
 
                     // Create container for tab
-                    let container_match_type = compute_container_match_type(&section_containers);
+                    let container_match_type = compute_container_match_type(&tab_path, &section_containers, field_matches);
                     tab_containers.push(ComparisonTreeItem::Container(ContainerNode {
-                        id: format!("tab_{}_{}", form.id, tab.name),
+                        id: tab_path.clone(),
                         label: format!("{} ({} sections)", tab.label, tab.sections.len()),
                         children: section_containers,
                         container_match_type,
@@ -214,9 +238,9 @@ fn build_forms_tree(
             };
 
             // Create container for this form
-            let container_match_type = compute_container_match_type(&form_children);
+            let container_match_type = compute_container_match_type(&form_path, &form_children, field_matches);
             form_containers.push(ComparisonTreeItem::Container(ContainerNode {
-                id: format!("form_{}", form.id),
+                id: form_path.clone(),
                 label: if form_children.is_empty() {
                     format!("{} (no structure)", form.name)
                 } else {
@@ -228,9 +252,9 @@ fn build_forms_tree(
         }
 
         // Create container for this form type
-        let container_match_type = compute_container_match_type(&form_containers);
+        let container_match_type = compute_container_match_type(&formtype_path, &form_containers, field_matches);
         result.push(ComparisonTreeItem::Container(ContainerNode {
-            id: format!("formtype_{}", form_type),
+            id: formtype_path.clone(),
             label: format!("{} ({} forms)", form_type, form_containers.len()),
             children: form_containers,
             container_match_type,
@@ -245,11 +269,29 @@ fn is_relationship_field(field: &crate::api::metadata::FieldMetadata) -> bool {
     matches!(field.field_type, FieldType::Lookup)
 }
 
-/// Compute ContainerMatchType based on children's match status
-/// For now, this only looks at children (not container-level matching)
-fn compute_container_match_type(children: &[ComparisonTreeItem]) -> ContainerMatchType {
-    if children.is_empty() {
+/// Compute ContainerMatchType based on container's own match and children's match status
+///
+/// Logic:
+/// - NoMatch: Container path doesn't match (OR no children and not matched)
+/// - FullMatch: Container path matches AND all children match
+/// - Mixed: Container path matches BUT not all children match
+fn compute_container_match_type(
+    container_id: &str,
+    children: &[ComparisonTreeItem],
+    field_matches: &HashMap<String, MatchInfo>,
+) -> ContainerMatchType {
+    // Check if this container itself has a match
+    let container_matched = field_matches.contains_key(container_id);
+
+    if !container_matched {
+        // Container doesn't match → NoMatch
         return ContainerMatchType::NoMatch;
+    }
+
+    // Container matched - now check children
+    if children.is_empty() {
+        // Container matched but has no children → FullMatch
+        return ContainerMatchType::FullMatch;
     }
 
     let mut has_matched = false;
@@ -280,9 +322,7 @@ fn compute_container_match_type(children: &[ComparisonTreeItem]) -> ContainerMat
 
     if has_matched && !has_unmatched {
         ContainerMatchType::FullMatch
-    } else if has_matched {
-        ContainerMatchType::Mixed
     } else {
-        ContainerMatchType::NoMatch
+        ContainerMatchType::Mixed  // Container matched but some/all children didn't
     }
 }
