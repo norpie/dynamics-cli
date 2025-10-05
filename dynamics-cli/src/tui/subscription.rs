@@ -109,9 +109,17 @@ impl std::fmt::Display for KeyBinding {
 }
 
 /// Convert KeyCode to KeyBinding for backward compatibility
+/// Automatically converts uppercase letters to lowercase + SHIFT modifier
 impl From<KeyCode> for KeyBinding {
     fn from(code: KeyCode) -> Self {
-        Self::new(code)
+        match code {
+            // Convert uppercase letters to lowercase + SHIFT
+            KeyCode::Char(c) if c.is_ascii_uppercase() => {
+                Self::shift(KeyCode::Char(c.to_ascii_lowercase()))
+            }
+            // Everything else: no modifiers
+            _ => Self::new(code),
+        }
     }
 }
 
