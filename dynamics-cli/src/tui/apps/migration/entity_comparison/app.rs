@@ -85,6 +85,10 @@ pub struct State {
     pub(super) prefix_source_input: crate::tui::widgets::TextInputField,
     pub(super) prefix_target_input: crate::tui::widgets::TextInputField,
 
+    // Manual mappings modal state
+    pub(super) show_manual_mappings_modal: bool,
+    pub(super) manual_mappings_list_state: crate::tui::widgets::ListState,
+
     // Modal state
     pub(super) show_back_confirmation: bool,
 }
@@ -181,6 +185,8 @@ impl App for EntityComparisonApp {
             prefix_mappings_list_state: crate::tui::widgets::ListState::new(),
             prefix_source_input: crate::tui::widgets::TextInputField::new(),
             prefix_target_input: crate::tui::widgets::TextInputField::new(),
+            show_manual_mappings_modal: false,
+            manual_mappings_list_state: crate::tui::widgets::ListState::new(),
             show_back_confirmation: false,
         };
 
@@ -234,6 +240,10 @@ impl App for EntityComparisonApp {
             view = view.with_app_modal(super::view::render_prefix_mappings_modal(state, theme), LayerAlignment::Center);
         }
 
+        if state.show_manual_mappings_modal {
+            view = view.with_app_modal(super::view::render_manual_mappings_modal(state, theme), LayerAlignment::Center);
+        }
+
         view
     }
 
@@ -285,6 +295,9 @@ impl App for EntityComparisonApp {
             Subscription::keyboard(KeyCode::Char('p'), "Open prefix mappings modal", Msg::OpenPrefixMappingsModal),
             Subscription::keyboard(KeyCode::Char('P'), "Open prefix mappings modal", Msg::OpenPrefixMappingsModal),
 
+            // Manual mappings
+            Subscription::keyboard(KeyCode::Char('M'), "View manual mappings modal", Msg::OpenManualMappingsModal),
+
             // Export
             Subscription::keyboard(KeyCode::F(10), "Export to Excel", Msg::ExportToExcel),
         ];
@@ -312,6 +325,13 @@ impl App for EntityComparisonApp {
             subs.push(Subscription::keyboard(KeyCode::Char('d'), "Delete prefix mapping", Msg::DeletePrefixMapping));
             subs.push(Subscription::keyboard(KeyCode::Char('c'), "Close modal", Msg::ClosePrefixMappingsModal));
             subs.push(Subscription::keyboard(KeyCode::Esc, "Close modal", Msg::ClosePrefixMappingsModal));
+        }
+
+        // When showing manual mappings modal, add hotkeys
+        if state.show_manual_mappings_modal {
+            subs.push(Subscription::keyboard(KeyCode::Char('d'), "Delete manual mapping", Msg::DeleteManualMappingFromModal));
+            subs.push(Subscription::keyboard(KeyCode::Char('c'), "Close modal", Msg::CloseManualMappingsModal));
+            subs.push(Subscription::keyboard(KeyCode::Esc, "Close modal", Msg::CloseManualMappingsModal));
         }
 
         subs

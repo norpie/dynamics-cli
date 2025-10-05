@@ -3,6 +3,7 @@ pub mod tree_events;
 pub mod mappings;
 pub mod examples;
 pub mod prefix_mappings;
+pub mod manual_mappings;
 pub mod data_loading;
 
 use crate::tui::command::Command;
@@ -56,6 +57,12 @@ pub fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         Msg::PrefixTargetInputEvent(event) => prefix_mappings::handle_target_input_event(state, event),
         Msg::AddPrefixMapping => prefix_mappings::handle_add_prefix_mapping(state),
         Msg::DeletePrefixMapping => prefix_mappings::handle_delete_prefix_mapping(state),
+
+        // Manual mappings
+        Msg::OpenManualMappingsModal => manual_mappings::handle_open_modal(state),
+        Msg::CloseManualMappingsModal => manual_mappings::handle_close_modal(state),
+        Msg::ManualMappingsListNavigate(key) => manual_mappings::handle_list_navigate(state, key),
+        Msg::DeleteManualMappingFromModal => manual_mappings::handle_delete_manual_mapping(state),
 
         // Export
         Msg::ExportToExcel => mappings::handle_export_to_excel(state),

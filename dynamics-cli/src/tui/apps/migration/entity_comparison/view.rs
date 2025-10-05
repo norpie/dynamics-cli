@@ -334,3 +334,24 @@ fn get_item_match_target(item: &ComparisonTreeItem) -> Option<&str> {
         _ => None,
     }
 }
+
+pub fn render_manual_mappings_modal(state: &State, theme: &Theme) -> Element<Msg> {
+    use crate::tui::modals::{ManualMappingsModal, ManualMappingItem};
+
+    // Convert manual field mappings to list items
+    let mapping_items: Vec<ManualMappingItem<Msg>> = state.field_mappings.iter().map(|(source, target)| {
+        ManualMappingItem {
+            source_field: source.clone(),
+            target_field: target.clone(),
+            on_delete: Msg::DeleteManualMappingFromModal,
+        }
+    }).collect();
+
+    ManualMappingsModal::new()
+        .mappings(mapping_items)
+        .list_state(state.manual_mappings_list_state.clone())
+        .on_list_navigate(Msg::ManualMappingsListNavigate)
+        .on_delete(Msg::DeleteManualMappingFromModal)
+        .on_close(Msg::CloseManualMappingsModal)
+        .build(theme)
+}

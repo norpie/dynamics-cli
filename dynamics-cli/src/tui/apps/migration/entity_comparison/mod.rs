@@ -55,6 +55,12 @@ pub enum Msg {
     AddPrefixMapping,
     DeletePrefixMapping,
 
+    // Manual mappings modal messages
+    OpenManualMappingsModal,
+    CloseManualMappingsModal,
+    ManualMappingsListNavigate(crossterm::event::KeyCode),
+    DeleteManualMappingFromModal,
+
     // Export
     ExportToExcel,
 }
