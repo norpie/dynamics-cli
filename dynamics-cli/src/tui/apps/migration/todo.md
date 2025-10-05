@@ -4,7 +4,7 @@
 
 ### High Priority - User Experience
 1. ~~**Hide matched filtering**~~ - ✅ DONE - Toggle with 'h' key to show only unmatched items
-2. **Mirrored selection** - Highlight corresponding item on other side when selecting a match
+2. ~~**Mirrored selection**~~ - ✅ DONE - Highlight corresponding item on target side when selecting in source tree
 3. **Field value display from examples** - Show actual data to verify mappings are correct
 
 ### Medium Priority - Quality of Life
@@ -100,8 +100,11 @@
 - [x] Visual indicator when prefix mapping applies vs exact match (shows [Prefix] label)
 
 ### **Mirrored Selection**
-- [ ] When selecting matched pair on one side, highlight corresponding item on other side
-- [ ] Sync scroll position between matched items on source/target
+- [x] When selecting matched pair on source side, highlight corresponding item on target side
+- [x] Sync scroll position between matched items (automatic via TreeState::update_scroll)
+- [x] Works for all tab types (Fields, Relationships, Entities, Forms, Views)
+- [x] Hierarchical path expansion for Forms/Views tabs
+- [x] Mirror container expand/collapse - toggling a container in source also toggles it in target
 
 ### **Context Menu / Actions**
 - [ ] Create manual mapping (requires selection on both sides)
