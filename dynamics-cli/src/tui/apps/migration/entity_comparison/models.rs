@@ -283,6 +283,28 @@ impl ExamplesState {
                         return Some(format!("\"{}\"", s));
                     }
                 }
+
+                // If formatted value not found, check if the base lookup field exists and is null
+                // e.g., for "organizationidname", check "_organizationid_value"
+                let base_lookup_key = if extracted_field_name.ends_with("yominame") {
+                    let base = extracted_field_name.strip_suffix("yominame").unwrap_or(extracted_field_name);
+                    format!("_{}_value", base)
+                } else if extracted_field_name.ends_with("name") {
+                    let base = extracted_field_name.strip_suffix("name").unwrap_or(extracted_field_name);
+                    format!("_{}_value", base)
+                } else {
+                    String::new()
+                };
+
+                if !base_lookup_key.is_empty() {
+                    if let Some(base_value) = record_data.get(&base_lookup_key) {
+                        // Lookup field exists - check if it's null
+                        if base_value.is_null() {
+                            log::debug!("Virtual field '{}' has null lookup value at '{}'", extracted_field_name, base_lookup_key);
+                            return Some("null".to_string());
+                        }
+                    }
+                }
             }
 
             log::debug!("Field '{}' not found in cached data (tried lookup key: '{}')", extracted_field_name, lookup_formatted_key);
