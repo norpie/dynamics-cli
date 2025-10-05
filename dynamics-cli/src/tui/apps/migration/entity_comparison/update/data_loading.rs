@@ -14,12 +14,42 @@ pub fn handle_parallel_data_loaded(
         Ok(data) => {
             // Update the appropriate metadata based on the data variant
             match data {
-                FetchedData::SourceFields(fields) => {
+                FetchedData::SourceFields(mut fields) => {
+                    // Extract relationships if we have Lookup fields (fresh from API)
+                    // If no Lookup fields, they came from cache and relationships need to be loaded separately
+                    let has_lookup_fields = fields.iter().any(|f| matches!(&f.field_type, crate::api::metadata::FieldType::Lookup) || matches!(&f.field_type, crate::api::metadata::FieldType::Other(t) if t.starts_with("Relationship:")));
+
+                    let relationships = if has_lookup_fields {
+                        let rels = extract_relationships(&fields);
+                        fields.retain(|f| {
+                            !matches!(&f.field_type, crate::api::metadata::FieldType::Lookup)
+                                && !matches!(&f.field_type, crate::api::metadata::FieldType::Other(t) if t.starts_with("Relationship:"))
+                        });
+                        rels
+                    } else {
+                        // From cache - load relationships from cache
+                        let config = crate::global_config();
+                        let source_env = state.source_env.clone();
+                        let source_entity = state.source_entity.clone();
+                        tokio::task::block_in_place(|| {
+                            tokio::runtime::Handle::current().block_on(async {
+                                config.get_entity_metadata_cache(&source_env, &source_entity, 12)
+                                    .await
+                                    .ok()
+                                    .flatten()
+                                    .map(|cached| cached.relationships)
+                                    .unwrap_or_default()
+                            })
+                        })
+                    };
+
                     if let Resource::Success(ref mut meta) = state.source_metadata {
                         meta.fields = fields;
+                        meta.relationships = relationships;
                     } else {
                         state.source_metadata = Resource::Success(crate::api::EntityMetadata {
                             fields,
+                            relationships,
                             ..Default::default()
                         });
                     }
@@ -44,12 +74,42 @@ pub fn handle_parallel_data_loaded(
                         });
                     }
                 }
-                FetchedData::TargetFields(fields) => {
+                FetchedData::TargetFields(mut fields) => {
+                    // Extract relationships if we have Lookup fields (fresh from API)
+                    // If no Lookup fields, they came from cache and relationships need to be loaded separately
+                    let has_lookup_fields = fields.iter().any(|f| matches!(&f.field_type, crate::api::metadata::FieldType::Lookup) || matches!(&f.field_type, crate::api::metadata::FieldType::Other(t) if t.starts_with("Relationship:")));
+
+                    let relationships = if has_lookup_fields {
+                        let rels = extract_relationships(&fields);
+                        fields.retain(|f| {
+                            !matches!(&f.field_type, crate::api::metadata::FieldType::Lookup)
+                                && !matches!(&f.field_type, crate::api::metadata::FieldType::Other(t) if t.starts_with("Relationship:"))
+                        });
+                        rels
+                    } else {
+                        // From cache - load relationships from cache
+                        let config = crate::global_config();
+                        let target_env = state.target_env.clone();
+                        let target_entity = state.target_entity.clone();
+                        tokio::task::block_in_place(|| {
+                            tokio::runtime::Handle::current().block_on(async {
+                                config.get_entity_metadata_cache(&target_env, &target_entity, 12)
+                                    .await
+                                    .ok()
+                                    .flatten()
+                                    .map(|cached| cached.relationships)
+                                    .unwrap_or_default()
+                            })
+                        })
+                    };
+
                     if let Resource::Success(ref mut meta) = state.target_metadata {
                         meta.fields = fields;
+                        meta.relationships = relationships;
                     } else {
                         state.target_metadata = Resource::Success(crate::api::EntityMetadata {
                             fields,
+                            relationships,
                             ..Default::default()
                         });
                     }
@@ -82,28 +142,6 @@ pub fn handle_parallel_data_loaded(
                         state.examples.cache.insert(pair.source_record_id.clone(), source_data);
                         state.examples.cache.insert(pair.target_record_id.clone(), target_data);
                     }
-                }
-            }
-
-            // Extract relationships from fields after fields are loaded
-            if let Resource::Success(ref mut meta) = state.source_metadata {
-                if meta.relationships.is_empty() && !meta.fields.is_empty() {
-                    meta.relationships = extract_relationships(&meta.fields);
-                    // Remove relationship fields from fields list - they should only appear in relationships
-                    meta.fields.retain(|f| {
-                        !matches!(&f.field_type, crate::api::metadata::FieldType::Lookup)
-                            && !matches!(&f.field_type, crate::api::metadata::FieldType::Other(t) if t.starts_with("Relationship:"))
-                    });
-                }
-            }
-            if let Resource::Success(ref mut meta) = state.target_metadata {
-                if meta.relationships.is_empty() && !meta.fields.is_empty() {
-                    meta.relationships = extract_relationships(&meta.fields);
-                    // Remove relationship fields from fields list - they should only appear in relationships
-                    meta.fields.retain(|f| {
-                        !matches!(&f.field_type, crate::api::metadata::FieldType::Lookup)
-                            && !matches!(&f.field_type, crate::api::metadata::FieldType::Other(t) if t.starts_with("Relationship:"))
-                    });
                 }
             }
 

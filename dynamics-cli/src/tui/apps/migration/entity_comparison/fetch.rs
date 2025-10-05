@@ -28,19 +28,14 @@ pub async fn fetch_with_cache(
             .ok()
             .flatten();
 
-        // If we have cached metadata, extract the requested type and process it
+        // If we have cached metadata, extract the requested type
+        // Note: Cached metadata already has relationships extracted and lookup fields removed
         if let Some(cached) = cached_metadata {
             return match fetch_type {
-                FetchType::SourceFields => {
-                    let fields = process_lookup_fields(cached.fields);
-                    Ok(FetchedData::SourceFields(fields))
-                }
+                FetchType::SourceFields => Ok(FetchedData::SourceFields(cached.fields)),
                 FetchType::SourceForms => Ok(FetchedData::SourceForms(cached.forms)),
                 FetchType::SourceViews => Ok(FetchedData::SourceViews(cached.views)),
-                FetchType::TargetFields => {
-                    let fields = process_lookup_fields(cached.fields);
-                    Ok(FetchedData::TargetFields(fields))
-                }
+                FetchType::TargetFields => Ok(FetchedData::TargetFields(cached.fields)),
                 FetchType::TargetForms => Ok(FetchedData::TargetForms(cached.forms)),
                 FetchType::TargetViews => Ok(FetchedData::TargetViews(cached.views)),
             };
