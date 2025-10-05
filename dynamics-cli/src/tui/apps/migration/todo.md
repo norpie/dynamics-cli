@@ -19,7 +19,7 @@
 
 ### **Match Status Indicators**
 - [x] Show mapping type badge/icon: `[Exact]`, `[Prefix]`, `[Manual]` (placeholder in FieldNode)
-- [ ] Color code by match type (TODO: needs proper styling implementation)
+- [x] Color code by match type (green=Exact, yellow=Prefix/Manual, red=no match)
 - [ ] Display match score
 
 ### **Hide Matched Filtering**
@@ -29,7 +29,7 @@
 ### **Field Mapping Actions**
 - [ ] Select source field + target field to create manual mapping
 - [ ] Delete existing manual mapping from selected field
-- [ ] Show which target field a source maps to (and vice versa)
+- [x] Show which target field a source maps to (and vice versa) (arrow with target name)
 - [ ] **Preserve tree position after creating/deleting manual mapping**
 
 ### **Prefix Mapping Effects**
@@ -48,15 +48,15 @@
 - [ ] Show mapping details
 
 ### **Node Metadata Display**
-- [ ] Field type information
-- [ ] Required/optional status
+- [x] Field type information (shown in angle brackets)
+- [x] Required/optional status (red asterisk for required)
 - [ ] Display name vs logical name
-- [ ] Related entity information (for lookups)
+- [x] Related entity information (for lookups/relationships)
 
 ### **Manual API Refresh**
-- [ ] Re-fetch metadata/examples from API on demand
+- [x] Re-fetch metadata/examples from API on demand (F5 keybinding)
 - [ ] Preserve current tree position (selected item, scroll offset, expanded nodes)
-- [ ] Show loading indicator during refresh
+- [x] Show loading indicator during refresh
 
 ### **Sorting Modes**
 - [ ] **Matches first**: Matched items at top (alphabetically), unmatched at bottom (alphabetically)
