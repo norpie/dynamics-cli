@@ -54,6 +54,7 @@
 - [x] Show all relationships (ManyToOne, OneToMany, ManyToMany)
 - [x] Infer relationship cardinality from XML Type attribute (Collection = 1:N)
 - [x] Display relationship type alongside entity name (e.g., `<systemuser N:1>` or `<1:N>`)
+- [x] Views/Forms tabs now show real field types (DateTime, Lookup, etc.) instead of "Column"/"FormField"
 - [ ] Show formatted display names in examples for lookup fields
 
 ## Entities Tab Implementation (Completed)

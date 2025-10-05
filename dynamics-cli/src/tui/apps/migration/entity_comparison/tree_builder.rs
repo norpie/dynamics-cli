@@ -19,8 +19,8 @@ pub fn build_tree_items(
     match active_tab {
         ActiveTab::Fields => build_fields_tree(&metadata.fields, field_matches),
         ActiveTab::Relationships => build_relationships_tree(&metadata.relationships, relationship_matches),
-        ActiveTab::Views => build_views_tree(&metadata.views, field_matches),
-        ActiveTab::Forms => build_forms_tree(&metadata.forms, field_matches),
+        ActiveTab::Views => build_views_tree(&metadata.views, field_matches, &metadata.fields),
+        ActiveTab::Forms => build_forms_tree(&metadata.forms, field_matches, &metadata.fields),
         ActiveTab::Entities => build_entities_tree(entities, entity_matches),
     }
 }
@@ -62,6 +62,7 @@ fn build_relationships_tree(
 fn build_views_tree(
     views: &[crate::api::metadata::ViewMetadata],
     field_matches: &HashMap<String, MatchInfo>,
+    all_fields: &[crate::api::metadata::FieldMetadata],
 ) -> Vec<ComparisonTreeItem> {
     // Group views by type
     let mut grouped: HashMap<String, Vec<&crate::api::metadata::ViewMetadata>> = HashMap::new();
@@ -95,17 +96,33 @@ fn build_views_tree(
                     // Build full path for this column
                     let column_path = format!("{}/{}", view_path, col.name);
 
-                    // Create a placeholder FieldNode for the column
-                    ComparisonTreeItem::Field(FieldNode {
-                        metadata: crate::api::metadata::FieldMetadata {
-                            logical_name: column_path.clone(), // Use full path as ID
+                    // Look up actual field metadata from entity's fields
+                    let field_metadata = if let Some(real_field) = lookup_field_metadata(all_fields, &col.name) {
+                        // Use real field metadata with path-based ID
+                        crate::api::metadata::FieldMetadata {
+                            logical_name: column_path.clone(), // Use full path as ID for matching
+                            display_name: real_field.display_name.clone(),
+                            field_type: real_field.field_type.clone(),
+                            is_required: real_field.is_required,
+                            is_primary_key: col.is_primary,
+                            max_length: real_field.max_length,
+                            related_entity: real_field.related_entity.clone(),
+                        }
+                    } else {
+                        // Fallback to placeholder if field not found
+                        crate::api::metadata::FieldMetadata {
+                            logical_name: column_path.clone(),
                             display_name: None,
                             field_type: FieldType::Other("Column".to_string()),
                             is_required: false,
                             is_primary_key: col.is_primary,
                             max_length: None,
                             related_entity: None,
-                        },
+                        }
+                    };
+
+                    ComparisonTreeItem::Field(FieldNode {
+                        metadata: field_metadata,
                         match_info: field_matches.get(&column_path).cloned(),
                         example_value: None,
                     })
@@ -143,6 +160,7 @@ fn build_views_tree(
 fn build_forms_tree(
     forms: &[crate::api::metadata::FormMetadata],
     field_matches: &HashMap<String, MatchInfo>,
+    all_fields: &[crate::api::metadata::FieldMetadata],
 ) -> Vec<ComparisonTreeItem> {
     // Group forms by type
     let mut grouped: HashMap<String, Vec<&crate::api::metadata::FormMetadata>> = HashMap::new();
@@ -199,17 +217,33 @@ fn build_forms_tree(
                                 // Build full path for this field
                                 let field_path = format!("{}/{}", section_path, field.logical_name);
 
-                                // Create FieldNode from FormField with path-based ID
-                                ComparisonTreeItem::Field(FieldNode {
-                                    metadata: crate::api::metadata::FieldMetadata {
-                                        logical_name: field_path.clone(), // Use full path as ID
+                                // Look up actual field metadata from entity's fields
+                                let field_metadata = if let Some(real_field) = lookup_field_metadata(all_fields, &field.logical_name) {
+                                    // Use real field metadata with path-based ID
+                                    crate::api::metadata::FieldMetadata {
+                                        logical_name: field_path.clone(), // Use full path as ID for matching
+                                        display_name: Some(field.label.clone()), // Keep form's label
+                                        field_type: real_field.field_type.clone(),
+                                        is_required: field.required_level != "None",
+                                        is_primary_key: real_field.is_primary_key,
+                                        max_length: real_field.max_length,
+                                        related_entity: real_field.related_entity.clone(),
+                                    }
+                                } else {
+                                    // Fallback to placeholder if field not found
+                                    crate::api::metadata::FieldMetadata {
+                                        logical_name: field_path.clone(),
                                         display_name: Some(field.label.clone()),
                                         field_type: FieldType::Other("FormField".to_string()),
                                         is_required: field.required_level != "None",
                                         is_primary_key: false,
                                         max_length: None,
                                         related_entity: None,
-                                    },
+                                    }
+                                };
+
+                                ComparisonTreeItem::Field(FieldNode {
+                                    metadata: field_metadata,
                                     match_info: field_matches.get(&field_path).cloned(),
                                     example_value: None,
                                 })
@@ -276,6 +310,15 @@ fn build_forms_tree(
 /// Check if a field is a relationship field (lookup)
 fn is_relationship_field(field: &crate::api::metadata::FieldMetadata) -> bool {
     matches!(field.field_type, FieldType::Lookup)
+}
+
+/// Look up actual field metadata from entity's fields list by logical name
+/// Returns None if field not found
+fn lookup_field_metadata<'a>(
+    fields: &'a [crate::api::metadata::FieldMetadata],
+    logical_name: &str,
+) -> Option<&'a crate::api::metadata::FieldMetadata> {
+    fields.iter().find(|f| f.logical_name == logical_name)
 }
 
 /// Compute ContainerMatchType and MatchInfo based on container's own match and children's match status
