@@ -8,8 +8,10 @@
 DeadlinesEnvironmentSelectApp (select environment)
     ↓ (passes environment_name)
 DeadlinesFileSelectApp (file browser → select file → load sheets → select sheet)
-    ↓ (will pass environment_name + file_path + sheet_name)
-[Next app TBD - probably field mapping or validation]
+    ↓ (passes environment_name + file_path + sheet_name)
+DeadlinesMappingApp (entity detection → load data button → validate Excel structure)
+    ↓ (shows warnings, user can continue or go back)
+[Next app TBD - probably transformation or review]
 ```
 
 **Note**: Setup/entity mapping step has been deferred. We're starting with the file selection flow first, then will add entity mapping configuration later.
@@ -80,7 +82,7 @@ Each app needs (pattern from migration apps):
 - ✅ Continue button → proceeds with selected file + sheet
 - ✅ State: environment_name, file_browser_state, selected_file, available_sheets (Resource<Vec<String>>), sheet_selector
 - ✅ Viewport height tracking for proper scrolling
-- ✅ Navigate to: Environment Select (back) or Next App (continue)
+- ✅ Navigate to: Environment Select (back) or Mapping App (continue)
 
 **New Widget Created:** `FileBrowser` (reusable)
 - ✅ `FileBrowserState` - manages directory navigation, filtering, selection
@@ -91,7 +93,29 @@ Each app needs (pattern from migration apps):
 - ✅ Virtual scrolling with scrollbar
 - ✅ Filter support for custom file type filtering
 
-### App 3: Setup (Entity Mapping) - DEFERRED
+### App 3: Field Mapping & Validation ✅ COMPLETE
+**File:** `deadlines_mapping_app.rs`
+- ✅ Receives: environment_name, file_path, sheet_name
+- ✅ Auto-loads entity list from cache or API
+- ✅ Auto-detects entity type (cgk_deadline or nrq_deadline)
+- ✅ Manual entity selector if auto-detection fails
+- ✅ "Load Data" button to trigger entity data loading
+- ✅ Parallel entity data loading with loading screen
+- ✅ Board meeting lookup preprocessing (HashMap for O(1) lookups)
+- ✅ Excel structure validation:
+  - ✅ Checkbox columns (after "Raad van Bestuur" column)
+  - ✅ Regular lookup fields (systemuser, cgk_fund, etc.)
+  - ✅ Board meeting date validation
+  - ✅ Date/time field validation
+- ✅ Whitespace normalization (non-breaking spaces → regular spaces)
+- ✅ Trimming on all field comparisons
+- ✅ Warnings list display with scrolling
+- ✅ Back button → returns to File Select
+- ✅ Continue button → proceeds to next step
+- ✅ State: entities, detected_entity, manual_override, entity_data_cache, warnings, excel_processed
+- ✅ Navigate to: File Select (back) or Next App (continue)
+
+### App 4: Setup (Entity Mapping) - DEFERRED
 **File:** `deadlines_setup_app.rs` (not yet created)
 - [ ] Prefix input (text field)
 - [ ] Entity discovery (async API call → loading screen)
@@ -101,25 +125,9 @@ Each app needs (pattern from migration apps):
 - [ ] State: prefix, discovered entities, mappings, validation status
 - [ ] Navigate to: File Select on success, back to Environment Select on cancel
 
-**Note**: This step has been deferred. We're building the file-to-mapping flow first.
+**Note**: This step has been deferred. Entity detection is handled automatically in Mapping App.
 
-### App 4: Cache Check
-**File:** `deadlines_cache_check_app.rs`
-- [ ] Check cache freshness on init
-- [ ] Show refresh progress modal if stale (entity-by-entity)
-- [ ] Parallel entity fetching
-- [ ] State: cache status, refresh progress per entity
-- [ ] Navigate to: Validation when cache ready
-
-### App 5: Validation
-**File:** `deadlines_validation_app.rs`
-- [ ] Load Excel data (async)
-- [ ] Validate structure (column → entity type matching)
-- [ ] Show warnings popup (unmatched columns)
-- [ ] "Continue" → Transformation, "Cancel" → File Select
-- [ ] State: excel data, validation result, show warnings popup
-
-### App 6: Transformation
+### App 5: Transformation (Future)
 **File:** `deadlines_transform_app.rs`
 - [ ] Transform Excel rows → Dynamics entities (async)
 - [ ] Lookup resolution (fuzzy matching)
@@ -129,7 +137,7 @@ Each app needs (pattern from migration apps):
 - [ ] State: transformation progress, current row
 - [ ] Navigate to: Review when complete
 
-### App 7: Review
+### App 6: Review (Future)
 **File:** `deadlines_review_app.rs`
 - [ ] List rows with validation warnings
 - [ ] Detail panel for selected row (all warnings + field values)
@@ -215,9 +223,8 @@ Each app needs (pattern from migration apps):
 ### AppId Enum (`tui/command.rs`)
 - ✅ Add `DeadlinesEnvironmentSelect` variant
 - ✅ Add `DeadlinesFileSelect` variant
+- ✅ Add `DeadlinesMapping` variant
 - [ ] Add `DeadlinesSetup` variant (deferred)
-- [ ] Add `DeadlinesCacheCheck` variant
-- [ ] Add `DeadlinesValidation` variant
 - [ ] Add `DeadlinesTransform` variant
 - [ ] Add `DeadlinesReview` variant
 
@@ -228,6 +235,7 @@ Each app needs (pattern from migration apps):
 ### Runtime Registration (`tui/multi_runtime.rs`)
 - ✅ Register DeadlinesEnvironmentSelectApp
 - ✅ Register DeadlinesFileSelectApp
+- ✅ Register DeadlinesMappingApp
 - [ ] Register remaining apps as they're built
 
 ### App Launcher
@@ -236,6 +244,7 @@ Each app needs (pattern from migration apps):
 
 ### Models (`models.rs`)
 - ✅ `FileSelectParams` - Passes environment_name to file select app
+- ✅ `MappingParams` - Passes environment_name, file_path, sheet_name to mapping app
 
 ---
 
@@ -249,9 +258,17 @@ Each app needs (pattern from migration apps):
 5. ✅ `deadlines_file_select_app.rs` - File browser + sheet selector with buttons
 6. ✅ Integration - AppIds, runtime registration, launcher entry
 
-**Phase 2: Next App** (Current Work)
-7. [ ] Determine next step: Field mapping or validation?
-8. [ ] Create corresponding app based on decision
+**Phase 2: Field Mapping & Validation** ✅ COMPLETE
+7. ✅ Created `deadlines_mapping_app.rs` - Combined validation + field mapping
+8. ✅ Entity detection (auto-detect cgk_deadline or nrq_deadline)
+9. ✅ Manual "Load Data" button to start entity data loading
+10. ✅ Parallel entity data loading with loading screen
+11. ✅ Excel structure validation against entity data
+12. ✅ Board meeting lookup with date matching
+13. ✅ Checkbox column validation
+14. ✅ Regular lookup field validation
+15. ✅ Whitespace normalization (non-breaking spaces, trimming)
+16. ✅ Warnings list display
 
 **Phase 3: Shared Logic** (As Needed)
 - [ ] `shared/config.rs` - Port DeadlineConfig + persistence (when needed for Setup app)
@@ -321,7 +338,7 @@ RUST_LOG=debug cargo run -- deadlines  # With logs → dynamics-cli.log
 
 ## Current Status Summary
 
-### ✅ Completed (Phase 1)
+### ✅ Completed (Phases 1-2)
 
 **Apps:**
 1. **DeadlinesEnvironmentSelectApp** - Lists environments, selects one, navigates to file select
@@ -333,6 +350,14 @@ RUST_LOG=debug cargo run -- deadlines  # With logs → dynamics-cli.log
    - Sheet selector dropdown
    - Back/Continue buttons
    - Proper scrolling with viewport height tracking
+3. **DeadlinesMappingApp** - Field mapping and validation:
+   - Auto-detect entity type from entity list
+   - Manual "Load Data" button for entity data
+   - Parallel entity data loading with loading screen
+   - Board meeting lookup with date parsing
+   - Excel structure validation (checkboxes, lookups, dates)
+   - Whitespace normalization (handles non-breaking spaces)
+   - Warnings list display
 
 **New Widgets:**
 - **FileBrowser** - Fully reusable file/directory browser
@@ -346,15 +371,15 @@ RUST_LOG=debug cargo run -- deadlines  # With logs → dynamics-cli.log
 - **ListState** - Now tracks viewport height for proper scroll calculations
 
 **Integration:**
-- AppIds added to `tui/command.rs`
+- AppIds added to `tui/command.rs` (EnvironmentSelect, FileSelect, Mapping)
 - Apps registered in `tui/multi_runtime.rs`
 - Launcher menu entry
 
 ### 🔄 Next Steps
 
-**Immediate:** Decide on next app in flow:
-- Option A: Field mapping (map Excel columns to Dynamics fields)
-- Option B: Validation (check Excel structure)
-- Option C: Something else based on requirements
+**Immediate (Phase 3):** Build next app in flow:
+- Option A: Transformation app (convert Excel rows to Dynamics entities)
+- Option B: Review app (show validation warnings per row)
+- Option C: Upload app (send data to Dynamics API)
 
-**Future:** Build remaining apps as needed (cache, transform, review)
+**Future:** Build remaining apps as needed (setup, review, upload)
