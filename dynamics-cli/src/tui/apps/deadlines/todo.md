@@ -2,22 +2,34 @@
 
 **Architecture**: Multi-app flow (like migration module). Each screen = separate App, navigation via `Command::NavigateTo(AppId)`.
 
-## App Flow (7 Separate Apps)
+## Current App Flow (Actual Implementation)
 
 ```
 DeadlinesEnvironmentSelectApp (select environment)
+    ↓ (passes environment_name)
+DeadlinesFileSelectApp (file browser → select file → load sheets → select sheet)
+    ↓ (will pass environment_name + file_path + sheet_name)
+[Next app TBD - probably field mapping or validation]
+```
+
+**Note**: Setup/entity mapping step has been deferred. We're starting with the file selection flow first, then will add entity mapping configuration later.
+
+## Original Planned Flow (For Reference)
+
+```
+DeadlinesEnvironmentSelectApp
     ↓
 DeadlinesSetupApp (one-time: prefix → entity discovery → mapping)
     ↓
-DeadlinesFileSelectApp (file browser → sheet selector)
+DeadlinesFileSelectApp
     ↓
-DeadlinesCacheCheckApp (cache freshness check + refresh progress)
+DeadlinesCacheCheckApp
     ↓
-DeadlinesValidationApp (structure validation + warnings popup)
+DeadlinesValidationApp
     ↓
-DeadlinesTransformApp (data transformation + progress)
+DeadlinesTransformApp
     ↓
-DeadlinesReviewApp (validation errors review)
+DeadlinesReviewApp
 ```
 
 ## 1. Core Structure (Must Create First)
@@ -50,15 +62,37 @@ Each app needs (pattern from migration apps):
 - [ ] `update()` function (pure function pattern)
 - [ ] `view()` function for rendering
 
-### App 1: Environment Selection
+### App 1: Environment Selection ✅ COMPLETE
 **File:** `deadlines_environment_select_app.rs`
-- [ ] List available environments from config
-- [ ] "Create New" option → launches setup app
-- [ ] Navigate to setup app (if not configured) or file select (if configured)
-- [ ] State: list of environments, selected index
+- ✅ List available environments from config
+- ✅ Select environment and navigate to File Select
+- ✅ State: list of environments, selected index
+- ✅ Passes `FileSelectParams { environment_name }` to next app
 
-### App 2: Setup (Entity Mapping)
-**File:** `deadlines_setup_app.rs`
+### App 2: File Selection ✅ COMPLETE
+**File:** `deadlines_file_select_app.rs`
+- ✅ File browser widget (custom reusable FileBrowser widget)
+- ✅ Filter .xlsx files (and directories)
+- ✅ Auto-select first Excel file on directory change
+- ✅ Load sheets from selected file (calamine, async)
+- ✅ Sheet selector with panel
+- ✅ Back button → returns to Environment Select
+- ✅ Continue button → proceeds with selected file + sheet
+- ✅ State: environment_name, file_browser_state, selected_file, available_sheets (Resource<Vec<String>>), sheet_selector
+- ✅ Viewport height tracking for proper scrolling
+- ✅ Navigate to: Environment Select (back) or Next App (continue)
+
+**New Widget Created:** `FileBrowser` (reusable)
+- ✅ `FileBrowserState` - manages directory navigation, filtering, selection
+- ✅ `FileBrowserEntry` - represents file/directory
+- ✅ `FileBrowserAction` - FileSelected, DirectoryEntered, DirectoryChanged
+- ✅ `FileBrowserEvent` - Navigate, Activate, GoUp, Refresh
+- ✅ Custom key handler (treats Enter as navigation, not activation)
+- ✅ Virtual scrolling with scrollbar
+- ✅ Filter support for custom file type filtering
+
+### App 3: Setup (Entity Mapping) - DEFERRED
+**File:** `deadlines_setup_app.rs` (not yet created)
 - [ ] Prefix input (text field)
 - [ ] Entity discovery (async API call → loading screen)
 - [ ] Entity mapping UI (logical types ↔ discovered entities)
@@ -67,14 +101,7 @@ Each app needs (pattern from migration apps):
 - [ ] State: prefix, discovered entities, mappings, validation status
 - [ ] Navigate to: File Select on success, back to Environment Select on cancel
 
-### App 3: File Selection
-**File:** `deadlines_file_select_app.rs`
-- [ ] Directory browser (reuse Tree widget)
-- [ ] Filter .xlsx files
-- [ ] Load sheets from selected file (calamine)
-- [ ] Sheet selector list
-- [ ] State: current path, dir entries, selected file, available sheets
-- [ ] Navigate to: Cache Check on sheet selection
+**Note**: This step has been deferred. We're building the file-to-mapping flow first.
 
 ### App 4: Cache Check
 **File:** `deadlines_cache_check_app.rs`
@@ -158,14 +185,20 @@ Each app needs (pattern from migration apps):
 - [ ] `parse_excel_file(path, sheet)` - Load Excel data
 - [ ] `SheetData` struct (rows + columns)
 
-## 4. Reusable Components (Already Exist)
+## 4. Reusable Components
 
-**From `tui/widgets/`:**
+**New Widgets Created:**
+- ✅ **FileBrowser** (`tui/widgets/file_browser.rs`) - Reusable file/directory browser
+  - Supports custom filtering
+  - Auto-selection on directory change
+  - Virtual scrolling with ListState
+  - Enter key treated as navigation (not activation)
+
+**From `tui/widgets/` (Already Exist):**
 - ✅ TextInputField (prefix input in Setup)
-- ✅ List (environment list, file browser, error list)
+- ✅ List (environment list, error list) - **Enhanced with viewport height tracking**
 - ✅ SelectField (sheet selection)
 - ✅ AutocompleteField (entity search in Setup)
-- ✅ Tree (directory navigation in FileSelect)
 - ✅ Scrollable (long lists)
 
 **From `tui/apps/screens/`:**
@@ -180,59 +213,65 @@ Each app needs (pattern from migration apps):
 ## 5. Integration (Add to TUI Runtime)
 
 ### AppId Enum (`tui/command.rs`)
-- [ ] Add `DeadlinesEnvironmentSelect` variant
-- [ ] Add `DeadlinesSetup` variant
-- [ ] Add `DeadlinesFileSelect` variant
+- ✅ Add `DeadlinesEnvironmentSelect` variant
+- ✅ Add `DeadlinesFileSelect` variant
+- [ ] Add `DeadlinesSetup` variant (deferred)
 - [ ] Add `DeadlinesCacheCheck` variant
 - [ ] Add `DeadlinesValidation` variant
 - [ ] Add `DeadlinesTransform` variant
 - [ ] Add `DeadlinesReview` variant
 
 ### Module Export (`tui/apps/mod.rs`)
-- [ ] Add `pub mod deadlines;`
-- [ ] Export app structs + state types
+- ✅ Add `pub mod deadlines;`
+- ✅ Export app structs + state types
 
 ### Runtime Registration (`tui/multi_runtime.rs`)
-- [ ] Register all 7 apps in `create_app_instance()` match
-- [ ] Wire up navigation flow
+- ✅ Register DeadlinesEnvironmentSelectApp
+- ✅ Register DeadlinesFileSelectApp
+- [ ] Register remaining apps as they're built
 
 ### App Launcher
-- [ ] Add "Deadlines" option to launcher menu
-- [ ] Entry point → DeadlinesEnvironmentSelectApp
+- ✅ Add "Deadlines" option to launcher menu
+- ✅ Entry point → DeadlinesEnvironmentSelectApp
+
+### Models (`models.rs`)
+- ✅ `FileSelectParams` - Passes environment_name to file select app
 
 ---
 
 ## Implementation Priority
 
-**Phase 1: Shared Foundation** (no UI dependencies)
-1. [ ] `models.rs` - Core types (params, results)
-2. [ ] `shared/config.rs` - Port DeadlineConfig + persistence
-3. [ ] `shared/excel.rs` - Port Excel parsing
-4. [ ] `shared/discovery.rs` - Port entity discovery
-5. [ ] `shared/validation/` - Port validation logic
-6. [ ] `shared/transformation/` - Port transformation logic
-7. [ ] `shared/cache/` - Port cache management
+**Phase 1: Foundation + First Apps** ✅ COMPLETE
+1. ✅ `models.rs` - Initial types (`FileSelectParams`)
+2. ✅ **FileBrowser widget** - Reusable file browser with filtering
+3. ✅ **List widget enhancement** - Viewport height tracking for proper scrolling
+4. ✅ `deadlines_environment_select_app.rs` - Environment selection
+5. ✅ `deadlines_file_select_app.rs` - File browser + sheet selector with buttons
+6. ✅ Integration - AppIds, runtime registration, launcher entry
 
-**Phase 2: Simple Apps First** (learn patterns)
-8. [ ] `deadlines_environment_select_app.rs` - List + navigation (like MigrationEnvironmentApp)
-9. [ ] `deadlines_file_select_app.rs` - File browser + sheet selector
+**Phase 2: Next App** (Current Work)
+7. [ ] Determine next step: Field mapping or validation?
+8. [ ] Create corresponding app based on decision
 
-**Phase 3: Complex Apps** (async operations)
-10. [ ] `deadlines_setup_app.rs` - Multi-step workflow + API calls
-11. [ ] `deadlines_cache_check_app.rs` - Progress tracking
-12. [ ] `deadlines_validation_app.rs` - Validation + modal
-13. [ ] `deadlines_transform_app.rs` - Heavy async processing
-14. [ ] `deadlines_review_app.rs` - Review UI + details panel
+**Phase 3: Shared Logic** (As Needed)
+- [ ] `shared/config.rs` - Port DeadlineConfig + persistence (when needed for Setup app)
+- [ ] `shared/excel.rs` - Port Excel parsing (when needed for validation/transformation)
+- [ ] `shared/discovery.rs` - Port entity discovery (when needed for Setup app)
+- [ ] `shared/validation/` - Port validation logic (when validation app is built)
+- [ ] `shared/transformation/` - Port transformation logic (when transform app is built)
+- [ ] `shared/cache/` - Port cache management (when cache check app is built)
 
-**Phase 4: Integration**
-15. [ ] Add AppIds to command.rs
-16. [ ] Register apps in runtime
-17. [ ] Add to launcher
-18. [ ] Manual testing + debug
+**Phase 4: Remaining Apps** (Future)
+- [ ] Field mapping app (or integrate into existing flow)
+- [ ] `deadlines_cache_check_app.rs` - Progress tracking
+- [ ] `deadlines_validation_app.rs` - Validation + modal
+- [ ] `deadlines_transform_app.rs` - Heavy async processing
+- [ ] `deadlines_review_app.rs` - Review UI + details panel
+- [ ] `deadlines_setup_app.rs` - Entity mapping setup (optional/admin feature)
 
 **Phase 5: Cleanup**
-19. [ ] Delete old `commands/deadlines/` directory (5545 lines!)
-20. [ ] Update documentation
+- [ ] Delete old `commands/deadlines/` directory (5545 lines!)
+- [ ] Update documentation
 
 ---
 
@@ -280,9 +319,42 @@ RUST_LOG=debug cargo run -- deadlines  # With logs → dynamics-cli.log
 
 ---
 
-## Start Here
+## Current Status Summary
 
-**Recommended first task:** Build shared foundation (Phase 1) before any apps.
-- Start with `models.rs` (define all param/result types)
-- Then `shared/config.rs` (port DeadlineConfig - needed by all apps)
-- Then `shared/excel.rs` (simplest logic, no dependencies)
+### ✅ Completed (Phase 1)
+
+**Apps:**
+1. **DeadlinesEnvironmentSelectApp** - Lists environments, selects one, navigates to file select
+2. **DeadlinesFileSelectApp** - Complete file + sheet selection with:
+   - FileBrowser widget for navigating directories
+   - Excel file filtering (.xlsx, .xls, .xlsm)
+   - Auto-selection of first Excel file
+   - Async sheet loading with calamine
+   - Sheet selector dropdown
+   - Back/Continue buttons
+   - Proper scrolling with viewport height tracking
+
+**New Widgets:**
+- **FileBrowser** - Fully reusable file/directory browser
+  - Custom filtering support
+  - Virtual scrolling
+  - Enter key as navigation
+  - Auto-selection helpers
+
+**Enhancements:**
+- **List widget** - Added `on_render` callback and viewport height tracking
+- **ListState** - Now tracks viewport height for proper scroll calculations
+
+**Integration:**
+- AppIds added to `tui/command.rs`
+- Apps registered in `tui/multi_runtime.rs`
+- Launcher menu entry
+
+### 🔄 Next Steps
+
+**Immediate:** Decide on next app in flow:
+- Option A: Field mapping (map Excel columns to Dynamics fields)
+- Option B: Validation (check Excel structure)
+- Option C: Something else based on requirements
+
+**Future:** Build remaining apps as needed (cache, transform, review)
