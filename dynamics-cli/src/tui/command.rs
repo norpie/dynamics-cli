@@ -111,6 +111,7 @@ pub enum AppId {
     DeadlinesEnvironmentSelect,
     DeadlinesFileSelect,
     DeadlinesMapping,
+    DeadlinesInspection,
 }
 
 impl<Msg> Command<Msg> {

@@ -10,6 +10,180 @@ use ratatui::style::{Style, Stylize};
 use calamine::{Reader, open_workbook, Xlsx};
 
 use super::field_mappings;
+use super::models::TransformedDeadline;
+
+/// Extract the primary ID field from a record
+fn extract_id_from_record(record: &serde_json::Value, entity_name: &str) -> Option<String> {
+    // Try common ID field patterns
+    let id_fields = vec![
+        format!("{}id", entity_name),  // e.g., cgk_deadlineid
+        "systemuserid".to_string(),    // Special case for systemuser
+        format!("{}_id", entity_name),
+    ];
+
+    for field in id_fields {
+        if let Some(id_value) = record.get(&field) {
+            if let Some(id_str) = id_value.as_str() {
+                return Some(id_str.to_string());
+            }
+        }
+    }
+
+    None
+}
+
+/// Resolve a lookup field to its GUID
+fn resolve_lookup(
+    cache: &HashMap<String, Vec<serde_json::Value>>,
+    board_meeting_lookup: &HashMap<chrono::NaiveDate, (String, String)>,
+    target_entity: &str,
+    cell_value: &str,
+    excel_column: &str,
+) -> Option<String> {
+    // Special case: Board meeting (date-based lookup)
+    if excel_column.to_lowercase().contains("raad") && excel_column.to_lowercase().contains("bestuur") {
+        if let Ok(date) = parse_excel_date(cell_value) {
+            return board_meeting_lookup.get(&date).map(|(id, _name)| id.clone());
+        }
+        return None;
+    }
+
+    // Regular name-based lookup
+    if let Some(records) = cache.get(target_entity) {
+        for record in records {
+            if let Some(name) = extract_name_from_record_with_entity(record, Some(target_entity)) {
+                if name.trim().to_lowercase() == cell_value.trim().to_lowercase() {
+                    // Extract the ID field from the record
+                    return extract_id_from_record(record, target_entity);
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Parse a time value and return NaiveTime
+fn parse_time(value: &str) -> Result<chrono::NaiveTime, String> {
+    // Try parsing as Excel time fraction (0.0 to 1.0)
+    if let Ok(fraction) = value.parse::<f64>() {
+        if (0.0..=1.0).contains(&fraction) {
+            let total_seconds = (fraction * 86400.0) as u32;
+            let hours = total_seconds / 3600;
+            let minutes = (total_seconds % 3600) / 60;
+            let seconds = total_seconds % 60;
+
+            return chrono::NaiveTime::from_hms_opt(hours, minutes, seconds)
+                .ok_or_else(|| "Invalid time components".to_string());
+        }
+    }
+
+    // Try parsing as time string (HH:MM or HH:MM:SS)
+    let formats = vec![
+        "%H:%M",
+        "%H:%M:%S",
+        "%I:%M %p",
+        "%I:%M:%S %p",
+    ];
+
+    for format in formats {
+        if let Ok(time) = chrono::NaiveTime::parse_from_str(value, format) {
+            return Ok(time);
+        }
+    }
+
+    Err("Could not parse as time".to_string())
+}
+
+/// Get checkbox relationship names for an entity type
+fn get_checkbox_relationship_names(entity_type: &str) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+
+    if entity_type == "cgk_deadline" {
+        map.insert("cgk_support".to_string(), "cgk_deadline_cgk_support".to_string());
+        map.insert("cgk_category".to_string(), "cgk_deadline_cgk_category".to_string());
+        map.insert("cgk_length".to_string(), "cgk_deadline_cgk_length".to_string());
+        map.insert("cgk_flemishshare".to_string(), "cgk_deadline_cgk_flemishshare".to_string());
+    } else if entity_type == "nrq_deadline" {
+        map.insert("nrq_support".to_string(), "nrq_deadline_nrq_support".to_string());
+        map.insert("nrq_category".to_string(), "nrq_deadline_nrq_category".to_string());
+        map.insert("nrq_subcategory".to_string(), "nrq_deadline_nrq_subcategory".to_string());
+        map.insert("nrq_flemishshare".to_string(), "nrq_deadline_nrq_flemishshare".to_string());
+    }
+
+    map
+}
+
+/// Find checkbox ID by matching header name against entity records
+fn find_checkbox_id(
+    cache: &HashMap<String, Vec<serde_json::Value>>,
+    entity_name: &str,
+    header: &str,
+) -> Option<String> {
+    if let Some(records) = cache.get(entity_name) {
+        for record in records {
+            if let Some(name) = extract_name_from_record_with_entity(record, Some(entity_name)) {
+                if name.trim().to_lowercase() == header.trim().to_lowercase() {
+                    return extract_id_from_record(record, entity_name);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Resolve checked checkbox values to their IDs and relationship names
+fn resolve_checkboxes(
+    cache: &HashMap<String, Vec<serde_json::Value>>,
+    entity_type: &str,
+    headers: &[String],
+    row: &[calamine::Data],
+    rvb_idx: usize,
+) -> HashMap<String, Vec<String>> {
+    let mut result: HashMap<String, Vec<String>> = HashMap::new();
+    let entity_prefix = if entity_type == "cgk_deadline" { "cgk_" } else { "nrq_" };
+
+    // Get relationship name mappings
+    let relationship_map = get_checkbox_relationship_names(entity_type);
+
+    // Checkbox entity types to check
+    let checkbox_entities = vec![
+        format!("{}support", entity_prefix),
+        format!("{}category", entity_prefix),
+        if entity_prefix == "cgk_" { "cgk_length".to_string() } else { "nrq_subcategory".to_string() },
+        format!("{}flemishshare", entity_prefix),
+    ];
+
+    // Process columns after RvB
+    for (col_idx, header) in headers.iter().enumerate().skip(rvb_idx + 1) {
+        // Skip empty headers and OPM column
+        if header.is_empty() || header.to_uppercase() == "OPM" {
+            continue;
+        }
+
+        if let Some(cell) = row.get(col_idx) {
+            let cell_value = cell.to_string().trim().to_lowercase();
+
+            // Check if checkbox is checked
+            if cell_value == "x" || cell_value == "1" || cell_value == "true" || cell_value == "yes" {
+                // Try to find matching entity record and extract its ID
+                for entity_name in &checkbox_entities {
+                    if let Some(id) = find_checkbox_id(cache, entity_name, header) {
+                        // Get the relationship name for this entity type
+                        if let Some(relationship_name) = relationship_map.get(entity_name) {
+                            result.entry(relationship_name.clone())
+                                .or_insert_with(Vec::new)
+                                .push(id);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    result
+}
 
 /// Fetch entity data from cache or API
 async fn fetch_entity_data(
@@ -193,10 +367,11 @@ fn parse_board_meeting_date(date_str: &str) -> Result<chrono::NaiveDate, String>
     Err(format!("Could not parse board meeting date: {}", date_str))
 }
 
-/// Process Excel file: find header row, identify checkbox columns, validate mappings
+/// Process Excel file: find header row, identify checkbox columns, transform rows
 fn process_excel_file(state: &mut State) -> Command<Msg> {
     state.excel_processed = true;
     state.warnings.clear();
+    state.transformed_records.clear();
 
     let file_path = state.file_path.clone();
     let sheet_name = state.sheet_name.clone();
@@ -284,7 +459,7 @@ fn process_excel_file(state: &mut State) -> Command<Msg> {
         }
     }
 
-    // Validate checkbox columns against entity data
+    // Validate checkbox columns against entity data (warnings only)
     for checkbox_col in &checkbox_columns {
         // Try to find matching entity records
         let mut found = false;
@@ -338,32 +513,50 @@ fn process_excel_file(state: &mut State) -> Command<Msg> {
     // Build board meeting lookup for efficient row processing
     build_board_meeting_lookup(state, &entity_type_owned);
 
-    // Now process data rows
+    // Now process data rows and build transformed records
     let data_rows = range.rows().skip(header_row_idx + 1);
 
     for (row_num, row) in data_rows.enumerate() {
         let excel_row_number = header_row_idx + 2 + row_num; // +2 because: +1 for header, +1 for 1-based indexing
-        process_row(state, &headers, row, excel_row_number, &entity_type_owned, &checkbox_columns);
+        let transformed = process_row(state, &headers, row, excel_row_number, &entity_type_owned);
+
+        // Add row-level warnings to global warnings list
+        for warning in &transformed.warnings {
+            state.warnings.push(Warning(format!("Row {}: {}", excel_row_number, warning)));
+        }
+
+        state.transformed_records.push(transformed);
     }
 
-    log::debug!("Excel processing complete. Total warnings: {}", state.warnings.len());
+    // Update summary stats
+    state.total_rows = state.transformed_records.len();
+    state.rows_with_warnings = state.transformed_records.iter()
+        .filter(|r| r.has_warnings())
+        .count();
+
+    log::debug!("Transformation complete. {} rows, {} with warnings",
+        state.total_rows, state.rows_with_warnings);
 
     Command::None
 }
 
-/// Process a single data row
+/// Process a single data row - now returns a TransformedDeadline
 fn process_row(
-    state: &mut State,
+    state: &State,
     headers: &[String],
     row: &[calamine::Data],
     row_number: usize,
     entity_type: &str,
-    checkbox_columns: &[String],
-) {
-    let entity_prefix = if entity_type == "cgk_deadline" { "cgk_" } else { "nrq_" };
+) -> TransformedDeadline {
+    let mut transformed = TransformedDeadline::new(row_number);
 
     // Get field mappings for this entity type
     let mappings = field_mappings::get_mappings_for_entity(entity_type);
+
+    // Determine field name prefixes
+    let date_field = if entity_type == "cgk_deadline" { "cgk_date" } else { "nrq_date" };
+    let time_field = if entity_type == "cgk_deadline" { "cgk_time" } else { "nrq_time" };
+    let commission_date_field = if entity_type == "cgk_deadline" { "cgk_commissiondate" } else { "nrq_commissiondate" };
 
     // Process each mapped field
     for mapping in mappings {
@@ -379,73 +572,61 @@ fn process_row(
 
                 match &mapping.field_type {
                     field_mappings::FieldType::Lookup { target_entity } => {
-                        // Special handling for Raad van Bestuur (board meeting)
-                        if mapping.excel_column.to_lowercase().contains("raad") &&
-                           mapping.excel_column.to_lowercase().contains("bestuur") {
-                            // Try to parse as date and use prebuilt lookup
-                            if let Ok(date) = parse_date_value(&cell_value).and_then(|_| {
-                                parse_excel_date(&cell_value)
-                            }) {
-                                // Use the prebuilt lookup map
-                                if !state.board_meeting_date_lookup.contains_key(&date) {
-                                    state.warnings.push(Warning(format!(
-                                        "Row {}: Board meeting for date '{}' ({}) not found",
-                                        row_number, cell_value, date.format("%-d/%-m/%Y")
-                                    )));
-                                }
-                            } else {
-                                state.warnings.push(Warning(format!(
-                                    "Row {}: Invalid date in '{}': '{}'",
-                                    row_number, mapping.excel_column, cell_value
-                                )));
-                            }
+                        // Resolve lookup to its GUID
+                        if let Some(id) = resolve_lookup(
+                            &state.entity_data_cache,
+                            &state.board_meeting_date_lookup,
+                            target_entity,
+                            &cell_value,
+                            &mapping.excel_column,
+                        ) {
+                            transformed.lookup_fields.insert(mapping.dynamics_field.clone(), id);
                         } else {
-                            // Regular lookup handling
-                            // Try to find matching record in entity data cache
-                            if let Some(records) = state.entity_data_cache.get(target_entity) {
-                                let found = records.iter().any(|record| {
-                                    if let Some(name) = extract_name_from_record_with_entity(record, Some(target_entity)) {
-                                        name.trim().to_lowercase() == cell_value.trim().to_lowercase()
-                                    }
-                                    else {
-                                        false
-                                    }
-                                });
-
-                                if !found {
-                                    state.warnings.push(Warning(format!(
-                                        "Row {}: Lookup '{}' not found in {} (value: '{}')",
-                                        row_number, mapping.excel_column, target_entity, cell_value
-                                    )));
-                                }
-                            } else {
-                                state.warnings.push(Warning(format!(
-                                    "Row {}: Entity data for {} not loaded",
-                                    row_number, target_entity
-                                )));
-                            }
+                            transformed.warnings.push(format!(
+                                "Lookup '{}' not found: '{}'",
+                                mapping.excel_column, cell_value
+                            ));
                         }
                     }
                     field_mappings::FieldType::Date => {
-                        // Try to parse as date
-                        if let Err(e) = parse_date_value(&cell_value) {
-                            state.warnings.push(Warning(format!(
-                                "Row {}: Invalid date in '{}': {} (value: '{}')",
-                                row_number, mapping.excel_column, e, cell_value
-                            )));
+                        // Parse date
+                        match parse_excel_date(&cell_value) {
+                            Ok(date) => {
+                                // Store in appropriate field
+                                if mapping.dynamics_field == date_field {
+                                    transformed.deadline_date = Some(date);
+                                } else if mapping.dynamics_field == commission_date_field {
+                                    transformed.commission_date = Some(date);
+                                }
+                            }
+                            Err(e) => {
+                                transformed.warnings.push(format!(
+                                    "Invalid date in '{}': {} (value: '{}')",
+                                    mapping.excel_column, e, cell_value
+                                ));
+                            }
                         }
                     }
                     field_mappings::FieldType::Time => {
-                        // Try to parse as time
-                        if let Err(e) = parse_time_value(&cell_value) {
-                            state.warnings.push(Warning(format!(
-                                "Row {}: Invalid time in '{}': {} (value: '{}')",
-                                row_number, mapping.excel_column, e, cell_value
-                            )));
+                        // Parse time (to be combined with deadline date)
+                        match parse_time(&cell_value) {
+                            Ok(time) => {
+                                transformed.deadline_time = Some(time);
+                            }
+                            Err(e) => {
+                                transformed.warnings.push(format!(
+                                    "Invalid time in '{}': {} (value: '{}')",
+                                    mapping.excel_column, e, cell_value
+                                ));
+                            }
                         }
                     }
                     field_mappings::FieldType::Direct => {
-                        // Direct fields don't need validation
+                        // Direct field - copy value as-is
+                        transformed.direct_fields.insert(
+                            mapping.dynamics_field.clone(),
+                            cell_value.clone()
+                        );
                     }
                     field_mappings::FieldType::Checkbox => {
                         // Checkboxes are handled separately below
@@ -461,53 +642,17 @@ fn process_row(
     );
 
     if let Some(rvb_idx) = rvb_idx {
-        for (col_idx, header) in headers.iter().enumerate().skip(rvb_idx + 1) {
-            // Skip OPM column
-            if header.to_uppercase() == "OPM" || header.is_empty() {
-                continue;
-            }
-
-            // Check if this checkbox column is checked (has an 'x' or similar)
-            if let Some(cell) = row.get(col_idx) {
-                let cell_value = cell.to_string().trim().to_lowercase();
-
-                // Consider 'x', 'X', '1', 'true', 'yes' as checked
-                if cell_value == "x" || cell_value == "1" || cell_value == "true" || cell_value == "yes" {
-                    // Verify we can find this checkbox value in entity data
-                    let checkbox_entity_names = vec![
-                        format!("{}support", entity_prefix),
-                        format!("{}category", entity_prefix),
-                        if entity_prefix == "cgk_" { "cgk_length".to_string() } else { "nrq_subcategory".to_string() },
-                        format!("{}flemishshare", entity_prefix),
-                    ];
-
-                    let mut found = false;
-                    for entity_name in checkbox_entity_names {
-                        if let Some(records) = state.entity_data_cache.get(&entity_name) {
-                            found = records.iter().any(|record| {
-                                if let Some(name) = extract_name_from_record_with_entity(record, Some(&entity_name)) {
-                                    name.to_lowercase() == header.to_lowercase()
-                                } else {
-                                    false
-                                }
-                            });
-
-                            if found {
-                                break;
-                            }
-                        }
-                    }
-
-                    if !found {
-                        state.warnings.push(Warning(format!(
-                            "Row {}: Checkbox '{}' is checked but value not found in entity data",
-                            row_number, header
-                        )));
-                    }
-                }
-            }
-        }
+        let checkbox_relationships = resolve_checkboxes(
+            &state.entity_data_cache,
+            entity_type,
+            headers,
+            row,
+            rvb_idx,
+        );
+        transformed.checkbox_relationships = checkbox_relationships;
     }
+
+    transformed
 }
 
 /// Parse a date value from Excel
@@ -551,32 +696,6 @@ fn parse_excel_date(value: &str) -> Result<chrono::NaiveDate, String> {
     }
 
     Err("Could not parse as date".to_string())
-}
-
-/// Parse a time value from Excel
-fn parse_time_value(value: &str) -> Result<(), String> {
-    // Try parsing as Excel time fraction (0.0 to 1.0)
-    if let Ok(fraction) = value.parse::<f64>() {
-        if (0.0..=1.0).contains(&fraction) {
-            return Ok(());
-        }
-    }
-
-    // Try parsing as time string (HH:MM or HH:MM:SS)
-    let formats = vec![
-        "%H:%M",
-        "%H:%M:%S",
-        "%I:%M %p",
-        "%I:%M:%S %p",
-    ];
-
-    for format in formats {
-        if chrono::NaiveTime::parse_from_str(value, format).is_ok() {
-            return Ok(());
-        }
-    }
-
-    Err("Could not parse as time".to_string())
 }
 
 /// Extract name field from a record (tries common name field patterns)
@@ -709,6 +828,9 @@ pub struct State {
     entity_data_cache: HashMap<String, Vec<serde_json::Value>>,
     board_meeting_date_lookup: HashMap<chrono::NaiveDate, (String, String)>, // date -> (id, name)
     excel_processed: bool,
+    transformed_records: Vec<TransformedDeadline>,
+    total_rows: usize,
+    rows_with_warnings: usize,
 }
 
 impl State {
@@ -729,6 +851,9 @@ impl State {
             entity_data_cache: HashMap::new(),
             board_meeting_date_lookup: HashMap::new(),
             excel_processed: false,
+            transformed_records: Vec::new(),
+            total_rows: 0,
+            rows_with_warnings: 0,
         }
     }
 }
@@ -904,8 +1029,16 @@ impl App for DeadlinesMappingApp {
                 },
             ),
             Msg::Continue => {
-                // TODO: Next app
-                panic!("Continue to next app - not implemented yet");
+                Command::start_app(
+                    AppId::DeadlinesInspection,
+                    super::models::InspectionParams {
+                        environment_name: state.environment_name.clone(),
+                        entity_type: state.detected_entity.clone()
+                            .or_else(|| state.manual_override.clone())
+                            .unwrap_or_default(),
+                        transformed_records: state.transformed_records.clone(),
+                    },
+                )
             }
         }
     }
