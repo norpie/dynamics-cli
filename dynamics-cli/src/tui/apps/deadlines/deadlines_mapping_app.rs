@@ -1,11 +1,13 @@
 use crossterm::event::KeyCode;
 use std::path::PathBuf;
+use std::collections::HashMap;
 use crate::tui::{App, AppId, Command, Element, Subscription, Theme, LayeredView, Resource};
 use crate::tui::element::LayoutConstraint::*;
 use crate::tui::widgets::{SelectField, SelectEvent, ListState};
 use crate::{col, spacer};
 use ratatui::text::{Line, Span};
 use ratatui::style::{Style, Stylize};
+use calamine::{Reader, open_workbook, Xlsx};
 
 use super::field_mappings;
 
@@ -54,6 +56,171 @@ async fn fetch_entity_data(
     let _ = config.set_entity_data_cache(environment_name, entity_name, &records).await;
 
     Ok(records)
+}
+
+/// Process Excel file: find header row, identify checkbox columns, validate mappings
+fn process_excel_file(state: &mut State) -> Command<Msg> {
+    state.excel_processed = true;
+    state.warnings.clear();
+
+    let file_path = state.file_path.clone();
+    let sheet_name = state.sheet_name.clone();
+
+    // Open the Excel file
+    let mut workbook: Xlsx<_> = match open_workbook(&file_path) {
+        Ok(wb) => wb,
+        Err(e) => {
+            state.warnings.push(Warning(format!("Failed to open Excel file: {}", e)));
+            return Command::None;
+        }
+    };
+
+    // Get the specified sheet
+    let range = match workbook.worksheet_range(&sheet_name) {
+        Ok(range) => range,
+        Err(e) => {
+            state.warnings.push(Warning(format!("Failed to read sheet '{}': {}", sheet_name, e)));
+            return Command::None;
+        }
+    };
+
+    // Find header row by looking for "Domein*" in first column
+    let mut header_row_idx = None;
+    let mut headers = Vec::new();
+
+    for (row_idx, row) in range.rows().enumerate() {
+        if let Some(first_cell) = row.first() {
+            let cell_str = first_cell.to_string();
+            if cell_str.contains("Domein") {
+                header_row_idx = Some(row_idx);
+                headers = row.iter().map(|cell| cell.to_string()).collect();
+                break;
+            }
+        }
+    }
+
+    if header_row_idx.is_none() {
+        state.warnings.push(Warning("Could not find header row (looking for 'Domein*' in first column)".to_string()));
+        return Command::None;
+    }
+
+    let header_row_idx = header_row_idx.unwrap();
+    log::debug!("Found header row at index {}", header_row_idx);
+    log::debug!("Headers: {:?}", headers);
+
+    // Find "Raad van Bestuur" column index
+    let rvb_idx = headers.iter().position(|h| h.to_lowercase().contains("raad") && h.to_lowercase().contains("bestuur"));
+
+    if rvb_idx.is_none() {
+        state.warnings.push(Warning("Could not find 'Raad van Bestuur' column".to_string()));
+        return Command::None;
+    }
+
+    let rvb_idx = rvb_idx.unwrap();
+    log::debug!("Found 'Raad van Bestuur' at column index {}", rvb_idx);
+
+    // All columns after RvB are checkbox columns, except "OPM"
+    let checkbox_columns: Vec<String> = headers.iter()
+        .skip(rvb_idx + 1)
+        .filter(|h| !h.is_empty() && h.to_uppercase() != "OPM")
+        .map(|h| h.to_string())
+        .collect();
+
+    log::debug!("Checkbox columns: {:?}", checkbox_columns);
+
+    // Get the entity type to determine which entity prefix to use
+    let entity_type = state.detected_entity.as_ref()
+        .or(state.manual_override.as_ref());
+
+    if entity_type.is_none() {
+        state.warnings.push(Warning("No entity type selected".to_string()));
+        return Command::None;
+    }
+
+    let entity_type = entity_type.unwrap();
+    let entity_prefix = if entity_type == "cgk_deadline" { "cgk_" } else { "nrq_" };
+
+    // Debug: log what's in the entity data cache
+    log::debug!("Entity data cache keys: {:?}", state.entity_data_cache.keys().collect::<Vec<_>>());
+    for (entity_name, records) in &state.entity_data_cache {
+        log::debug!("Entity '{}' has {} records", entity_name, records.len());
+        if let Some(first_record) = records.first() {
+            log::debug!("First record keys: {:?}", first_record.as_object().map(|o| o.keys().collect::<Vec<_>>()));
+        }
+    }
+
+    // Validate checkbox columns against entity data
+    for checkbox_col in &checkbox_columns {
+        // Try to find matching entity records
+        let mut found = false;
+
+        // Check all checkbox entity types for this environment
+        let checkbox_entity_names = vec![
+            format!("{}support", entity_prefix),
+            format!("{}category", entity_prefix),
+            if entity_prefix == "cgk_" { "cgk_length".to_string() } else { "nrq_subcategory".to_string() },
+            format!("{}flemishshare", entity_prefix),
+        ];
+
+        log::debug!("Checking checkbox column '{}' against entities: {:?}", checkbox_col, checkbox_entity_names);
+
+        for entity_name in checkbox_entity_names {
+            if let Some(records) = state.entity_data_cache.get(&entity_name) {
+                log::debug!("Checking {} records in entity '{}'", records.len(), entity_name);
+                // Check if any record's name matches the checkbox column header
+                for (idx, record) in records.iter().enumerate() {
+                    if let Some(name_value) = extract_name_from_record(record) {
+                        if idx < 3 {
+                            log::debug!("Record {} name: '{}'", idx, name_value);
+                        }
+                        if name_value.to_lowercase() == checkbox_col.to_lowercase() {
+                            found = true;
+                            log::debug!("✓ Matched checkbox column '{}' to entity '{}'", checkbox_col, entity_name);
+                            break;
+                        }
+                    } else if idx < 3 {
+                        log::debug!("Record {} has no name field, record: {:?}", idx, record);
+                    }
+                }
+                if found {
+                    break;
+                }
+            } else {
+                log::debug!("Entity '{}' not found in cache", entity_name);
+            }
+        }
+
+        if !found {
+            state.warnings.push(Warning(format!("Checkbox column '{}' not found in entity data", checkbox_col)));
+        }
+    }
+
+    log::debug!("Excel processing complete. Found {} warnings", state.warnings.len());
+
+    Command::None
+}
+
+/// Extract name field from a record (tries common name field patterns)
+fn extract_name_from_record(record: &serde_json::Value) -> Option<String> {
+    // Try common name field patterns
+    let name_fields = vec![
+        "name",
+        "cgk_name",
+        "nrq_name",
+        "fullname",
+        "cgk_fullname",
+        "nrq_fullname",
+    ];
+
+    for field in name_fields {
+        if let Some(value) = record.get(field) {
+            if let Some(s) = value.as_str() {
+                return Some(s.to_string());
+            }
+        }
+    }
+
+    None
 }
 
 /// Start loading entity data in parallel
@@ -139,6 +306,8 @@ pub struct State {
     entity_data_loading: bool,
     entity_data_loaded_count: usize,
     entity_data_total_count: usize,
+    entity_data_cache: HashMap<String, Vec<serde_json::Value>>,
+    excel_processed: bool,
 }
 
 impl State {
@@ -156,6 +325,8 @@ impl State {
             entity_data_loading: false,
             entity_data_loaded_count: 0,
             entity_data_total_count: 0,
+            entity_data_cache: HashMap::new(),
+            excel_processed: false,
         }
     }
 }
@@ -282,6 +453,17 @@ impl App for DeadlinesMappingApp {
                 match result {
                     Ok(records) => {
                         log::debug!("Loaded {} records for task {}", records.len(), task_index);
+
+                        // Store the entity data in cache
+                        let entity_type = state.detected_entity.as_ref()
+                            .or(state.manual_override.as_ref());
+                        if let Some(entity_type) = entity_type {
+                            let cache_entities = field_mappings::get_cache_entities(entity_type);
+                            if task_index < cache_entities.len() {
+                                let entity_name = cache_entities[task_index].clone();
+                                state.entity_data_cache.insert(entity_name, records);
+                            }
+                        }
                     }
                     Err(err) => {
                         state.warnings.push(Warning(format!("Failed to load entity data: {}", err)));
@@ -291,6 +473,11 @@ impl App for DeadlinesMappingApp {
                 // Check if all tasks completed
                 if state.entity_data_loaded_count >= state.entity_data_total_count {
                     state.entity_data_loading = false;
+
+                    // Process Excel file now that we have all entity data
+                    if !state.excel_processed {
+                        return process_excel_file(state);
+                    }
                 }
 
                 Command::None
