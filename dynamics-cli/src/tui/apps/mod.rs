@@ -8,4 +8,4 @@ pub mod deadlines;
 pub use app_launcher::AppLauncher;
 pub use screens::{LoadingScreen, ErrorScreen};
 pub use settings_app::SettingsApp;
-pub use deadlines::{DeadlinesEnvironmentSelectApp, DeadlinesFileSelectApp};
+pub use deadlines::{DeadlinesEnvironmentSelectApp, DeadlinesFileSelectApp, DeadlinesMappingApp};

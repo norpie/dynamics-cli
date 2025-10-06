@@ -150,10 +150,14 @@ impl App for DeadlinesFileSelectApp {
             Msg::ConfirmSelection => {
                 if let (Some(file_path), Resource::Success(_sheets)) = (&state.selected_file, &state.available_sheets) {
                     if let Some(sheet_name) = state.sheet_selector.value() {
-                        panic!("Environment: {} - File: {} - Sheet: {}",
-                            state.environment_name,
-                            file_path.display(),
-                            sheet_name);
+                        return Command::start_app(
+                            AppId::DeadlinesMapping,
+                            super::models::MappingParams {
+                                environment_name: state.environment_name.clone(),
+                                file_path: file_path.clone(),
+                                sheet_name: sheet_name.to_string(),
+                            }
+                        );
                     }
                 }
                 Command::None

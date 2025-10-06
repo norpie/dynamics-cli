@@ -210,12 +210,12 @@ pub fn build_mapping_lookup(mappings: Vec<FieldMapping>) -> HashMap<String, Fiel
 }
 
 /// Detect which entity type based on environment entities
-/// Returns either "cgk_deadlines" or "nrq_deadlines" if found, None otherwise
+/// Returns either "cgk_deadline" or "nrq_deadline" if found, None otherwise
 pub fn detect_deadline_entity(entities: &[String]) -> Option<String> {
-    if entities.iter().any(|e| e == "cgk_deadlines") {
-        Some("cgk_deadlines".to_string())
-    } else if entities.iter().any(|e| e == "nrq_deadlines") {
-        Some("nrq_deadlines".to_string())
+    if entities.iter().any(|e| e == "cgk_deadline") {
+        Some("cgk_deadline".to_string())
+    } else if entities.iter().any(|e| e == "nrq_deadline") {
+        Some("nrq_deadline".to_string())
     } else {
         None
     }
@@ -224,8 +224,8 @@ pub fn detect_deadline_entity(entities: &[String]) -> Option<String> {
 /// Get mappings based on detected entity type
 pub fn get_mappings_for_entity(entity_name: &str) -> Vec<FieldMapping> {
     match entity_name {
-        "cgk_deadlines" => get_cgk_mappings(),
-        "nrq_deadlines" => get_nrq_mappings(),
+        "cgk_deadline" => get_cgk_mappings(),
+        "nrq_deadline" => get_nrq_mappings(),
         _ => vec![],
     }
 }
@@ -236,14 +236,14 @@ mod tests {
 
     #[test]
     fn test_detect_cgk_entity() {
-        let entities = vec!["cgk_pillar".to_string(), "cgk_deadlines".to_string()];
-        assert_eq!(detect_deadline_entity(&entities), Some("cgk_deadlines".to_string()));
+        let entities = vec!["cgk_pillar".to_string(), "cgk_deadline".to_string()];
+        assert_eq!(detect_deadline_entity(&entities), Some("cgk_deadline".to_string()));
     }
 
     #[test]
     fn test_detect_nrq_entity() {
-        let entities = vec!["nrq_domain".to_string(), "nrq_deadlines".to_string()];
-        assert_eq!(detect_deadline_entity(&entities), Some("nrq_deadlines".to_string()));
+        let entities = vec!["nrq_domain".to_string(), "nrq_deadline".to_string()];
+        assert_eq!(detect_deadline_entity(&entities), Some("nrq_deadline".to_string()));
     }
 
     #[test]
