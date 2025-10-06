@@ -12,6 +12,7 @@ pub struct ListBuilder<Msg> {
     pub(crate) on_navigate: Option<fn(crossterm::event::KeyCode) -> Msg>,
     pub(crate) on_focus: Option<Msg>,
     pub(crate) on_blur: Option<Msg>,
+    pub(crate) on_render: Option<fn(usize) -> Msg>,
 }
 
 impl<Msg> ListBuilder<Msg> {
@@ -40,6 +41,11 @@ impl<Msg> ListBuilder<Msg> {
         self
     }
 
+    pub fn on_render(mut self, msg: fn(usize) -> Msg) -> Self {
+        self.on_render = Some(msg);
+        self
+    }
+
     pub fn build(self) -> Element<Msg> {
         Element::List {
             id: self.id,
@@ -51,6 +57,7 @@ impl<Msg> ListBuilder<Msg> {
             on_navigate: self.on_navigate,
             on_focus: self.on_focus,
             on_blur: self.on_blur,
+            on_render: self.on_render,
         }
     }
 }

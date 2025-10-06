@@ -332,8 +332,9 @@ impl Renderer {
                 on_navigate,
                 on_focus,
                 on_blur,
+                on_render,
             } => {
-                render_list(frame, theme, registry, focus_registry, dropdown_registry, focused_id, id, items, *selected, *scroll_offset, on_select, on_activate, on_navigate, on_focus, on_blur, area, inside_panel, Self::render_element);
+                render_list(frame, theme, registry, focus_registry, dropdown_registry, focused_id, id, items, *selected, *scroll_offset, on_select, on_activate, on_navigate, on_focus, on_blur, on_render, area, inside_panel, Self::render_element);
             }
 
             Element::TextInput {
@@ -413,6 +414,25 @@ impl Renderer {
                 on_blur,
             } => {
                 render_autocomplete(frame, theme, registry, focus_registry, dropdown_registry, focused_id, id, &[], current_input, placeholder, *is_open, filtered_options, *highlight, on_input, on_select, on_navigate, on_event, on_focus, on_blur, area, inside_panel);
+            }
+
+            Element::FileBrowser {
+                id,
+                current_path: _,
+                entries,
+                selected,
+                scroll_offset,
+                on_file_selected: _,
+                on_directory_changed: _,
+                on_directory_entered: _,
+                on_navigate,
+                on_event: _,
+                on_focus,
+                on_blur,
+                on_render,
+            } => {
+                // Render with file browser key handler (Enter is treated as navigation)
+                render_file_browser(frame, theme, registry, focus_registry, dropdown_registry, focused_id, id, entries, *selected, *scroll_offset, on_navigate, on_focus, on_blur, on_render, area, inside_panel, Self::render_element);
             }
 
             Element::Stack { layers } => {
@@ -517,6 +537,11 @@ impl Renderer {
             }
             Element::Select { .. } => (max_width.min(30), 3),
             Element::Autocomplete { .. } => (max_width.min(40), 3),
+            Element::FileBrowser { entries, .. } => {
+                // Like list - width based on content, height based on item count
+                let entry_count = entries.len() as u16;
+                (max_width, entry_count.min(max_height))
+            }
             Element::Stack { layers } => {
                 // Stack size is the max of all layers
                 let mut max_w = 0u16;
@@ -578,6 +603,10 @@ impl Renderer {
             Element::Autocomplete { .. } => {
                 // Autocomplete: fixed height (3 lines including borders), full width
                 (container.width, 3)
+            }
+            Element::FileBrowser { entries, .. } => {
+                // Like list - full width, height based on entry count (up to container height)
+                (container.width, (entries.len() as u16).min(container.height))
             }
             _ => {
                 // Default: 50% of container

@@ -21,6 +21,7 @@ pub struct ListState {
     scroll_offset: usize,
     scroll_off: usize, // Rows from edge before scrolling (like vim scrolloff)
     wrap_around: bool, // Wrap to bottom/top when reaching edges
+    viewport_height: Option<usize>, // Last known viewport height from renderer
 }
 
 impl Default for ListState {
@@ -37,6 +38,7 @@ impl ListState {
             scroll_offset: 0,
             scroll_off: 3,
             wrap_around: true,
+            viewport_height: None,
         }
     }
 
@@ -47,7 +49,13 @@ impl ListState {
             scroll_offset: 0,
             scroll_off: 3,
             wrap_around: true,
+            viewport_height: None,
         }
+    }
+
+    /// Set the viewport height (called by renderer with actual area height)
+    pub fn set_viewport_height(&mut self, height: usize) {
+        self.viewport_height = Some(height);
     }
 
     /// Set the scroll-off distance (rows from edge before scrolling)
@@ -78,26 +86,30 @@ impl ListState {
     }
 
     /// Handle navigation key, returns true if handled
+    /// Uses stored viewport_height if available, otherwise falls back to provided visible_height
     pub fn handle_key(&mut self, key: KeyCode, item_count: usize, visible_height: usize) -> bool {
         if item_count == 0 {
             return false;
         }
 
+        // Use stored viewport_height if available, otherwise use provided value
+        let height = self.viewport_height.unwrap_or(visible_height);
+
         match key {
             KeyCode::Up => {
-                self.move_up(item_count);
+                self.move_up(item_count, height);
                 true
             }
             KeyCode::Down => {
-                self.move_down(item_count);
+                self.move_down(item_count, height);
                 true
             }
             KeyCode::PageUp => {
-                self.page_up(visible_height);
+                self.page_up(height);
                 true
             }
             KeyCode::PageDown => {
-                self.page_down(item_count, visible_height);
+                self.page_down(item_count, height);
                 true
             }
             KeyCode::Home => {
@@ -105,14 +117,14 @@ impl ListState {
                 true
             }
             KeyCode::End => {
-                self.select_last(item_count);
+                self.select_last(item_count, height);
                 true
             }
             _ => false,
         }
     }
 
-    fn move_up(&mut self, item_count: usize) {
+    fn move_up(&mut self, item_count: usize, visible_height: usize) {
         if item_count == 0 {
             return;
         }
@@ -121,12 +133,14 @@ impl ListState {
             if sel > 0 {
                 self.selected = Some(sel - 1);
                 // Adjust scroll if needed (scrolloff logic)
-                if (sel as isize - self.scroll_offset as isize) <= self.scroll_off as isize {
+                if sel > 0 && (sel - 1) < self.scroll_offset + self.scroll_off {
                     self.scroll_offset = self.scroll_offset.saturating_sub(1);
                 }
             } else if self.wrap_around {
                 // At top, wrap to bottom
                 self.selected = Some(item_count - 1);
+                // Scroll to bottom to show last item
+                self.scroll_offset = item_count.saturating_sub(visible_height);
             }
         } else {
             // No selection, select first
@@ -134,7 +148,7 @@ impl ListState {
         }
     }
 
-    fn move_down(&mut self, item_count: usize) {
+    fn move_down(&mut self, item_count: usize, visible_height: usize) {
         if item_count == 0 {
             return;
         }
@@ -143,8 +157,10 @@ impl ListState {
             if sel < item_count - 1 {
                 self.selected = Some(sel + 1);
                 // Adjust scroll if needed (scrolloff logic)
-                // We need visible_height for this, but we'll handle it in the renderer
-                // For now, just update selection
+                if sel + 1 >= self.scroll_offset + visible_height - self.scroll_off {
+                    let max_scroll = item_count.saturating_sub(visible_height);
+                    self.scroll_offset = (self.scroll_offset + 1).min(max_scroll);
+                }
             } else if self.wrap_around {
                 // At bottom, wrap to top
                 self.selected = Some(0);
@@ -181,9 +197,11 @@ impl ListState {
         self.scroll_offset = 0;
     }
 
-    fn select_last(&mut self, item_count: usize) {
+    fn select_last(&mut self, item_count: usize, visible_height: usize) {
         if item_count > 0 {
             self.selected = Some(item_count - 1);
+            // Scroll to show last item
+            self.scroll_offset = item_count.saturating_sub(visible_height);
         }
     }
 

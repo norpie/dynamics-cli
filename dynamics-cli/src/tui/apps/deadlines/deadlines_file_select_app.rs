@@ -1,6 +1,7 @@
 use crossterm::event::KeyCode;
-use crate::tui::{App, AppId, Command, Element, Subscription, Theme, FocusId, LayeredView};
-use crate::tui::renderer::LayeredView as LV;
+use std::path::PathBuf;
+use crate::tui::{App, AppId, Command, Element, Subscription, Theme, FocusId, LayeredView, Resource};
+use crate::tui::widgets::{FileBrowserState, FileBrowserEntry, FileBrowserEvent, SelectField, SelectEvent};
 use ratatui::text::{Line, Span};
 use ratatui::style::{Style, Stylize};
 
@@ -9,12 +10,29 @@ pub struct DeadlinesFileSelectApp;
 #[derive(Clone)]
 pub struct State {
     environment_name: String,
+    file_browser_state: FileBrowserState,
+    selected_file: Option<PathBuf>,
+    available_sheets: Resource<Vec<String>>,
+    sheet_selector: SelectField,
 }
 
 impl State {
     fn new(environment_name: String) -> Self {
+        let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
+        let mut browser_state = FileBrowserState::new(current_dir);
+
+        // Set filter to show only Excel files and directories
+        browser_state.set_filter(is_excel_or_dir);
+
+        // Auto-select first Excel file
+        browser_state.select_first_matching(is_excel_file);
+
         Self {
             environment_name,
+            file_browser_state: browser_state,
+            selected_file: None,
+            available_sheets: Resource::NotAsked,
+            sheet_selector: SelectField::new(),
         }
     }
 }
@@ -27,7 +45,14 @@ impl Default for State {
 
 #[derive(Clone)]
 pub enum Msg {
+    FileSelected(PathBuf),
+    SheetsLoaded(Result<Vec<String>, String>),
+    DirectoryEntered(PathBuf),
+    Navigate(KeyCode),
+    SheetSelectorEvent(SelectEvent),
+    ConfirmSelection,
     Back,
+    SetViewportHeight(usize),
 }
 
 impl crate::tui::AppState for State {}
@@ -39,38 +64,199 @@ impl App for DeadlinesFileSelectApp {
 
     fn init(params: Self::InitParams) -> (State, Command<Msg>) {
         let state = State::new(params.environment_name);
-        (state, Command::None)
+        (state, Command::set_focus(FocusId::new("file-browser")))
     }
 
     fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         match msg {
+            Msg::FileSelected(path) => {
+                state.selected_file = Some(path.clone());
+                state.available_sheets = Resource::Loading;
+
+                // Load Excel sheets asynchronously
+                Command::perform(
+                    async move {
+                        load_excel_sheets(&path).await
+                    },
+                    Msg::SheetsLoaded
+                )
+            }
+            Msg::SheetsLoaded(Ok(sheets)) => {
+                if !sheets.is_empty() {
+                    state.sheet_selector.state.update_option_count(sheets.len());
+                    state.sheet_selector.state.select(0);
+                    state.sheet_selector.set_value(Some(sheets[0].clone()));
+                    state.available_sheets = Resource::Success(sheets);
+                    Command::set_focus(FocusId::new("sheet-selector"))
+                } else {
+                    state.available_sheets = Resource::Failure("No sheets found in file".to_string());
+                    Command::None
+                }
+            }
+            Msg::SheetsLoaded(Err(err)) => {
+                state.available_sheets = Resource::Failure(err);
+                Command::None
+            }
+            Msg::DirectoryEntered(_path) => {
+                // Auto-select first Excel file after entering directory
+                state.file_browser_state.select_first_matching(is_excel_file);
+                Command::None
+            }
+            Msg::Navigate(key) => {
+                match key {
+                    KeyCode::Up => {
+                        state.file_browser_state.navigate_up();
+                        Command::None
+                    }
+                    KeyCode::Down => {
+                        state.file_browser_state.navigate_down();
+                        Command::None
+                    }
+                    KeyCode::PageUp | KeyCode::PageDown | KeyCode::Home | KeyCode::End => {
+                        state.file_browser_state.handle_navigation_key(key);
+                        Command::None
+                    }
+                    KeyCode::Enter => {
+                        if let Some(action) = state.file_browser_state.handle_event(FileBrowserEvent::Activate) {
+                            match action {
+                                crate::tui::widgets::FileBrowserAction::FileSelected(path) => {
+                                    Command::batch(vec![Command::perform(
+                                        async move { path },
+                                        Msg::FileSelected
+                                    )])
+                                }
+                                crate::tui::widgets::FileBrowserAction::DirectoryEntered(path) => {
+                                    Command::batch(vec![Command::perform(
+                                        async move { path },
+                                        Msg::DirectoryEntered
+                                    )])
+                                }
+                                _ => Command::None
+                            }
+                        } else {
+                            Command::None
+                        }
+                    }
+                    _ => Command::None
+                }
+            }
+            Msg::SheetSelectorEvent(event) => {
+                if let Resource::Success(ref sheets) = state.available_sheets {
+                    state.sheet_selector.handle_event(event, sheets)
+                } else {
+                    Command::None
+                }
+            }
+            Msg::ConfirmSelection => {
+                if let (Some(file_path), Resource::Success(_sheets)) = (&state.selected_file, &state.available_sheets) {
+                    if let Some(sheet_name) = state.sheet_selector.value() {
+                        panic!("Environment: {} - File: {} - Sheet: {}",
+                            state.environment_name,
+                            file_path.display(),
+                            sheet_name);
+                    }
+                }
+                Command::None
+            }
             Msg::Back => {
                 Command::navigate_to(AppId::DeadlinesEnvironmentSelect)
+            }
+            Msg::SetViewportHeight(height) => {
+                let item_count = state.file_browser_state.entries().len();
+                let list_state = state.file_browser_state.list_state_mut();
+                list_state.set_viewport_height(height);
+                list_state.update_scroll(height, item_count);
+                Command::None
             }
         }
     }
 
     fn view(state: &mut State, theme: &Theme) -> LayeredView<Msg> {
-        let content = Element::styled_text(
-            Line::from(vec![
-                Span::styled(
-                    format!("File selector for environment: {}", state.environment_name),
-                    Style::default().fg(theme.text)
-                ),
-            ])
-        ).build();
+        use crate::tui::element::LayoutConstraint::*;
+        use crate::{col, row, spacer};
 
-        let panel = Element::panel(content)
-            .title("Select Excel File")
+        // File browser panel
+        let browser = Element::file_browser("file-browser", &state.file_browser_state, theme)
+            .on_file_selected(Msg::FileSelected)
+            .on_directory_entered(Msg::DirectoryEntered)
+            .on_navigate(Msg::Navigate)
+            .on_render(Msg::SetViewportHeight)
             .build();
 
-        LayeredView::new(panel)
+        let browser_panel = Element::panel(browser)
+            .title(format!("Select Excel File - {}", state.file_browser_state.current_path().display()))
+            .build();
+
+        // Sheet selector panel
+        let sheet_content = match &state.available_sheets {
+            Resource::NotAsked => {
+                Element::styled_text(Line::from(vec![
+                    Span::styled("Select an Excel file to view available sheets", Style::default().fg(theme.subtext0)),
+                ])).build()
+            }
+            Resource::Loading => {
+                Element::styled_text(Line::from(vec![
+                    Span::styled("Loading sheets...", Style::default().fg(theme.blue)),
+                ])).build()
+            }
+            Resource::Failure(err) => {
+                Element::styled_text(Line::from(vec![
+                    Span::styled(format!("Error: {}", err), Style::default().fg(theme.red)),
+                ])).build()
+            }
+            Resource::Success(sheets) => {
+                let selector = Element::select("sheet-selector", sheets.clone(), &mut state.sheet_selector.state)
+                    .on_event(Msg::SheetSelectorEvent)
+                    .build();
+
+                let selector_panel = Element::panel(selector)
+                    .title("Sheet")
+                    .build();
+
+                col![
+                    Element::styled_text(Line::from(vec![
+                        Span::styled("Selected file: ", Style::default().fg(theme.subtext0)),
+                        Span::styled(
+                            state.selected_file.as_ref().map(|p| p.file_name().unwrap().to_string_lossy().to_string()).unwrap_or_default(),
+                            Style::default().fg(theme.lavender)
+                        ),
+                    ])).build(),
+                    spacer!(),
+                    selector_panel,
+                    spacer!(),
+                    row![
+                        Element::button("back-button", "Back")
+                            .on_press(Msg::Back)
+                            .build(),
+                        spacer!(),
+                        Element::button("continue-button", "Continue")
+                            .on_press(Msg::ConfirmSelection)
+                            .build(),
+                    ]
+                ]
+            }
+        };
+
+        let sheet_panel = Element::panel(sheet_content)
+            .title("Sheet Selection")
+            .height(9)
+            .build();
+
+        // Main layout
+        let main_content = col![
+            browser_panel,
+            sheet_panel,
+        ];
+
+        let outer_panel = Element::panel(main_content)
+            .title("Deadlines - File and Sheet Selection")
+            .build();
+
+        LayeredView::new(outer_panel)
     }
 
     fn subscriptions(_state: &State) -> Vec<Subscription<Msg>> {
-        vec![
-            Subscription::keyboard(KeyCode::Esc, "Go back", Msg::Back),
-        ]
+        vec![]
     }
 
     fn title() -> &'static str {
@@ -82,5 +268,35 @@ impl App for DeadlinesFileSelectApp {
             Span::styled("Environment: ", Style::default().fg(theme.subtext0)),
             Span::styled(state.environment_name.clone(), Style::default().fg(theme.lavender)),
         ]))
+    }
+}
+
+/// Filter to show only Excel files and directories
+fn is_excel_or_dir(entry: &FileBrowserEntry) -> bool {
+    entry.is_dir || is_excel_file(entry)
+}
+
+/// Check if entry is an Excel file
+fn is_excel_file(entry: &FileBrowserEntry) -> bool {
+    if entry.is_dir {
+        return false;
+    }
+    let name_lower = entry.name.to_lowercase();
+    name_lower.ends_with(".xlsx") || name_lower.ends_with(".xls") || name_lower.ends_with(".xlsm")
+}
+
+/// Load sheet names from an Excel file
+async fn load_excel_sheets(path: &PathBuf) -> Result<Vec<String>, String> {
+    use calamine::{Reader, open_workbook, Xlsx};
+
+    let workbook: Xlsx<_> = open_workbook(path)
+        .map_err(|e| format!("Failed to open Excel file: {}", e))?;
+
+    let sheets = workbook.sheet_names().to_vec();
+
+    if sheets.is_empty() {
+        Err("No sheets found in workbook".to_string())
+    } else {
+        Ok(sheets)
     }
 }

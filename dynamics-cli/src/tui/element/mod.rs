@@ -145,6 +145,7 @@ pub enum Element<Msg> {
         on_navigate: Option<fn(crossterm::event::KeyCode) -> Msg>,
         on_focus: Option<Msg>,
         on_blur: Option<Msg>,
+        on_render: Option<fn(usize) -> Msg>,  // Called with actual viewport height from renderer
     },
 
     /// Single-line text input
@@ -219,6 +220,23 @@ pub enum Element<Msg> {
         on_event: Option<fn(crate::tui::widgets::AutocompleteEvent) -> Msg>,  // Unified event handler
         on_focus: Option<Msg>,
         on_blur: Option<Msg>,
+    },
+
+    /// File browser widget
+    FileBrowser {
+        id: FocusId,
+        current_path: std::path::PathBuf,
+        entries: Vec<Element<Msg>>,         // Pre-rendered entries as list items
+        selected: Option<usize>,
+        scroll_offset: usize,
+        on_file_selected: Option<fn(std::path::PathBuf) -> Msg>,
+        on_directory_changed: Option<fn(std::path::PathBuf) -> Msg>,
+        on_directory_entered: Option<fn(std::path::PathBuf) -> Msg>,
+        on_navigate: Option<fn(crossterm::event::KeyCode) -> Msg>,
+        on_event: Option<fn(crate::tui::widgets::FileBrowserEvent) -> Msg>,
+        on_focus: Option<Msg>,
+        on_blur: Option<Msg>,
+        on_render: Option<fn(usize) -> Msg>,  // Called with actual viewport height from renderer
     },
 }
 
@@ -403,6 +421,7 @@ impl<Msg> Element<Msg> {
             Element::Scrollable { .. } => LayoutConstraint::Fill(1),
             Element::Select { .. } => LayoutConstraint::Length(1),  // Borderless like TextInput
             Element::Autocomplete { .. } => LayoutConstraint::Length(1),  // Borderless like TextInput
+            Element::FileBrowser { .. } => LayoutConstraint::Fill(1),  // Fill available space like List
         }
     }
 
@@ -456,6 +475,7 @@ impl<Msg> Element<Msg> {
             on_navigate: None,
             on_focus: None,
             on_blur: None,
+            on_render: None,
         }
     }
 
@@ -539,6 +559,39 @@ impl<Msg> Element<Msg> {
     }
 
     /// Create an autocomplete input with fuzzy-matched dropdown
+    /// Create a file browser element
+    pub fn file_browser(
+        id: impl Into<FocusId>,
+        state: &crate::tui::widgets::FileBrowserState,
+        theme: &crate::tui::Theme,
+    ) -> FileBrowserBuilder<Msg> {
+        // Convert entries to Elements with proper styling
+        let elements = state.entries()
+            .iter()
+            .enumerate()
+            .map(|(idx, entry)| {
+                let is_selected = state.selected_index() == Some(idx);
+                entry.to_element(theme, is_selected)
+            })
+            .collect();
+
+        FileBrowserBuilder {
+            id: id.into(),
+            current_path: state.current_path().to_path_buf(),
+            entries: elements,
+            selected: state.selected_index(),
+            scroll_offset: state.list_state().scroll_offset(),
+            on_file_selected: None,
+            on_directory_changed: None,
+            on_directory_entered: None,
+            on_navigate: None,
+            on_event: None,
+            on_focus: None,
+            on_blur: None,
+            on_render: None,
+        }
+    }
+
     pub fn autocomplete(
         id: impl Into<FocusId>,
         all_options: Vec<String>,

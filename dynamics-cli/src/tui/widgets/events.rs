@@ -46,3 +46,16 @@ pub enum SelectEvent {
     /// Option selected (Enter or click)
     Select(usize),
 }
+
+/// Event type for FileBrowser widget
+#[derive(Clone, Debug)]
+pub enum FileBrowserEvent {
+    /// Navigate list (Up/Down/PageUp/PageDown/Home/End)
+    Navigate(KeyCode),
+    /// Select current entry (Enter) - enter dir or select file
+    Activate,
+    /// Go to parent directory (Backspace or Left)
+    GoUp,
+    /// Refresh current directory (F5)
+    Refresh,
+}
