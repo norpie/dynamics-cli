@@ -8,6 +8,43 @@
 
 use std::collections::HashMap;
 
+/// Entities that need to be fetched and cached for lookups and checkboxes
+/// These are used for both field lookups and N:N relationships
+pub const LOOKUP_ENTITIES_CGK: &[&str] = &[
+    "cgk_pillar",       // Lookup: Pillar/Domain
+    "cgk_fund",         // Lookup: Fund
+    "cgk_commission",   // Lookup: Commission
+    "systemuser",       // Lookup: Project manager (no prefix)
+    "cgk_support",      // Checkbox: Support
+    "cgk_category",     // Checkbox: Category
+    "cgk_length",       // Checkbox: Subcategory (called length in CGK)
+    "cgk_flemishshare", // Checkbox: Flemish share
+    "cgk_deadline",     // Lookup: Board meeting (self-referencing)
+];
+
+pub const LOOKUP_ENTITIES_NRQ: &[&str] = &[
+    "nrq_domain",       // Lookup: Pillar/Domain (called domain in NRQ)
+    "nrq_fund",         // Lookup: Fund
+    "nrq_commission",   // Lookup: Commission
+    "systemuser",       // Lookup: Project manager (no prefix)
+    "nrq_support",      // Checkbox: Support
+    "nrq_category",     // Checkbox: Category
+    "nrq_subcategory",  // Checkbox: Subcategory
+    "nrq_flemishshare", // Checkbox: Flemish share
+    "nrq_boardmeeting", // Lookup: Board meeting (separate entity)
+];
+
+/// Get the list of entities to cache based on detected deadline entity type
+pub fn get_cache_entities(entity_type: &str) -> Vec<String> {
+    let entities = match entity_type {
+        "cgk_deadline" => LOOKUP_ENTITIES_CGK,
+        "nrq_deadline" => LOOKUP_ENTITIES_NRQ,
+        _ => return Vec::new(),
+    };
+
+    entities.iter().map(|s| s.to_string()).collect()
+}
+
 /// Field type for mapping configuration
 #[derive(Debug, Clone)]
 pub enum FieldType {
