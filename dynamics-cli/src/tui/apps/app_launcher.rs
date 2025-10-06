@@ -29,6 +29,11 @@ impl Default for State {
                     description: "Manage Dynamics 365 migrations".to_string(),
                 },
                 AppInfo {
+                    id: AppId::DeadlinesEnvironmentSelect,
+                    name: "Deadlines".to_string(),
+                    description: "Process Excel deadlines for migration".to_string(),
+                },
+                AppInfo {
                     id: AppId::Settings,
                     name: "Settings".to_string(),
                     description: "Configure application options".to_string(),

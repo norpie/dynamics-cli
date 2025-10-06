@@ -6,7 +6,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use anyhow::Result;
 use std::collections::HashMap;
 
-use crate::tui::{AppId, Runtime, AppRuntime, apps::{AppLauncher, LoadingScreen, ErrorScreen, SettingsApp, migration::{MigrationEnvironmentApp, MigrationComparisonSelectApp, EntityComparisonApp}}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App, ModalState, KeyBinding, AppLifecycle};
+use crate::tui::{AppId, Runtime, AppRuntime, apps::{AppLauncher, LoadingScreen, ErrorScreen, SettingsApp, migration::{MigrationEnvironmentApp, MigrationComparisonSelectApp, EntityComparisonApp}, DeadlinesEnvironmentSelectApp}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App, ModalState, KeyBinding, AppLifecycle};
 use crate::tui::runtime::AppFactory;
 use crate::tui::element::{ColumnBuilder, RowBuilder, FocusId};
 use crate::tui::widgets::ScrollableState;
@@ -85,6 +85,7 @@ impl MultiAppRuntime {
         factories.insert(AppId::MigrationEnvironment, Box::new(std::marker::PhantomData::<MigrationEnvironmentApp>));
         factories.insert(AppId::MigrationComparisonSelect, Box::new(std::marker::PhantomData::<MigrationComparisonSelectApp>));
         factories.insert(AppId::EntityComparison, Box::new(std::marker::PhantomData::<EntityComparisonApp>));
+        factories.insert(AppId::DeadlinesEnvironmentSelect, Box::new(std::marker::PhantomData::<DeadlinesEnvironmentSelectApp>));
 
         // Mark all apps as NotCreated initially
         for app_id in factories.keys() {

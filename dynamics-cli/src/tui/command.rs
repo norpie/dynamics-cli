@@ -108,6 +108,7 @@ pub enum AppId {
     MigrationEnvironment,
     MigrationComparisonSelect,
     EntityComparison,
+    DeadlinesEnvironmentSelect,
 }
 
 impl<Msg> Command<Msg> {
