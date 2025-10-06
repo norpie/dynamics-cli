@@ -85,42 +85,54 @@ fn build_board_meeting_lookup(state: &mut State, entity_type: &str) {
     };
 
     if let Some(records) = state.entity_data_cache.get(board_entity) {
-        log::debug!("Building board meeting lookup from {} records", records.len());
-
-        let mut sample_count = 0;
         let mut name_extract_failures = 0;
+        let mut names_checked = 0;
+        let mut bestuur_matches = 0;
+        let mut first_bestuur_sample = Vec::new();
+
         for record in records {
             let name = match extract_name_from_record_with_entity(record, Some(board_entity)) {
-                Some(n) => {
-                    if sample_count < 5 {
-                        log::debug!("Sample record name: '{}'", n);
-                        sample_count += 1;
-                    }
-                    n
-                }
+                Some(n) => n,
                 None => {
                     name_extract_failures += 1;
-                    if name_extract_failures <= 3 {
-                        log::debug!("Failed to extract name from record, keys: {:?}",
-                            record.as_object().map(|o| o.keys().collect::<Vec<_>>()));
-                    }
                     continue;
                 }
             };
 
+            names_checked += 1;
             let name_lower = name.to_lowercase();
 
+            // Normalize whitespace - replace all whitespace variants (including non-breaking spaces) with regular spaces
+            let name_normalized = name_lower
+                .replace('\u{00A0}', " ")  // non-breaking space
+                .replace('\u{2009}', " ")  // thin space
+                .replace('\u{202F}', " ")  // narrow no-break space
+                .trim()
+                .to_string();
+
             // Check if this is a board meeting record
-            if name_lower.starts_with("bestuur - ") || name_lower.starts_with("bestuur + algemene vergadering - ") {
-                // Extract the date part
-                let date_start = if name_lower.starts_with("bestuur + algemene vergadering - ") {
+            let is_bestuur = name_normalized.starts_with("bestuur - ")
+                || name_normalized.starts_with("bestuur + algemene vergadering - ")
+                || name_normalized.starts_with("raad van bestuur - ");
+
+            if is_bestuur {
+                bestuur_matches += 1;
+                if first_bestuur_sample.len() < 5 {
+                    first_bestuur_sample.push(name.clone());
+                }
+            }
+
+            if is_bestuur {
+                // Extract the date part from normalized name
+                let date_start = if name_normalized.starts_with("bestuur + algemene vergadering - ") {
                     "bestuur + algemene vergadering - ".len()
+                } else if name_normalized.starts_with("raad van bestuur - ") {
+                    "raad van bestuur - ".len()
                 } else {
                     "bestuur - ".len()
                 };
 
-                let date_part = name[date_start..].split_whitespace().next().unwrap_or("");
-                log::debug!("Found board meeting record, extracting date from: '{}'", date_part);
+                let date_part = name_normalized[date_start..].split_whitespace().next().unwrap_or("");
 
                 // Try to parse the date
                 if let Ok(date) = parse_board_meeting_date(date_part) {
@@ -142,22 +154,21 @@ fn build_board_meeting_lookup(state: &mut State, entity_type: &str) {
                     }
 
                     if let Some(id_str) = found_id {
-                        state.board_meeting_date_lookup.insert(date, (id_str.clone(), name.clone()));
-                        log::debug!("Added board meeting: {} -> {} ({})", date, id_str, name);
-                    } else {
-                        log::debug!("Found board meeting but no ID field in record");
+                        state.board_meeting_date_lookup.insert(date, (id_str, name));
                     }
-                } else {
-                    log::debug!("Found board meeting but failed to parse date from: '{}'", date_part);
                 }
             }
         }
 
-        if name_extract_failures > 0 {
-            log::debug!("Failed to extract names from {} records", name_extract_failures);
+        log::debug!("Board meeting lookup stats for {}:", board_entity);
+        log::debug!("  Total records: {}", records.len());
+        log::debug!("  Name extract failures: {}", name_extract_failures);
+        log::debug!("  Names checked: {}", names_checked);
+        log::debug!("  Names matching 'bestuur' pattern: {}", bestuur_matches);
+        if !first_bestuur_sample.is_empty() {
+            log::debug!("  Sample bestuur matches: {:?}", first_bestuur_sample);
         }
-
-        log::debug!("Built lookup with {} board meeting dates", state.board_meeting_date_lookup.len());
+        log::debug!("  Final lookup size: {}", state.board_meeting_date_lookup.len());
     } else {
         log::warn!("Board entity '{}' not found in cache", board_entity);
     }
@@ -297,7 +308,7 @@ fn process_excel_file(state: &mut State) -> Command<Msg> {
                         if idx < 3 {
                             log::debug!("Record {} name: '{}'", idx, name_value);
                         }
-                        if name_value.to_lowercase() == checkbox_col.to_lowercase() {
+                        if name_value.trim().to_lowercase() == checkbox_col.trim().to_lowercase() {
                             found = true;
                             log::debug!("✓ Matched checkbox column '{}' to entity '{}'", checkbox_col, entity_name);
                             break;
@@ -394,7 +405,7 @@ fn process_row(
                             if let Some(records) = state.entity_data_cache.get(target_entity) {
                                 let found = records.iter().any(|record| {
                                     if let Some(name) = extract_name_from_record_with_entity(record, Some(target_entity)) {
-                                        name.to_lowercase() == cell_value.to_lowercase()
+                                        name.trim().to_lowercase() == cell_value.trim().to_lowercase()
                                     }
                                     else {
                                         false
@@ -732,6 +743,7 @@ impl Default for State {
 pub enum Msg {
     EntitiesLoaded(Result<Vec<String>, String>),
     EntitySelectorEvent(SelectEvent),
+    StartDataLoading,
     EntityDataLoaded(usize, Result<Vec<serde_json::Value>, String>),
     Back,
     Continue,
@@ -804,11 +816,6 @@ impl App for DeadlinesMappingApp {
                 if let Resource::Success(ref entities) = state.entities {
                     state.detected_entity = field_mappings::detect_deadline_entity(entities);
 
-                    // If we detected an entity, start loading entity data immediately
-                    if let Some(entity_type) = state.detected_entity.clone() {
-                        return start_entity_data_loading(state, &entity_type);
-                    }
-
                     // If no detection, initialize selector with cgk/nrq options
                     if state.detected_entity.is_none() {
                         let options = vec!["cgk_deadline".to_string(), "nrq_deadline".to_string()];
@@ -817,15 +824,21 @@ impl App for DeadlinesMappingApp {
                         state.entity_selector.set_value(Some(options[0].clone()));
                         state.manual_override = Some(options[0].clone());
 
-                        // Start loading entity data for the default selection
-                        return Command::batch(vec![
-                            Command::set_focus(crate::tui::FocusId::new("entity-selector")),
-                            start_entity_data_loading(state, &options[0]),
-                        ]);
+                        return Command::set_focus(crate::tui::FocusId::new("entity-selector"));
                     }
                 }
 
                 Command::None
+            }
+            Msg::StartDataLoading => {
+                let entity_type = state.detected_entity.clone()
+                    .or_else(|| state.manual_override.clone());
+
+                if let Some(entity_type) = entity_type {
+                    start_entity_data_loading(state, &entity_type)
+                } else {
+                    Command::None
+                }
             }
             Msg::EntitySelectorEvent(event) => {
                 let options = vec!["cgk_deadline".to_string(), "nrq_deadline".to_string()];
@@ -875,6 +888,9 @@ impl App for DeadlinesMappingApp {
 
                     // Process Excel file now that we have all entity data
                     if !state.excel_processed {
+                        // Add temporary loading item to warnings list
+                        state.warnings.clear();
+                        state.warnings.push(Warning("Loading... Processing Excel file and validating data...".to_string()));
                         return process_excel_file(state);
                     }
                 }
@@ -1046,15 +1062,40 @@ impl App for DeadlinesMappingApp {
                     }
                 }
 
-                // Warnings list (empty for now, will be filled with unmappable columns)
-                let warnings_list = Element::list("warnings-list", &state.warnings, &state.warnings_list_state, theme)
-                    .build();
+                // Show button to load data, or warnings list if data is already loaded
+                if state.excel_processed {
+                    // Show warnings list after processing
+                    let warnings_list = Element::list("warnings-list", &state.warnings, &state.warnings_list_state, theme)
+                        .build();
 
-                let warnings_panel = Element::panel(warnings_list)
-                    .title("Mapping Warnings")
-                    .build();
+                    let warnings_panel = Element::panel(warnings_list)
+                        .title("Mapping Warnings")
+                        .build();
 
-                builder = builder.add(warnings_panel, Fill(1));
+                    builder = builder.add(warnings_panel, Fill(1));
+                } else if !state.entity_data_loading {
+                    // Show button to start loading
+                    builder = builder.add(spacer!(), Fill(1));
+                    builder = builder.add(Element::styled_text(Line::from(vec![Span::styled(
+                        "Click 'Load Data' to fetch entity records for validation",
+                        Style::default().fg(theme.subtext0).italic()
+                    )]))
+                    .build(), Length(1));
+                    builder = builder.add(spacer!(), Length(1));
+                    builder = builder.add(Element::button("load-data-button", "Load Data")
+                        .on_press(Msg::StartDataLoading)
+                        .build(), Length(3));
+                    builder = builder.add(spacer!(), Fill(1));
+                } else {
+                    // Show loading status
+                    builder = builder.add(spacer!(), Fill(1));
+                    builder = builder.add(Element::styled_text(Line::from(vec![Span::styled(
+                        format!("Loading entity data... ({}/{})", state.entity_data_loaded_count, state.entity_data_total_count),
+                        Style::default().fg(theme.yellow)
+                    )]))
+                    .build(), Length(1));
+                    builder = builder.add(spacer!(), Fill(1));
+                }
 
                 // Bottom section: buttons
                 builder = builder.add(crate::row![
