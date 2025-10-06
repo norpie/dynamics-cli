@@ -73,14 +73,17 @@ impl App for DeadlinesEnvironmentSelectApp {
 
     fn init(_params: ()) -> (State, Command<Msg>) {
         let state = State::default();
-        let cmd = Command::perform(
-            async {
-                let config = crate::global_config();
-                config.list_environments().await
-                    .map_err(|e| e.to_string())
-            },
-            Msg::EnvironmentsLoaded
-        );
+        let cmd = Command::batch(vec![
+            Command::perform(
+                async {
+                    let config = crate::global_config();
+                    config.list_environments().await
+                        .map_err(|e| e.to_string())
+                },
+                Msg::EnvironmentsLoaded
+            ),
+            Command::set_focus(FocusId::new("environment-list")),
+        ]);
         (state, cmd)
     }
 
@@ -88,7 +91,7 @@ impl App for DeadlinesEnvironmentSelectApp {
         match msg {
             Msg::EnvironmentsLoaded(Ok(envs)) => {
                 state.environments = envs.into_iter().map(|name| Environment { name }).collect();
-                Command::set_focus(FocusId::new("environment-list"))
+                Command::None
             }
             Msg::EnvironmentsLoaded(Err(err)) => {
                 log::error!("Failed to load environments: {}", err);
@@ -102,7 +105,12 @@ impl App for DeadlinesEnvironmentSelectApp {
             }
             Msg::SelectEnvironment(idx) => {
                 if let Some(env) = state.environments.get(idx) {
-                    panic!("Selected environment: {}", env.name);
+                    Command::start_app(
+                        AppId::DeadlinesFileSelect,
+                        super::models::FileSelectParams {
+                            environment_name: env.name.clone(),
+                        }
+                    )
                 } else {
                     Command::None
                 }
