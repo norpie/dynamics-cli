@@ -9,6 +9,93 @@ use ratatui::style::{Style, Stylize};
 
 use super::field_mappings;
 
+/// Fetch entity data from cache or API
+async fn fetch_entity_data(
+    environment_name: &str,
+    entity_name: &str,
+) -> Result<Vec<serde_json::Value>, String> {
+    let config = crate::global_config();
+    let manager = crate::client_manager();
+
+    // Try cache first (24 hours)
+    match config.get_entity_data_cache(environment_name, entity_name, 24).await {
+        Ok(Some(cached)) => {
+            log::debug!("Using cached data for {} ({} records)", entity_name, cached.len());
+            return Ok(cached);
+        }
+        Ok(None) => {
+            log::debug!("No cache for {}, fetching from API", entity_name);
+        }
+        Err(e) => {
+            log::warn!("Cache lookup failed for {}: {}", entity_name, e);
+        }
+    }
+
+    // Fetch from API
+    let client = manager
+        .get_client(environment_name)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Fetch all records for this entity using query builder
+    let query = crate::api::QueryBuilder::new(entity_name).build();
+    let result = client
+        .execute_query(&query)
+        .await
+        .map_err(|e| format!("Failed to fetch {}: {}", entity_name, e))?;
+
+    let records = result.records()
+        .cloned()
+        .unwrap_or_default();
+
+    log::debug!("Fetched {} records for {}", records.len(), entity_name);
+
+    // Cache for future use
+    let _ = config.set_entity_data_cache(environment_name, entity_name, &records).await;
+
+    Ok(records)
+}
+
+/// Start loading entity data in parallel
+fn start_entity_data_loading(state: &mut State, entity_type: &str) -> Command<Msg> {
+    let cache_entities = field_mappings::get_cache_entities(entity_type);
+
+    if cache_entities.is_empty() {
+        return Command::None;
+    }
+
+    state.entity_data_loading = true;
+    state.entity_data_loaded_count = 0;
+    state.entity_data_total_count = cache_entities.len();
+
+    let environment_name = state.environment_name.clone();
+
+    let mut builder = Command::perform_parallel();
+
+    for (index, entity_name) in cache_entities.iter().enumerate() {
+        let entity_name_clone = entity_name.clone();
+        let env_name_clone = environment_name.clone();
+
+        builder = builder.add_task(
+            format!("Loading {} records", entity_name),
+            async move {
+                fetch_entity_data(&env_name_clone, &entity_name_clone).await
+            }
+        );
+    }
+
+    builder
+        .with_title("Loading entity data for lookups")
+        .on_complete(AppId::DeadlinesMapping)
+        .cancellable(false)
+        .build(move |task_index, result| {
+            let typed_result = result.downcast::<Result<Vec<serde_json::Value>, String>>()
+                .map(|boxed| *boxed)
+                .unwrap_or_else(|_| Err("Type mismatch in task result".to_string()));
+            Msg::EntityDataLoaded(task_index, typed_result)
+        })
+}
+
 pub struct DeadlinesMappingApp;
 
 // Wrapper type for warnings to implement ListItem
@@ -49,6 +136,9 @@ pub struct State {
     entity_selector: SelectField,
     warnings: Vec<Warning>,
     warnings_list_state: ListState,
+    entity_data_loading: bool,
+    entity_data_loaded_count: usize,
+    entity_data_total_count: usize,
 }
 
 impl State {
@@ -63,6 +153,9 @@ impl State {
             entity_selector: SelectField::new(),
             warnings: Vec::new(),
             warnings_list_state: ListState::default(),
+            entity_data_loading: false,
+            entity_data_loaded_count: 0,
+            entity_data_total_count: 0,
         }
     }
 }
@@ -77,6 +170,7 @@ impl Default for State {
 pub enum Msg {
     EntitiesLoaded(Result<Vec<String>, String>),
     EntitySelectorEvent(SelectEvent),
+    EntityDataLoaded(usize, Result<Vec<serde_json::Value>, String>),
     Back,
     Continue,
 }
@@ -140,6 +234,11 @@ impl App for DeadlinesMappingApp {
                 if let Resource::Success(ref entities) = state.entities {
                     state.detected_entity = field_mappings::detect_deadline_entity(entities);
 
+                    // If we detected an entity, start loading entity data immediately
+                    if let Some(entity_type) = state.detected_entity.clone() {
+                        return start_entity_data_loading(state, &entity_type);
+                    }
+
                     // If no detection, initialize selector with cgk/nrq options
                     if state.detected_entity.is_none() {
                         let options = vec!["cgk_deadline".to_string(), "nrq_deadline".to_string()];
@@ -147,7 +246,12 @@ impl App for DeadlinesMappingApp {
                         state.entity_selector.state.select(0);
                         state.entity_selector.set_value(Some(options[0].clone()));
                         state.manual_override = Some(options[0].clone());
-                        return Command::set_focus(crate::tui::FocusId::new("entity-selector"));
+
+                        // Start loading entity data for the default selection
+                        return Command::batch(vec![
+                            Command::set_focus(crate::tui::FocusId::new("entity-selector")),
+                            start_entity_data_loading(state, &options[0]),
+                        ]);
                     }
                 }
 
@@ -156,8 +260,40 @@ impl App for DeadlinesMappingApp {
             Msg::EntitySelectorEvent(event) => {
                 let options = vec!["cgk_deadline".to_string(), "nrq_deadline".to_string()];
                 let cmd = state.entity_selector.handle_event(event, &options);
+
+                // If the selection changed, update manual override and reload entity data
+                if let Some(new_selection) = state.entity_selector.value() {
+                    let new_selection_str = new_selection.to_string();
+                    if state.manual_override.as_ref() != Some(&new_selection_str) {
+                        state.manual_override = Some(new_selection_str.clone());
+                        return Command::batch(vec![
+                            cmd,
+                            start_entity_data_loading(state, &new_selection_str),
+                        ]);
+                    }
+                }
+
                 state.manual_override = state.entity_selector.value().map(|s| s.to_string());
                 cmd
+            }
+            Msg::EntityDataLoaded(task_index, result) => {
+                state.entity_data_loaded_count += 1;
+
+                match result {
+                    Ok(records) => {
+                        log::debug!("Loaded {} records for task {}", records.len(), task_index);
+                    }
+                    Err(err) => {
+                        state.warnings.push(Warning(format!("Failed to load entity data: {}", err)));
+                    }
+                }
+
+                // Check if all tasks completed
+                if state.entity_data_loaded_count >= state.entity_data_total_count {
+                    state.entity_data_loading = false;
+                }
+
+                Command::None
             }
             Msg::Back => Command::start_app(
                 AppId::DeadlinesFileSelect,
