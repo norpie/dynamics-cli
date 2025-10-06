@@ -310,6 +310,39 @@ impl Config {
         repository::entity_metadata_cache::delete_all_for_environment(&self.pool, environment_name).await
     }
 
+    // Entity data cache methods
+    pub async fn get_entity_data_cache(
+        &self,
+        environment_name: &str,
+        entity_name: &str,
+        max_age_hours: i64,
+    ) -> Result<Option<Vec<serde_json::Value>>> {
+        if let Some((data, cached_at)) = repository::entity_data_cache::get(&self.pool, environment_name, entity_name).await? {
+            let age = chrono::Utc::now().signed_duration_since(cached_at);
+            if age.num_hours() < max_age_hours {
+                return Ok(Some(data));
+            }
+        }
+        Ok(None)
+    }
+
+    pub async fn set_entity_data_cache(
+        &self,
+        environment_name: &str,
+        entity_name: &str,
+        data: &[serde_json::Value],
+    ) -> Result<()> {
+        repository::entity_data_cache::set(&self.pool, environment_name, entity_name, data).await
+    }
+
+    pub async fn delete_entity_data_cache(&self, environment_name: &str, entity_name: &str) -> Result<()> {
+        repository::entity_data_cache::delete(&self.pool, environment_name, entity_name).await
+    }
+
+    pub async fn delete_all_entity_data_cache(&self, environment_name: &str) -> Result<()> {
+        repository::entity_data_cache::delete_all_for_environment(&self.pool, environment_name).await
+    }
+
     // Field and prefix mapping methods
     pub async fn get_field_mappings(&self, source_entity: &str, target_entity: &str) -> Result<std::collections::HashMap<String, String>> {
         repository::mappings::get_field_mappings(&self.pool, source_entity, target_entity).await
