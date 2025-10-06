@@ -752,10 +752,11 @@ impl App for DeadlinesMappingApp {
         );
         state.entities = Resource::Loading;
 
-        // Load entities from cache or API
-        let cmd = Command::perform(
-            {
-                let environment_name = params.environment_name.clone();
+        // Load entities from cache or API with loading screen
+        let environment_name = params.environment_name.clone();
+        let cmd = Command::perform_parallel()
+            .add_task(
+                "Loading entities".to_string(),
                 async move {
                     use crate::api::metadata::parse_entity_list;
                     let config = crate::global_config();
@@ -780,9 +781,16 @@ impl App for DeadlinesMappingApp {
                         }
                     }
                 }
-            },
-            Msg::EntitiesLoaded,
-        );
+            )
+            .with_title("Loading entities")
+            .on_complete(AppId::DeadlinesMapping)
+            .cancellable(false)
+            .build(move |_task_index, result| {
+                let typed_result = result.downcast::<Result<Vec<String>, String>>()
+                    .map(|boxed| *boxed)
+                    .unwrap_or_else(|_| Err("Type mismatch in task result".to_string()));
+                Msg::EntitiesLoaded(typed_result)
+            });
 
         (state, cmd)
     }
@@ -896,11 +904,8 @@ impl App for DeadlinesMappingApp {
                 .build()]
             }
             Resource::Loading => {
-                col![Element::styled_text(Line::from(vec![Span::styled(
-                    "Loading entities...",
-                    Style::default().fg(theme.blue)
-                )]))
-                .build()]
+                // Loading screen is shown by the runtime
+                col![]
             }
             Resource::Failure(err) => {
                 col![
