@@ -10,12 +10,7 @@ TODO.md
 dynamics-cli.log
 continue.md
 AGENTS.md
-claude.general.md
-claude.migration.md
-claude.deadlines.md
-Deadlines.xlsx
-claude.api.md
-config-bak.toml
-claude.tui.md
-claude.entity.md
 *_to_*_*.xlsx
+Deadlines.xlsx
+config-bak.toml
+claude.*.md
