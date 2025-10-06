@@ -19,11 +19,14 @@ async fn fetch_entity_data(
     let config = crate::global_config();
     let manager = crate::client_manager();
 
-    // Try cache first (24 hours)
+    // Try cache first (24 hours) - but force refresh if cache has 0 records
     match config.get_entity_data_cache(environment_name, entity_name, 24).await {
-        Ok(Some(cached)) => {
+        Ok(Some(cached)) if !cached.is_empty() => {
             log::debug!("Using cached data for {} ({} records)", entity_name, cached.len());
             return Ok(cached);
+        }
+        Ok(Some(cached)) => {
+            log::debug!("Cache for {} has 0 records, forcing refresh", entity_name);
         }
         Ok(None) => {
             log::debug!("No cache for {}, fetching from API", entity_name);
@@ -39,8 +42,14 @@ async fn fetch_entity_data(
         .await
         .map_err(|e| e.to_string())?;
 
+    // Pluralize entity name for Web API (entity sets are plural)
+    let plural_name = crate::api::pluralization::pluralize_entity_name(entity_name);
+    log::debug!("Fetching {} (plural: {})", entity_name, plural_name);
+
     // Fetch all records for this entity using query builder
-    let query = crate::api::QueryBuilder::new(entity_name).build();
+    let query = crate::api::QueryBuilder::new(&plural_name).build();
+    log::debug!("Executing query for {}: {:?}", plural_name, query);
+
     let result = client
         .execute_query(&query)
         .await
@@ -51,6 +60,12 @@ async fn fetch_entity_data(
         .unwrap_or_default();
 
     log::debug!("Fetched {} records for {}", records.len(), entity_name);
+
+    if records.is_empty() {
+        log::warn!("Entity {} returned 0 records - entity might be empty or query might need adjustment", entity_name);
+    } else if let Some(first) = records.first() {
+        log::debug!("First record from {}: {:?}", entity_name, first);
+    }
 
     // Cache for future use
     let _ = config.set_entity_data_cache(environment_name, entity_name, &records).await;
