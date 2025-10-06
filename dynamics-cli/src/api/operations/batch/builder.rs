@@ -97,6 +97,30 @@ impl BatchRequestBuilder {
                     body: Some(body),
                 }
             }
+            Operation::CreateWithRefs { entity, data, content_id_refs } => {
+                let path = format!("{}/{}", constants::api_path(), entity);
+
+                // Merge data with content-ID references
+                let mut payload = data.clone();
+                if let Value::Object(ref mut map) = payload {
+                    for (field, ref_value) in content_id_refs {
+                        map.insert(field.clone(), Value::String(ref_value.clone()));
+                    }
+                }
+
+                let body = serde_json::to_string(&payload).unwrap_or_default();
+
+                ChangeSetOperation {
+                    content_id,
+                    method: methods::POST.to_string(),
+                    path,
+                    headers: vec![
+                        ("Content-Type".to_string(), headers::CONTENT_TYPE_JSON.to_string()),
+                        ("Prefer".to_string(), headers::PREFER_RETURN_REPRESENTATION.to_string()),
+                    ],
+                    body: Some(body),
+                }
+            }
             Operation::Update { entity, id, data } => {
                 let path = format!("{}/{}({})", constants::api_path(), entity, id);
                 let body = serde_json::to_string(data).unwrap_or_default();

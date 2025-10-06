@@ -94,6 +94,12 @@ impl DynamicsClient {
     pub async fn execute(&self, operation: &Operation, resilience: &ResilienceConfig) -> anyhow::Result<OperationResult> {
         match operation {
             Operation::Create { entity, data } => self.create_record(entity, data, resilience).await,
+            Operation::CreateWithRefs { .. } => {
+                // CreateWithRefs should only be used in batch operations
+                Err(anyhow::anyhow!(
+                    "CreateWithRefs operation can only be executed within a batch changeset. Use execute_batch() instead."
+                ))
+            }
             Operation::Update { entity, id, data } => self.update_record(entity, id, data, resilience).await,
             Operation::Delete { entity, id } => self.delete_record(entity, id, resilience).await,
             Operation::Upsert { entity, key_field, key_value, data } => {

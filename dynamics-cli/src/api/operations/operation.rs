@@ -14,6 +14,17 @@ pub enum Operation {
         /// Record data as JSON
         data: Value,
     },
+    /// Create a new record with references to previous operations in a batch
+    /// Uses $<content-id> syntax to reference entities created earlier in the same changeset
+    CreateWithRefs {
+        /// Entity logical name (e.g., "cgk_cgk_deadline_cgk_support")
+        entity: String,
+        /// Record data as JSON
+        data: Value,
+        /// Map of field names to content-ID references
+        /// e.g., {"cgk_deadlineid@odata.bind": "$1"} to reference the entity created with Content-ID 1
+        content_id_refs: HashMap<String, String>,
+    },
     /// Update an existing record
     Update {
         /// Entity logical name
@@ -105,6 +116,7 @@ impl Operation {
     pub fn entity(&self) -> &str {
         match self {
             Self::Create { entity, .. } => entity,
+            Self::CreateWithRefs { entity, .. } => entity,
             Self::Update { entity, .. } => entity,
             Self::Delete { entity, .. } => entity,
             Self::Upsert { entity, .. } => entity,
@@ -115,6 +127,7 @@ impl Operation {
     pub fn http_method(&self) -> &'static str {
         match self {
             Self::Create { .. } => "POST",
+            Self::CreateWithRefs { .. } => "POST",
             Self::Update { .. } => "PATCH",
             Self::Delete { .. } => "DELETE",
             Self::Upsert { .. } => "PATCH", // Upsert uses PATCH with specific headers
@@ -125,6 +138,7 @@ impl Operation {
     pub fn operation_type(&self) -> &'static str {
         match self {
             Self::Create { .. } => "create",
+            Self::CreateWithRefs { .. } => "create_with_refs",
             Self::Update { .. } => "update",
             Self::Delete { .. } => "delete",
             Self::Upsert { .. } => "upsert",

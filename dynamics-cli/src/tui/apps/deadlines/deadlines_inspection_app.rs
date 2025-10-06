@@ -158,102 +158,76 @@ impl App for DeadlinesInspectionApp {
                 },
             ),
             Msg::PrintAndPanic => {
-                // Print all transformed records to terminal in a nice format
+                // Convert all transformed records to operations
+                let mut all_operations = Vec::new();
+                let mut total_operations_count = 0;
+
+                for record in &state.transformed_records {
+                    let operations = record.to_operations(&state.entity_type);
+                    total_operations_count += operations.len();
+                    all_operations.push((record.source_row, operations));
+                }
+
+                // Print summary and operations
                 println!("\n");
                 println!("═══════════════════════════════════════════════════════════════");
-                println!("  DEADLINES INSPECTION - TRANSFORMED RECORDS");
+                println!("  DEADLINES - OPERATIONS PREVIEW");
                 println!("═══════════════════════════════════════════════════════════════");
                 println!();
                 println!("Environment: {}", state.environment_name);
                 println!("Entity Type: {}", state.entity_type);
                 println!("Total Records: {}", state.transformed_records.len());
+                println!("Total Operations: {}", total_operations_count);
                 let records_with_warnings = state.transformed_records.iter()
                     .filter(|r| r.has_warnings())
                     .count();
-                println!("Records with Warnings: {}", records_with_warnings);
+                println!("Records with Warnings: {} (will be skipped)", records_with_warnings);
                 println!();
 
-                for (idx, record) in state.transformed_records.iter().enumerate() {
+                for (source_row, operations) in &all_operations {
                     println!("───────────────────────────────────────────────────────────────");
-                    println!("Record {} (Excel Row {})", idx + 1, record.source_row);
+                    println!("Excel Row {}: {} operations", source_row, operations.len());
                     println!("───────────────────────────────────────────────────────────────");
                     println!();
 
-                    // Direct fields
-                    if !record.direct_fields.is_empty() {
-                        println!("  📝 Direct Fields:");
-                        for (key, value) in &record.direct_fields {
-                            println!("      {}: {}", key, value);
-                        }
-                        println!();
-                    }
+                    for (idx, operation) in operations.iter().enumerate() {
+                        let content_id = idx + 1;
+                        println!("  Operation {} (Content-ID: {})", idx + 1, content_id);
+                        println!("    Type: {}", operation.operation_type());
+                        println!("    Entity: {}", operation.entity());
+                        println!("    Method: {}", operation.http_method());
 
-                    // Lookup fields
-                    if !record.lookup_fields.is_empty() {
-                        println!("  🔗 Lookup Fields (Resolved IDs):");
-                        for (key, value) in &record.lookup_fields {
-                            // Truncate GUID for readability
-                            let truncated = if value.len() > 12 {
-                                format!("{}...", &value[..12])
-                            } else {
-                                value.clone()
-                            };
-                            println!("      {}: {}", key, truncated);
-                        }
-                        println!();
-                    }
-
-                    // Dates
-                    if record.deadline_date.is_some() || record.commission_date.is_some() {
-                        println!("  📅 Dates:");
-                        if let Some(date) = record.deadline_date {
-                            println!("      Deadline Date: {}", date.format("%Y-%m-%d"));
-                        }
-                        if let Some(time) = record.deadline_time {
-                            println!("      Deadline Time: {}", time.format("%H:%M:%S"));
-                        }
-                        if let Some(date) = record.commission_date {
-                            println!("      Commission Date: {}", date.format("%Y-%m-%d"));
-                        }
-                        println!();
-                    }
-
-                    // Checkbox relationships (N:N)
-                    if !record.checkbox_relationships.is_empty() {
-                        println!("  ☑️  Checkbox Relationships (N:N):");
-                        for (relationship, ids) in &record.checkbox_relationships {
-                            println!("      {}: {} items", relationship, ids.len());
-                            for id in ids {
-                                let truncated = if id.len() > 12 {
-                                    format!("{}...", &id[..12])
-                                } else {
-                                    id.clone()
-                                };
-                                println!("        - {}", truncated);
+                        // Show payload preview
+                        match operation {
+                            crate::api::operations::Operation::Create { data, .. } => {
+                                if let Some(obj) = data.as_object() {
+                                    println!("    Fields: {}", obj.keys().take(5).cloned().collect::<Vec<_>>().join(", "));
+                                    if obj.len() > 5 {
+                                        println!("    ... and {} more fields", obj.len() - 5);
+                                    }
+                                }
                             }
+                            crate::api::operations::Operation::CreateWithRefs { data, content_id_refs, .. } => {
+                                println!("    References: {:?}", content_id_refs);
+                                if let Some(obj) = data.as_object() {
+                                    println!("    Fields: {}", obj.keys().take(5).cloned().collect::<Vec<_>>().join(", "));
+                                }
+                            }
+                            _ => {}
                         }
-                        println!();
-                    }
-
-                    // Warnings
-                    if !record.warnings.is_empty() {
-                        println!("  ⚠️  Warnings ({}):", record.warnings.len());
-                        for warning in &record.warnings {
-                            println!("      - {}", warning);
-                        }
-                        println!();
-                    } else {
-                        println!("  ✅ No warnings");
                         println!();
                     }
                 }
 
                 println!("═══════════════════════════════════════════════════════════════");
-                println!("  END OF INSPECTION");
+                println!("  NEXT: Implement Queue System");
                 println!("═══════════════════════════════════════════════════════════════");
                 println!();
+                println!("Operations are ready for batch execution.");
+                println!("TODO: Add queue system to store and execute these operations.");
+                println!();
 
-                panic!("Inspection complete - application terminated as requested");
+                panic!("Operations preview complete - application terminated");
             }
         }
     }
