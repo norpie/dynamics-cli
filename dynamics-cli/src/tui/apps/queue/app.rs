@@ -13,7 +13,7 @@ use crate::{col, row, use_constraints};
 use crate::api::resilience::ResilienceConfig;
 use ratatui::text::Line;
 use std::collections::HashSet;
-use super::models::{QueueItem, QueueFilter, SortMode, OperationStatus, QueueResult, InitParams};
+use super::models::{QueueItem, QueueFilter, SortMode, OperationStatus, QueueResult};
 use super::tree_nodes::QueueTreeNode;
 
 pub struct OperationQueueApp;
@@ -68,11 +68,11 @@ impl crate::tui::AppState for State {}
 impl App for OperationQueueApp {
     type State = State;
     type Msg = Msg;
-    type InitParams = InitParams;
+    type InitParams = ();
 
-    fn init(params: InitParams) -> (State, Command<Msg>) {
+    fn init(_params: ()) -> (State, Command<Msg>) {
         let state = State {
-            queue_items: params.queue_items,
+            queue_items: Vec::new(),
             tree_state: TreeState::with_selection(),
             auto_play: false,
             max_concurrent: 3,

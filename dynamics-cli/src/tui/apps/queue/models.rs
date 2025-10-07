@@ -89,13 +89,6 @@ pub struct QueueResult {
     pub duration_ms: u64,
 }
 
-/// Initialization parameters for the queue app
-#[derive(Clone, Default)]
-pub struct InitParams {
-    /// Queue items to start with
-    pub queue_items: Vec<QueueItem>,
-}
-
 /// Filter for displaying queue items
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub enum QueueFilter {
