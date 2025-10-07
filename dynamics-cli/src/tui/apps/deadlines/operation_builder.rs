@@ -27,8 +27,9 @@ impl TransformedDeadline {
         let mut operations = Vec::new();
 
         // 1. Create main deadline entity (will get Content-ID 1 in batch)
+        let entity_set = pluralize_entity_name(entity_type);
         operations.push(Operation::Create {
-            entity: entity_type.to_string(),
+            entity: entity_set,
             data: self.build_create_payload(entity_type),
         });
 
