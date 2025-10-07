@@ -159,7 +159,18 @@ impl App for DeadlinesFileSelectApp {
             }
             Msg::SheetSelectorEvent(event) => {
                 if let Resource::Success(ref sheets) = state.available_sheets {
-                    state.sheet_selector.handle_event(event, sheets)
+                    let cmd = state.sheet_selector.handle_event(event.clone(), sheets);
+
+                    // Focus continue button after selecting a sheet with Enter
+                    match event {
+                        SelectEvent::Navigate(KeyCode::Enter) => {
+                            Command::batch(vec![
+                                cmd,
+                                Command::set_focus(FocusId::new("continue-button"))
+                            ])
+                        }
+                        _ => cmd
+                    }
                 } else {
                     Command::None
                 }
@@ -240,10 +251,10 @@ impl App for DeadlinesFileSelectApp {
                             state.selected_file.as_ref().map(|p| p.file_name().unwrap().to_string_lossy().to_string()).unwrap_or_default(),
                             Style::default().fg(theme.lavender)
                         ),
-                    ])).build(),
-                    spacer!(),
-                    selector_panel,
-                    spacer!(),
+                    ])).build() => Length(1),
+                    spacer!() => Length(1),
+                    selector_panel => Length(3),
+                    spacer!() => Fill(1),
                     row![
                         Element::button("back-button", "Back")
                             .on_press(Msg::Back)
@@ -252,7 +263,7 @@ impl App for DeadlinesFileSelectApp {
                         Element::button("continue-button", "Continue")
                             .on_press(Msg::ConfirmSelection)
                             .build(),
-                    ]
+                    ] => Length(3)
                 ]
             }
         };
