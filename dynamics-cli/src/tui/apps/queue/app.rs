@@ -7,7 +7,7 @@ use crate::tui::{
     subscription::Subscription,
     state::theme::Theme,
     renderer::LayeredView,
-    widgets::{TreeState, TreeEvent},
+    widgets::{TreeState, TreeEvent, ScrollableState},
 };
 use crate::{col, row, use_constraints};
 use crate::api::resilience::ResilienceConfig;
@@ -54,6 +54,9 @@ pub enum Msg {
     SetSortMode(SortMode),
     SetMaxConcurrent(usize),
 
+    // Details panel scrolling
+    DetailsScroll(crossterm::event::KeyCode),
+
     // Navigation
     Back,
 }
@@ -75,6 +78,7 @@ pub struct State {
     filter: QueueFilter,
     sort_mode: SortMode,
     selected_item_id: Option<String>,
+    details_scroll_state: ScrollableState,
 }
 
 impl Default for State {
@@ -89,6 +93,7 @@ impl Default for State {
             filter: QueueFilter::All,
             sort_mode: SortMode::Priority,
             selected_item_id: None,
+            details_scroll_state: ScrollableState::new(),
         }
     }
 }
@@ -410,6 +415,13 @@ impl App for OperationQueueApp {
                 Command::None
             }
 
+            Msg::DetailsScroll(key) => {
+                // Handle scrolling in details panel
+                // Content height will be updated by the scrollable widget
+                state.details_scroll_state.handle_key(key, 100, 20);
+                Command::None
+            }
+
             Msg::Back => Command::navigate_to(AppId::AppLauncher),
         }
     }
@@ -504,14 +516,14 @@ impl App for OperationQueueApp {
             .build();
 
         // Build details panel for selected item
-        let details_panel = build_details_panel(state, theme);
+        let details_panel = build_details_panel(state, theme, &state.details_scroll_state);
 
-        // Split into tree (left, larger) and details (right, smaller)
+        // Split into tree (left) and details (right) - 2/1 ratio
         let main_content = row![
             col![
                 header => Length(3),
                 tree => Fill(1),
-            ] => Fill(3),
+            ] => Fill(2),
             details_panel => Fill(1),
         ];
 
@@ -684,7 +696,7 @@ fn format_duration_estimate(ms: u64) -> String {
     }
 }
 
-fn build_details_panel(state: &State, theme: &Theme) -> Element<Msg> {
+fn build_details_panel(state: &State, theme: &Theme, scroll_state: &ScrollableState) -> Element<Msg> {
     use ratatui::style::Style;
     use ratatui::text::{Line as RataLine, Span};
     use ratatui::prelude::Stylize;
@@ -875,7 +887,16 @@ fn build_details_panel(state: &State, theme: &Theme) -> Element<Msg> {
         ]).build()
     };
 
-    Element::panel(content)
+    // Wrap content in scrollable
+    let scrollable_content = Element::scrollable(
+        FocusId::new("details-scroll"),
+        content,
+        scroll_state
+    )
+    .on_navigate(Msg::DetailsScroll)
+    .build();
+
+    Element::panel(scrollable_content)
         .title("Details")
         .build()
 }
