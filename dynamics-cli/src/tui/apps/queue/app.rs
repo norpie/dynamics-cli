@@ -113,6 +113,8 @@ impl App for OperationQueueApp {
         match msg {
             Msg::TreeEvent(event) => {
                 state.tree_state.handle_event(event);
+                // Update selected item when navigating (not just on Enter)
+                state.selected_item_id = state.tree_state.selected().map(|s| s.to_string());
                 Command::None
             }
 
