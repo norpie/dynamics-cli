@@ -362,7 +362,18 @@ impl DynamicsClient {
         let content_type = batch_request.content_type().to_string();
         let body = batch_request.body().to_string();
 
+        log::debug!("Executing batch request with {} operations (correlation_id: {})", operations.len(), correlation_id);
+
+        // Log first 2000 chars of request body for debugging
+        let truncated_body = if body.len() > 2000 {
+            format!("{}... (truncated, total {} chars)", &body[..2000], body.len())
+        } else {
+            body.clone()
+        };
+        log::debug!("Batch request body:\n{}", truncated_body);
+
         let retry_policy = crate::api::resilience::RetryPolicy::new(resilience.retry.clone());
+        let request_start = std::time::Instant::now();
         let response = retry_policy.execute(|| async {
             self.http_client
                 .post(&url)
@@ -375,13 +386,45 @@ impl DynamicsClient {
                 .await
         }).await?;
 
-        if response.status().is_success() {
-            let response_text = response.text().await?;
-            // Use the proper parser
-            BatchResponseParser::parse(&response_text, operations)
+        let request_duration = request_start.elapsed();
+        let status_code = response.status().as_u16();
+
+        log::debug!("Batch request completed: status={}, duration={:?}", status_code, request_duration);
+
+        let response_text = response.text().await?;
+
+        // Log full response for debugging (first 2000 chars to avoid log spam)
+        let truncated_response = if response_text.len() > 2000 {
+            format!("{}... (truncated, total {} chars)", &response_text[..2000], response_text.len())
         } else {
-            let error_text = response.text().await?;
-            anyhow::bail!("Batch request failed: {}", error_text)
+            response_text.clone()
+        };
+        log::debug!("Batch response body:\n{}", truncated_response);
+
+        if status_code >= 200 && status_code < 300 {
+            // Use the proper parser
+            let results = BatchResponseParser::parse(&response_text, operations)?;
+
+            // Log any individual operation failures
+            for (idx, result) in results.iter().enumerate() {
+                if !result.success {
+                    log::error!(
+                        "Batch operation {} FAILED: {} on entity '{}' (status: {})",
+                        idx + 1,
+                        result.operation.operation_type(),
+                        result.operation.entity(),
+                        result.status_code.map(|s| s.to_string()).unwrap_or_else(|| "unknown".to_string())
+                    );
+                    if let Some(ref err) = result.error {
+                        log::error!("  Error details: {}", err);
+                    }
+                }
+            }
+
+            Ok(results)
+        } else {
+            log::error!("Batch request FAILED (status {}): {}", status_code, response_text);
+            anyhow::bail!("Batch request failed (status {}): {}", status_code, response_text)
         }
     }
 
@@ -425,6 +468,16 @@ impl DynamicsClient {
             })
         } else {
             let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+
+            // Log the error
+            log::error!(
+                "Operation FAILED: {} on entity '{}' (status: {})",
+                operation.operation_type(),
+                operation.entity(),
+                status_code
+            );
+            log::error!("  Error details: {}", error_text);
+
             Ok(OperationResult {
                 operation,
                 success: false,

@@ -31,7 +31,7 @@ impl ListItem for RecordListItem {
         };
 
         // Extract name from direct fields
-        let name_field = if self.entity_type == "cgk_deadline" { "cgk_name" } else { "nrq_name" };
+        let name_field = if self.entity_type == "cgk_deadline" { "cgk_deadlinename" } else { "nrq_name" };
         let name = self.record.direct_fields.get(name_field)
             .map(|s| s.as_str())
             .unwrap_or("<No Name>");
@@ -170,7 +170,7 @@ impl App for DeadlinesInspectionApp {
                     }
 
                     // Get name for description
-                    let name_field = if state.entity_type == "cgk_deadline" { "cgk_name" } else { "nrq_name" };
+                    let name_field = if state.entity_type == "cgk_deadline" { "cgk_deadlinename" } else { "nrq_name" };
                     let name = record.direct_fields.get(name_field)
                         .map(|s| s.as_str())
                         .unwrap_or("<No Name>");
@@ -264,7 +264,7 @@ impl App for DeadlinesInspectionApp {
         };
 
         let detail_title = if let Some(record) = state.transformed_records.get(state.selected_record_idx) {
-            let name_field = if state.entity_type == "cgk_deadline" { "cgk_name" } else { "nrq_name" };
+            let name_field = if state.entity_type == "cgk_deadline" { "cgk_deadlinename" } else { "nrq_name" };
             let name = record.direct_fields.get(name_field)
                 .map(|s| s.as_str())
                 .unwrap_or("<No Name>");
@@ -357,16 +357,17 @@ fn build_detail_panel(record: &TransformedDeadline, entity_type: &str, theme: &T
             Span::styled("🔗 Lookup Fields (Resolved IDs)", Style::default().fg(theme.blue).bold())
         ])).build(), Length(1));
 
-        for (key, value) in &record.lookup_fields {
-            let truncated = if value.len() > 20 {
-                format!("{}...", &value[..20])
+        for (key, (id, target_entity)) in &record.lookup_fields {
+            let truncated = if id.len() > 20 {
+                format!("{}...", &id[..20])
             } else {
-                value.clone()
+                id.clone()
             };
 
             builder = builder.add(Element::styled_text(Line::from(vec![
                 Span::styled(format!("  {}: ", key), Style::default().fg(theme.subtext0)),
                 Span::styled(truncated, Style::default().fg(theme.green)),
+                Span::styled(format!(" ({})", target_entity), Style::default().fg(theme.overlay1)),
             ])).build(), Length(1));
         }
         builder = builder.add(spacer!(), Length(1));

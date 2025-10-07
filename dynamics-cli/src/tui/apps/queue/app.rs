@@ -243,13 +243,41 @@ impl App for OperationQueueApp {
                     };
                     item.result = Some(result.clone());
 
-                    // Log completion
-                    log::info!(
-                        "Queue item {} completed: success={}, duration={}ms",
-                        id,
-                        result.success,
-                        result.duration_ms
-                    );
+                    // Log completion with error details
+                    if result.success {
+                        log::info!(
+                            "✓ Queue item {} completed successfully: duration={}ms",
+                            id,
+                            result.duration_ms
+                        );
+                    } else {
+                        log::error!(
+                            "✗ Queue item {} FAILED: duration={}ms",
+                            id,
+                            result.duration_ms
+                        );
+
+                        // Log top-level error if present
+                        if let Some(ref error) = result.error {
+                            log::error!("  Error: {}", error);
+                        }
+
+                        // Log individual operation failures
+                        for (idx, op_result) in result.operation_results.iter().enumerate() {
+                            if !op_result.success {
+                                log::error!(
+                                    "  Operation {} failed: {} on entity '{}' (status: {})",
+                                    idx + 1,
+                                    op_result.operation.operation_type(),
+                                    op_result.operation.entity(),
+                                    op_result.status_code.map(|s| s.to_string()).unwrap_or_else(|| "unknown".to_string())
+                                );
+                                if let Some(ref err) = op_result.error {
+                                    log::error!("    Details: {}", err);
+                                }
+                            }
+                        }
+                    }
                 }
 
                 // Continue if auto-play

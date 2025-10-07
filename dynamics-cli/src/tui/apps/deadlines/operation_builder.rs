@@ -36,6 +36,7 @@ impl TransformedDeadline {
         // 2. Create junction entities for N:N relationships (Content-ID 2, 3, ...)
         for (relationship_name, related_ids) in &self.checkbox_relationships {
             let junction_entity = get_junction_entity_name(entity_type, relationship_name);
+            // Junction entities are NOT pluralized (unlike main entities)
             let deadline_field = format!("{}id@odata.bind", entity_type);
             let related_entity = extract_related_entity_from_relationship(relationship_name);
             let related_field = format!("{}id@odata.bind", related_entity);
@@ -72,11 +73,30 @@ impl TransformedDeadline {
             payload[field] = json!(value);
         }
 
+        // 1b. Generate cgk_name field (formatted as "Deadline - Date Time")
+        if entity_type == "cgk_deadline" {
+            if let Some(deadline_name) = self.direct_fields.get("cgk_deadlinename") {
+                let mut name_parts = vec![deadline_name.clone()];
+
+                // Add formatted date/time if available
+                if let Some(date) = self.deadline_date {
+                    let date_str = date.format("%d/%m/%Y").to_string();
+                    let time_str = if let Some(time) = self.deadline_time {
+                        time.format("%H:%M").to_string()
+                    } else {
+                        "12:00".to_string()
+                    };
+                    name_parts.push(format!("{} {}", date_str, time_str));
+                }
+
+                payload["cgk_name"] = json!(name_parts.join(" - "));
+            }
+        }
+
         // 2. Lookup fields (@odata.bind format)
-        for (field, id) in &self.lookup_fields {
+        for (field, (id, target_entity)) in &self.lookup_fields {
             let bind_field = format!("{}@odata.bind", field);
-            let entity_base = extract_entity_base_from_field(field);
-            let entity_set = pluralize_entity_name(&entity_base);
+            let entity_set = pluralize_entity_name(target_entity);
             payload[bind_field] = json!(format!("/{}({})", entity_set, id));
         }
 
@@ -100,7 +120,7 @@ impl TransformedDeadline {
         // 4. Commission date (date-only, no time conversion)
         if let Some(date) = self.commission_date {
             let commission_field = if entity_type == "cgk_deadline" {
-                "cgk_commissiondate"
+                "cgk_datumcommissievergadering"
             } else {
                 "nrq_commissiondate"
             };
@@ -113,16 +133,18 @@ impl TransformedDeadline {
 
 /// Get the junction entity name for a given entity type and relationship
 ///
-/// # CGK Pattern
+/// # CGK Pattern (varies by entity!)
 /// - cgk_deadline_cgk_support → cgk_cgk_deadline_cgk_support
 /// - cgk_deadline_cgk_category → cgk_cgk_deadline_cgk_category
+/// - cgk_deadline_cgk_length → cgk_cgk_deadline_cgk_length
+/// - cgk_deadline_cgk_flemishshare → cgk_cgk_flemishshare_cgk_deadline (REVERSED!)
 ///
 /// # NRQ Pattern (different!)
 /// - nrq_deadline_nrq_support → nrq_Deadline_nrq_Support_nrq_Support
 /// - nrq_deadline_nrq_category → nrq_Deadline_nrq_Category_nrq_Category
 fn get_junction_entity_name(entity_type: &str, relationship_name: &str) -> String {
     if entity_type == "cgk_deadline" {
-        // CGK: Simple pattern - cgk_cgk_deadline_cgk_{entity}
+        // CGK: Pattern varies by entity
         match relationship_name {
             "cgk_deadline_cgk_support" => "cgk_cgk_deadline_cgk_support".to_string(),
             "cgk_deadline_cgk_category" => "cgk_cgk_deadline_cgk_category".to_string(),

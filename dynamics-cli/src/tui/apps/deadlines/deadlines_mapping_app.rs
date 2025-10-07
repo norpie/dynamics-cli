@@ -555,8 +555,8 @@ fn process_row(
 
     // Determine field name prefixes
     let date_field = if entity_type == "cgk_deadline" { "cgk_date" } else { "nrq_date" };
-    let time_field = if entity_type == "cgk_deadline" { "cgk_time" } else { "nrq_time" };
-    let commission_date_field = if entity_type == "cgk_deadline" { "cgk_commissiondate" } else { "nrq_commissiondate" };
+    let time_field = if entity_type == "cgk_deadline" { "cgk_date" } else { "nrq_time" };
+    let commission_date_field = if entity_type == "cgk_deadline" { "cgk_datumcommissievergadering" } else { "nrq_commissiondate" };
 
     // Process each mapped field
     for mapping in mappings {
@@ -580,7 +580,7 @@ fn process_row(
                             &cell_value,
                             &mapping.excel_column,
                         ) {
-                            transformed.lookup_fields.insert(mapping.dynamics_field.clone(), id);
+                            transformed.lookup_fields.insert(mapping.dynamics_field.clone(), (id, target_entity.clone()));
                         } else {
                             transformed.warnings.push(format!(
                                 "Lookup '{}' not found: '{}'",

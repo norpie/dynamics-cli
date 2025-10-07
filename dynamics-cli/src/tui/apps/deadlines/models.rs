@@ -39,8 +39,8 @@ pub struct TransformedDeadline {
     /// Direct field values (cgk_name/nrq_name, cgk_info/nrq_info, etc.)
     pub direct_fields: std::collections::HashMap<String, String>,
 
-    /// Resolved lookup field IDs (cgk_pillarid -> GUID string)
-    pub lookup_fields: std::collections::HashMap<String, String>,
+    /// Resolved lookup field IDs (field_name -> (GUID, target_entity))
+    pub lookup_fields: std::collections::HashMap<String, (String, String)>,
 
     /// Resolved checkbox IDs for N:N relationships
     /// Key = relationship name (e.g., "cgk_deadline_cgk_support")

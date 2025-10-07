@@ -89,17 +89,17 @@ pub fn get_cgk_mappings() -> Vec<FieldMapping> {
             },
         },
 
-        // Deadline name
+        // Deadline name (just the value from Deadline column)
         FieldMapping {
             excel_column: "Deadline*".to_string(),
-            dynamics_field: "cgk_name".to_string(),
+            dynamics_field: "cgk_deadlinename".to_string(),
             field_type: FieldType::Direct,
         },
 
-        // Project manager - use email column (non-naam version)
+        // Project manager
         FieldMapping {
             excel_column: "Projectbeheerder".to_string(),
-            dynamics_field: "ownerid".to_string(),
+            dynamics_field: "cgk_projectmanagerid".to_string(),
             field_type: FieldType::Lookup {
                 target_entity: "systemuser".to_string(),
             },
@@ -112,21 +112,21 @@ pub fn get_cgk_mappings() -> Vec<FieldMapping> {
             field_type: FieldType::Direct,
         },
 
-        // Deadline date
+        // Deadline date (combined with time from "Uur" column)
         FieldMapping {
             excel_column: "Datum Deadline".to_string(),
             dynamics_field: "cgk_date".to_string(),
             field_type: FieldType::Date,
         },
 
-        // Commission meeting time (machine-readable time field)
+        // Time for deadline (combined into cgk_date)
         FieldMapping {
             excel_column: "Uur".to_string(),
-            dynamics_field: "cgk_time".to_string(),
+            dynamics_field: "cgk_date".to_string(),
             field_type: FieldType::Time,
         },
 
-        // Commission
+        // Commission lookup
         FieldMapping {
             excel_column: "Commissie".to_string(),
             dynamics_field: "cgk_commissionid".to_string(),
@@ -138,14 +138,14 @@ pub fn get_cgk_mappings() -> Vec<FieldMapping> {
         // Commission meeting date
         FieldMapping {
             excel_column: "Datum Commissievergadering".to_string(),
-            dynamics_field: "cgk_commissiondate".to_string(),
+            dynamics_field: "cgk_datumcommissievergadering".to_string(),
             field_type: FieldType::Date,
         },
 
-        // Board meeting (Raad van Bestuur)
+        // Board meeting (Raad van Bestuur) - hidden field only visible in $metadata
         FieldMapping {
             excel_column: "Raad van Bestuur".to_string(),
-            dynamics_field: "cgk_boardmeetingid".to_string(),
+            dynamics_field: "cgk_raadvanbestuur_cgk_deadline".to_string(),
             field_type: FieldType::Lookup {
                 target_entity: "cgk_deadline".to_string(), // Self-referencing for CGK
             },
