@@ -112,6 +112,7 @@ pub enum AppId {
     DeadlinesFileSelect,
     DeadlinesMapping,
     DeadlinesInspection,
+    OperationQueue,
 }
 
 impl<Msg> Command<Msg> {

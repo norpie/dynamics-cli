@@ -4,8 +4,10 @@ pub mod screens;
 pub mod migration;
 pub mod settings_app;
 pub mod deadlines;
+pub mod queue;
 
 pub use app_launcher::AppLauncher;
 pub use screens::{LoadingScreen, ErrorScreen};
 pub use settings_app::SettingsApp;
 pub use deadlines::{DeadlinesEnvironmentSelectApp, DeadlinesFileSelectApp, DeadlinesMappingApp, DeadlinesInspectionApp};
+pub use queue::OperationQueueApp;
