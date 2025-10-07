@@ -8,6 +8,8 @@ use ratatui::text::{Line, Span};
 use ratatui::style::{Style, Stylize};
 
 use super::models::{InspectionParams, TransformedDeadline};
+use crate::tui::apps::queue::{QueueItem, QueueMetadata};
+use crate::api::operations::Operations;
 
 pub struct DeadlinesInspectionApp;
 
@@ -101,7 +103,7 @@ pub enum Msg {
     ListNavigate(KeyCode),
     SetViewportHeight(usize),
     Back,
-    PrintAndPanic,
+    AddToQueueAndView,
 }
 
 impl crate::tui::AppState for State {}
@@ -157,77 +159,58 @@ impl App for DeadlinesInspectionApp {
                     sheet_name: String::new(), // TODO: preserve original sheet
                 },
             ),
-            Msg::PrintAndPanic => {
-                // Convert all transformed records to operations
-                let mut all_operations = Vec::new();
-                let mut total_operations_count = 0;
+            Msg::AddToQueueAndView => {
+                // Convert all transformed records (without warnings) to queue items
+                let mut queue_items = Vec::new();
 
                 for record in &state.transformed_records {
-                    let operations = record.to_operations(&state.entity_type);
-                    total_operations_count += operations.len();
-                    all_operations.push((record.source_row, operations));
-                }
-
-                // Print summary and operations
-                println!("\n");
-                println!("═══════════════════════════════════════════════════════════════");
-                println!("  DEADLINES - OPERATIONS PREVIEW");
-                println!("═══════════════════════════════════════════════════════════════");
-                println!();
-                println!("Environment: {}", state.environment_name);
-                println!("Entity Type: {}", state.entity_type);
-                println!("Total Records: {}", state.transformed_records.len());
-                println!("Total Operations: {}", total_operations_count);
-                let records_with_warnings = state.transformed_records.iter()
-                    .filter(|r| r.has_warnings())
-                    .count();
-                println!("Records with Warnings: {} (will be skipped)", records_with_warnings);
-                println!();
-
-                for (source_row, operations) in &all_operations {
-                    println!("───────────────────────────────────────────────────────────────");
-                    println!("Excel Row {}: {} operations", source_row, operations.len());
-                    println!("───────────────────────────────────────────────────────────────");
-                    println!();
-
-                    for (idx, operation) in operations.iter().enumerate() {
-                        let content_id = idx + 1;
-                        println!("  Operation {} (Content-ID: {})", idx + 1, content_id);
-                        println!("    Type: {}", operation.operation_type());
-                        println!("    Entity: {}", operation.entity());
-                        println!("    Method: {}", operation.http_method());
-
-                        // Show payload preview
-                        match operation {
-                            crate::api::operations::Operation::Create { data, .. } => {
-                                if let Some(obj) = data.as_object() {
-                                    println!("    Fields: {}", obj.keys().take(5).cloned().collect::<Vec<_>>().join(", "));
-                                    if obj.len() > 5 {
-                                        println!("    ... and {} more fields", obj.len() - 5);
-                                    }
-                                }
-                            }
-                            crate::api::operations::Operation::CreateWithRefs { data, content_id_refs, .. } => {
-                                println!("    References: {:?}", content_id_refs);
-                                if let Some(obj) = data.as_object() {
-                                    println!("    Fields: {}", obj.keys().take(5).cloned().collect::<Vec<_>>().join(", "));
-                                }
-                            }
-                            _ => {}
-                        }
-                        println!();
+                    // Skip records with warnings
+                    if record.has_warnings() {
+                        continue;
                     }
+
+                    // Get name for description
+                    let name_field = if state.entity_type == "cgk_deadline" { "cgk_name" } else { "nrq_name" };
+                    let name = record.direct_fields.get(name_field)
+                        .map(|s| s.as_str())
+                        .unwrap_or("<No Name>");
+
+                    // Convert to operations
+                    let operations_vec = record.to_operations(&state.entity_type);
+                    let operations = Operations::from_operations(operations_vec);
+
+                    // Create metadata
+                    let metadata = QueueMetadata {
+                        source: "Deadlines Excel".to_string(),
+                        entity_type: state.entity_type.clone(),
+                        description: format!("Row {}: {}", record.source_row, name),
+                        row_number: Some(record.source_row),
+                        environment_name: state.environment_name.clone(),
+                    };
+
+                    // Create queue item (priority based on row number - earlier rows = higher priority)
+                    let priority = (record.source_row.min(255)) as u8;
+                    let queue_item = QueueItem::new(operations, metadata, priority);
+                    queue_items.push(queue_item);
                 }
 
-                println!("═══════════════════════════════════════════════════════════════");
-                println!("  NEXT: Implement Queue System");
-                println!("═══════════════════════════════════════════════════════════════");
-                println!();
-                println!("Operations are ready for batch execution.");
-                println!("TODO: Add queue system to store and execute these operations.");
-                println!();
+                // Serialize queue items to JSON for pub/sub
+                let queue_items_json = match serde_json::to_value(&queue_items) {
+                    Ok(json) => json,
+                    Err(e) => {
+                        log::error!("Failed to serialize queue items: {}", e);
+                        return Command::None;
+                    }
+                };
 
-                panic!("Operations preview complete - application terminated");
+                // Publish to queue and navigate
+                Command::Batch(vec![
+                    Command::Publish {
+                        topic: "queue:add_items".to_string(),
+                        data: queue_items_json,
+                    },
+                    Command::navigate_to(AppId::OperationQueue),
+                ])
             }
         }
     }
@@ -306,8 +289,8 @@ impl App for DeadlinesInspectionApp {
                     .on_press(Msg::Back)
                     .build(),
                 spacer!(),
-                Element::button("inspect-button", "Print & Exit")
-                    .on_press(Msg::PrintAndPanic)
+                Element::button("queue-button", "Add to Queue & View")
+                    .on_press(Msg::AddToQueueAndView)
                     .build(),
             ] => Length(3),
         ];

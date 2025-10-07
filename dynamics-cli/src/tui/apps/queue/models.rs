@@ -1,9 +1,10 @@
 //! Data models for the operation queue
 
 use crate::api::operations::{Operations, OperationResult};
+use serde::{Serialize, Deserialize};
 
 /// Item in the operation queue
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct QueueItem {
     /// Unique identifier for this queue item
     pub id: String,
@@ -34,7 +35,7 @@ impl QueueItem {
 }
 
 /// Metadata about where a queue item came from
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct QueueMetadata {
     /// Source application/module (e.g., "Deadlines Excel", "Migration")
     pub source: String,
@@ -49,7 +50,7 @@ pub struct QueueMetadata {
 }
 
 /// Status of a queue item
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OperationStatus {
     /// Waiting to execute
     Pending,
@@ -77,7 +78,7 @@ impl OperationStatus {
 }
 
 /// Result of executing a queue item
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct QueueResult {
     /// Whether all operations succeeded
     pub success: bool,

@@ -41,6 +41,10 @@ pub enum Msg {
     DeleteSelected,
     RetrySelected,
 
+    // Queue management
+    AddItems(Vec<QueueItem>),
+    ClearQueue,
+
     // Execution
     StartExecution(String),
     ExecutionCompleted(String, QueueResult),
@@ -328,6 +332,17 @@ impl App for OperationQueueApp {
                 Command::None
             }
 
+            Msg::AddItems(mut items) => {
+                state.queue_items.append(&mut items);
+                Command::None
+            }
+
+            Msg::ClearQueue => {
+                state.queue_items.clear();
+                state.selected_item_id = None;
+                Command::None
+            }
+
             Msg::Back => Command::navigate_to(AppId::AppLauncher),
         }
     }
@@ -434,6 +449,7 @@ impl App for OperationQueueApp {
         use crossterm::event::KeyCode;
 
         vec![
+            // Keyboard shortcuts
             Subscription::keyboard(KeyBinding::new(KeyCode::Char(' ')), "Toggle play/pause", Msg::TogglePlay),
             Subscription::keyboard(KeyBinding::new(KeyCode::Char('p')), "Toggle play/pause", Msg::TogglePlay),
             Subscription::keyboard(KeyBinding::new(KeyCode::Char('s')), "Step one operation", Msg::StepOne),
@@ -444,6 +460,14 @@ impl App for OperationQueueApp {
             Subscription::keyboard(KeyBinding::new(KeyCode::Char('P')), "Toggle pause (selected)", Msg::TogglePauseSelected),
             Subscription::keyboard(KeyBinding::new(KeyCode::Char('r')), "Retry (selected)", Msg::RetrySelected),
             Subscription::keyboard(KeyBinding::new(KeyCode::Char('d')), "Delete (selected)", Msg::DeleteSelected),
+
+            // Event subscriptions
+            Subscription::subscribe("queue:add_items", |value| {
+                // Deserialize Vec<QueueItem> from JSON
+                serde_json::from_value::<Vec<QueueItem>>(value)
+                    .ok()
+                    .map(Msg::AddItems)
+            }),
         ]
     }
 
