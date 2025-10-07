@@ -34,6 +34,13 @@ pub enum Msg {
     DeleteItem(String),
     RetryItem(String),
 
+    // Keyboard shortcuts for selected item
+    IncreasePrioritySelected,
+    DecreasePrioritySelected,
+    TogglePauseSelected,
+    DeleteSelected,
+    RetrySelected,
+
     // Execution
     StartExecution(String),
     ExecutionCompleted(String, QueueResult),
@@ -61,6 +68,7 @@ pub struct State {
     // UI state
     filter: QueueFilter,
     sort_mode: SortMode,
+    selected_item_id: Option<String>,
 }
 
 impl crate::tui::AppState for State {}
@@ -79,6 +87,7 @@ impl App for OperationQueueApp {
             currently_running: HashSet::new(),
             filter: QueueFilter::All,
             sort_mode: SortMode::Priority,
+            selected_item_id: None,
         };
 
         (state, Command::set_focus(FocusId::new("queue-tree")))
@@ -91,8 +100,8 @@ impl App for OperationQueueApp {
                 Command::None
             }
 
-            Msg::NodeSelected(_id) => {
-                // Could show details panel
+            Msg::NodeSelected(id) => {
+                state.selected_item_id = Some(id);
                 Command::None
             }
 
@@ -262,6 +271,63 @@ impl App for OperationQueueApp {
                 Command::None
             }
 
+            // Keyboard shortcuts operating on selected item
+            Msg::IncreasePrioritySelected => {
+                if let Some(id) = &state.selected_item_id {
+                    if let Some(item) = state.queue_items.iter_mut().find(|i| &i.id == id) {
+                        if item.priority > 0 {
+                            item.priority -= 1;
+                        }
+                    }
+                }
+                Command::None
+            }
+
+            Msg::DecreasePrioritySelected => {
+                if let Some(id) = &state.selected_item_id {
+                    if let Some(item) = state.queue_items.iter_mut().find(|i| &i.id == id) {
+                        if item.priority < 255 {
+                            item.priority += 1;
+                        }
+                    }
+                }
+                Command::None
+            }
+
+            Msg::TogglePauseSelected => {
+                if let Some(id) = &state.selected_item_id {
+                    if let Some(item) = state.queue_items.iter_mut().find(|i| &i.id == id) {
+                        item.status = match item.status {
+                            OperationStatus::Pending => OperationStatus::Paused,
+                            OperationStatus::Paused => OperationStatus::Pending,
+                            _ => item.status.clone(),
+                        };
+                    }
+                }
+                Command::None
+            }
+
+            Msg::DeleteSelected => {
+                if let Some(id) = &state.selected_item_id {
+                    state.queue_items.retain(|item| &item.id != id);
+                    state.selected_item_id = None; // Clear selection after delete
+                }
+                Command::None
+            }
+
+            Msg::RetrySelected => {
+                if let Some(id) = &state.selected_item_id {
+                    if let Some(item) = state.queue_items.iter_mut().find(|i| &i.id == id) {
+                        item.status = OperationStatus::Pending;
+                        item.result = None;
+                    }
+                    if state.auto_play {
+                        return execute_next_if_available(state);
+                    }
+                }
+                Command::None
+            }
+
             Msg::Back => Command::navigate_to(AppId::AppLauncher),
         }
     }
@@ -346,18 +412,39 @@ impl App for OperationQueueApp {
             .on_render(Msg::ViewportHeight)
             .build();
 
-        let content = col![
-            controls => Length(3),
-            stats => Length(1),
-            filter_text => Length(1),
-            tree => Fill(1),
+        // Build details panel for selected item
+        let details_panel = build_details_panel(state, theme);
+
+        // Split into tree (left, larger) and details (right, smaller)
+        let main_content = row![
+            col![
+                controls => Length(3),
+                stats => Length(1),
+                filter_text => Length(1),
+                tree => Fill(1),
+            ] => Fill(3),
+            details_panel => Fill(1),
         ];
 
-        LayeredView::new(Element::panel(content).title("Operation Queue").build())
+        LayeredView::new(Element::panel(main_content).title("Operation Queue").build())
     }
 
     fn subscriptions(_state: &State) -> Vec<Subscription<Msg>> {
-        vec![]
+        use crate::tui::{Subscription, KeyBinding};
+        use crossterm::event::KeyCode;
+
+        vec![
+            Subscription::keyboard(KeyBinding::new(KeyCode::Char(' ')), "Toggle play/pause", Msg::TogglePlay),
+            Subscription::keyboard(KeyBinding::new(KeyCode::Char('p')), "Toggle play/pause", Msg::TogglePlay),
+            Subscription::keyboard(KeyBinding::new(KeyCode::Char('s')), "Step one operation", Msg::StepOne),
+            Subscription::keyboard(KeyBinding::new(KeyCode::Esc), "Back to launcher", Msg::Back),
+            Subscription::keyboard(KeyBinding::new(KeyCode::Char('=')), "Increase priority (selected)", Msg::IncreasePrioritySelected),
+            Subscription::keyboard(KeyBinding::new(KeyCode::Char('+')), "Increase priority (selected)", Msg::IncreasePrioritySelected),
+            Subscription::keyboard(KeyBinding::new(KeyCode::Char('-')), "Decrease priority (selected)", Msg::DecreasePrioritySelected),
+            Subscription::keyboard(KeyBinding::new(KeyCode::Char('P')), "Toggle pause (selected)", Msg::TogglePauseSelected),
+            Subscription::keyboard(KeyBinding::new(KeyCode::Char('r')), "Retry (selected)", Msg::RetrySelected),
+            Subscription::keyboard(KeyBinding::new(KeyCode::Char('d')), "Delete (selected)", Msg::DeleteSelected),
+        ]
     }
 
     fn title() -> &'static str {
@@ -442,4 +529,201 @@ fn execute_next_if_available(state: &mut State) -> Command<Msg> {
     } else {
         Command::None
     }
+}
+
+/// Build the details panel for the selected queue item
+fn build_details_panel(state: &State, theme: &Theme) -> Element<Msg> {
+    use ratatui::style::Style;
+    use ratatui::text::{Line as RataLine, Span};
+    use ratatui::prelude::Stylize;
+
+    let selected_item = state.selected_item_id.as_ref()
+        .and_then(|id| state.queue_items.iter().find(|item| &item.id == id))
+        .cloned();
+
+    let content = if let Some(item) = selected_item {
+        // Build detailed information about the selected item
+        let mut lines = vec![
+            // Header with status
+            Element::styled_text(RataLine::from(vec![
+                Span::styled(
+                    format!("{} ", item.status.symbol()),
+                    Style::default().fg(match item.status {
+                        OperationStatus::Pending => theme.yellow,
+                        OperationStatus::Running => theme.blue,
+                        OperationStatus::Paused => theme.overlay1,
+                        OperationStatus::Done => theme.green,
+                        OperationStatus::Failed => theme.red,
+                    })
+                ),
+                Span::styled(
+                    item.metadata.description.clone(),
+                    Style::default().fg(theme.text).bold()
+                ),
+            ])).build(),
+            Element::text(""),
+
+            // Priority
+            Element::styled_text(RataLine::from(vec![
+                Span::styled("Priority: ", Style::default().fg(theme.overlay1)),
+                Span::styled(
+                    item.priority.to_string(),
+                    Style::default().fg(theme.mauve)
+                ),
+            ])).build(),
+
+            // Source
+            Element::styled_text(RataLine::from(vec![
+                Span::styled("Source: ", Style::default().fg(theme.overlay1)),
+                Span::styled(
+                    item.metadata.source.clone(),
+                    Style::default().fg(theme.text)
+                ),
+            ])).build(),
+
+            // Entity type
+            Element::styled_text(RataLine::from(vec![
+                Span::styled("Entity: ", Style::default().fg(theme.overlay1)),
+                Span::styled(
+                    item.metadata.entity_type.clone(),
+                    Style::default().fg(theme.text)
+                ),
+            ])).build(),
+
+            // Environment
+            Element::styled_text(RataLine::from(vec![
+                Span::styled("Environment: ", Style::default().fg(theme.overlay1)),
+                Span::styled(
+                    item.metadata.environment_name.clone(),
+                    Style::default().fg(theme.text)
+                ),
+            ])).build(),
+        ];
+
+        // Row number if applicable
+        if let Some(row) = item.metadata.row_number {
+            lines.push(Element::styled_text(RataLine::from(vec![
+                Span::styled("Row: ", Style::default().fg(theme.overlay1)),
+                Span::styled(
+                    row.to_string(),
+                    Style::default().fg(theme.text)
+                ),
+            ])).build());
+        }
+
+        lines.push(Element::text(""));
+
+        // Operations list
+        lines.push(Element::styled_text(RataLine::from(vec![
+            Span::styled(
+                format!("Operations ({}):", item.operations.len()),
+                Style::default().fg(theme.peach).bold()
+            ),
+        ])).build());
+
+        for (idx, op) in item.operations.operations().iter().enumerate() {
+            let op_type = op.operation_type().to_string();
+            let entity = op.entity().to_string();
+
+            lines.push(Element::styled_text(RataLine::from(vec![
+                Span::styled(format!("  {}. ", idx + 1), Style::default().fg(theme.overlay1)),
+                Span::styled(op_type, Style::default().fg(theme.blue)),
+                Span::raw(" "),
+                Span::styled(entity, Style::default().fg(theme.text)),
+            ])).build());
+        }
+
+        // Show results if completed or failed
+        if let Some(result) = &item.result {
+            lines.push(Element::text(""));
+            lines.push(Element::styled_text(RataLine::from(vec![
+                Span::styled("Result:", Style::default().fg(theme.peach).bold()),
+            ])).build());
+
+            lines.push(Element::styled_text(RataLine::from(vec![
+                Span::styled("  Status: ", Style::default().fg(theme.overlay1)),
+                Span::styled(
+                    if result.success { "Success" } else { "Failed" },
+                    Style::default().fg(if result.success { theme.green } else { theme.red })
+                ),
+            ])).build());
+
+            lines.push(Element::styled_text(RataLine::from(vec![
+                Span::styled("  Duration: ", Style::default().fg(theme.overlay1)),
+                Span::styled(
+                    format!("{}ms", result.duration_ms),
+                    Style::default().fg(theme.text)
+                ),
+            ])).build());
+
+            // Show error if any
+            if let Some(error) = &result.error {
+                lines.push(Element::text(""));
+                lines.push(Element::styled_text(RataLine::from(vec![
+                    Span::styled("Error:", Style::default().fg(theme.red).bold()),
+                ])).build());
+
+                // Split error message into lines if too long
+                let max_width = 40;
+                let error_lines: Vec<&str> = error.as_str()
+                    .split('\n')
+                    .flat_map(|line| {
+                        if line.len() <= max_width {
+                            vec![line]
+                        } else {
+                            line.as_bytes()
+                                .chunks(max_width)
+                                .map(|chunk| std::str::from_utf8(chunk).unwrap_or(""))
+                                .collect()
+                        }
+                    })
+                    .collect();
+
+                for error_line in error_lines {
+                    lines.push(Element::styled_text(RataLine::from(vec![
+                        Span::styled(format!("  {}", error_line), Style::default().fg(theme.red)),
+                    ])).build());
+                }
+            }
+
+            // Show individual operation results
+            if !result.operation_results.is_empty() {
+                lines.push(Element::text(""));
+                lines.push(Element::styled_text(RataLine::from(vec![
+                    Span::styled("Operation Results:", Style::default().fg(theme.peach).bold()),
+                ])).build());
+
+                for (idx, op_result) in result.operation_results.iter().enumerate() {
+                    let status_symbol = if op_result.success { "✓" } else { "✗" };
+                    let status_color = if op_result.success { theme.green } else { theme.red };
+
+                    let msg = if let Some(err) = &op_result.error {
+                        err.clone()
+                    } else {
+                        "OK".to_string()
+                    };
+
+                    lines.push(Element::styled_text(RataLine::from(vec![
+                        Span::styled(format!("  {}. ", idx + 1), Style::default().fg(theme.overlay1)),
+                        Span::styled(status_symbol, Style::default().fg(status_color)),
+                        Span::raw(" "),
+                        Span::styled(msg, Style::default().fg(theme.text)),
+                    ])).build());
+                }
+            }
+        }
+
+        Element::column(lines).build()
+    } else {
+        // No selection
+        Element::column(vec![
+            Element::styled_text(RataLine::from(vec![
+                Span::styled("No item selected", Style::default().fg(theme.overlay1).italic()),
+            ])).build(),
+        ]).build()
+    };
+
+    Element::panel(content)
+        .title("Details")
+        .build()
 }
