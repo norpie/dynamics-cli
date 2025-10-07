@@ -379,7 +379,13 @@ impl App for OperationQueueApp {
 
             Msg::AddItems(mut items) => {
                 state.queue_items.append(&mut items);
-                Command::None
+
+                // If in play mode and we have capacity, start executing
+                if state.auto_play && state.currently_running.len() < state.max_concurrent {
+                    execute_next_if_available(state)
+                } else {
+                    Command::None
+                }
             }
 
             Msg::ClearQueue => {
