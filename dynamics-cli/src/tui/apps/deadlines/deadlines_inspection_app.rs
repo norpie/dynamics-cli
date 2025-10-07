@@ -183,13 +183,13 @@ impl App for DeadlinesInspectionApp {
                 // Track total for association batching later
                 state.total_deadlines_queued = valid_records.len();
 
-                // Batch deadline creates into groups of 200
+                // Batch deadline creates into groups of 50
                 let queue_items = batch_deadline_creates(
                     &valid_records,
                     &state.entity_type,
                     &state.environment_name,
                     &mut state.queued_items,
-                    200
+                    50
                 );
 
                 // Serialize queue items to JSON for pub/sub
@@ -261,12 +261,12 @@ impl App for DeadlinesInspectionApp {
                     if state.pending_associations.len() >= state.total_deadlines_queued {
                         log::info!("All {} deadlines created, batching associations", state.total_deadlines_queued);
 
-                        // Batch associations in groups of 200 max, never splitting a deadline's associations
+                        // Batch associations in groups of 50 max, never splitting a deadline's associations
                         let batched_queue_items = batch_associations(
                             &state.pending_associations,
                             &state.entity_type,
                             &metadata.environment_name,
-                            200
+                            50
                         );
 
                         if batched_queue_items.is_empty() {
