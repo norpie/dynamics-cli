@@ -382,4 +382,53 @@ impl Config {
     pub async fn delete_example_pair(&self, pair_id: &str) -> Result<()> {
         repository::examples::delete_example_pair(&self.pool, pair_id).await
     }
+
+    // Queue item methods
+    pub async fn save_queue_item(&self, item: &crate::tui::apps::queue::models::QueueItem) -> Result<()> {
+        repository::queue::save_queue_item(&self.pool, item).await
+    }
+
+    pub async fn get_queue_item(&self, id: &str) -> Result<Option<crate::tui::apps::queue::models::QueueItem>> {
+        repository::queue::get_queue_item(&self.pool, id).await
+    }
+
+    pub async fn list_queue_items(&self) -> Result<Vec<crate::tui::apps::queue::models::QueueItem>> {
+        repository::queue::list_queue_items(&self.pool).await
+    }
+
+    pub async fn update_queue_item_status(&self, id: &str, status: crate::tui::apps::queue::models::OperationStatus) -> Result<()> {
+        repository::queue::update_queue_item_status(&self.pool, id, status).await
+    }
+
+    pub async fn update_queue_item_priority(&self, id: &str, priority: u8) -> Result<()> {
+        repository::queue::update_queue_item_priority(&self.pool, id, priority).await
+    }
+
+    pub async fn update_queue_item_result(&self, id: &str, result: &crate::tui::apps::queue::models::QueueResult) -> Result<()> {
+        repository::queue::update_queue_item_result(&self.pool, id, result).await
+    }
+
+    pub async fn mark_queue_item_interrupted(&self, id: &str, interrupted_at: chrono::DateTime<chrono::Utc>) -> Result<()> {
+        repository::queue::mark_queue_item_interrupted(&self.pool, id, interrupted_at).await
+    }
+
+    pub async fn clear_queue_interruption_flag(&self, id: &str) -> Result<()> {
+        repository::queue::clear_interruption_flag(&self.pool, id).await
+    }
+
+    pub async fn delete_queue_item(&self, id: &str) -> Result<()> {
+        repository::queue::delete_queue_item(&self.pool, id).await
+    }
+
+    pub async fn clear_queue(&self) -> Result<()> {
+        repository::queue::clear_queue(&self.pool).await
+    }
+
+    pub async fn get_queue_settings(&self) -> Result<repository::queue::QueueSettings> {
+        repository::queue::get_queue_settings(&self.pool).await
+    }
+
+    pub async fn save_queue_settings(&self, settings: &repository::queue::QueueSettings) -> Result<()> {
+        repository::queue::save_queue_settings(&self.pool, settings).await
+    }
 }

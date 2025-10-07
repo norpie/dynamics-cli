@@ -63,6 +63,15 @@ pub enum Msg {
     DetailsScroll(crossterm::event::KeyCode),
     DetailsSetDimensions(usize, usize, usize, usize),  // (viewport_height, content_height, viewport_width, content_width)
 
+    // State loading and persistence
+    StateLoaded(Result<(Vec<QueueItem>, crate::config::repository::queue::QueueSettings, Vec<QueueItem>), String>),
+    PersistenceError(String),
+
+    // Interruption warnings
+    DismissInterruptionWarning,
+    ClearInterruptionFlag(String),
+    ClearInterruptionFlagSelected,
+
     // Navigation
     Back,
 }
@@ -89,6 +98,10 @@ pub struct State {
     // Modals
     clear_confirm_modal: ModalState<()>,
     delete_confirm_modal: ModalState<()>,
+    interruption_warning_modal: ModalState<Vec<QueueItem>>,
+
+    // Loading state
+    is_loading: bool,
 }
 
 impl Default for State {
@@ -106,6 +119,8 @@ impl Default for State {
             details_scroll_state: ScrollableState::new(),
             clear_confirm_modal: ModalState::Closed,
             delete_confirm_modal: ModalState::Closed,
+            interruption_warning_modal: ModalState::Closed,
+            is_loading: true,
         }
     }
 }
@@ -118,11 +133,129 @@ impl App for OperationQueueApp {
     type InitParams = ();
 
     fn init(_params: ()) -> (State, Command<Msg>) {
-        (State::default(), Command::set_focus(FocusId::new("queue-tree")))
+        let cmd = Command::perform(
+            async move {
+                let config = crate::global_config();
+
+                // Load queue items
+                let mut queue_items = config.list_queue_items().await
+                    .map_err(|e| format!("Failed to load queue items: {}", e))?;
+
+                // Load settings
+                let settings = config.get_queue_settings().await
+                    .map_err(|e| format!("Failed to load queue settings: {}", e))?;
+
+                // Detect and handle interrupted items
+                let mut interrupted_items = Vec::new();
+                let now = chrono::Utc::now();
+
+                log::info!("Checking for interrupted items. Total items loaded: {}", queue_items.len());
+
+                for item in &mut queue_items {
+                    log::debug!("Item {} has status: {:?}", item.id, item.status);
+                    if item.status == OperationStatus::Running {
+                        log::warn!("Found interrupted item: {} (was Running)", item.id);
+
+                        // Mark as interrupted
+                        item.status = OperationStatus::Pending;
+                        item.was_interrupted = true;
+                        item.interrupted_at = Some(now);
+                        item.started_at = None;
+
+                        interrupted_items.push(item.clone());
+
+                        // Persist the changes
+                        config.update_queue_item_status(&item.id, OperationStatus::Pending).await
+                            .map_err(|e| format!("Failed to update status: {}", e))?;
+                        config.mark_queue_item_interrupted(&item.id, now).await
+                            .map_err(|e| format!("Failed to mark interrupted: {}", e))?;
+                    }
+                }
+
+                log::info!("Found {} interrupted items", interrupted_items.len());
+
+                Ok((queue_items, settings, interrupted_items))
+            },
+            Msg::StateLoaded
+        );
+
+        (State::default(), cmd)
     }
 
     fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         match msg {
+            Msg::StateLoaded(result) => {
+                match result {
+                    Ok((queue_items, settings, interrupted_items)) => {
+                        state.queue_items = queue_items;
+                        state.auto_play = false; // Always start paused on load
+                        state.max_concurrent = settings.max_concurrent;
+                        state.filter = settings.filter;
+                        state.sort_mode = settings.sort_mode;
+                        state.is_loading = false;
+
+                        // Auto-select first item if queue is not empty
+                        if !state.queue_items.is_empty() && state.selected_item_id.is_none() {
+                            state.selected_item_id = state.queue_items.first().map(|item| item.id.clone());
+                        }
+
+                        // Show warning modal if there are interrupted items
+                        if !interrupted_items.is_empty() {
+                            state.interruption_warning_modal.open_with(interrupted_items);
+                            Command::set_focus(FocusId::new("warning-close"))
+                        } else {
+                            Command::set_focus(FocusId::new("queue-tree"))
+                        }
+                    }
+                    Err(err) => {
+                        log::error!("Failed to load queue state: {}", err);
+                        state.is_loading = false;
+                        Command::None
+                    }
+                }
+            }
+
+            Msg::PersistenceError(err) => {
+                log::error!("Queue persistence error: {}", err);
+                Command::None
+            }
+
+            Msg::DismissInterruptionWarning => {
+                state.interruption_warning_modal.close();
+                Command::set_focus(FocusId::new("queue-tree"))
+            }
+
+            Msg::ClearInterruptionFlag(id) => {
+                if let Some(item) = state.queue_items.iter_mut().find(|i| i.id == id) {
+                    item.was_interrupted = false;
+                    item.interrupted_at = None;
+
+                    // Persist to database
+                    let item_id = id.clone();
+                    return Command::perform(
+                        async move {
+                            let config = crate::global_config();
+                            config.clear_queue_interruption_flag(&item_id).await
+                                .map_err(|e| format!("Failed to clear interruption flag: {}", e))
+                        },
+                        |result| {
+                            match result {
+                                Err(err) => Msg::PersistenceError(err),
+                                Ok(_) => Msg::PersistenceError("".to_string()),
+                            }
+                        }
+                    );
+                }
+                Command::None
+            }
+
+            Msg::ClearInterruptionFlagSelected => {
+                if let Some(id) = &state.selected_item_id {
+                    return Self::update(state, Msg::ClearInterruptionFlag(id.clone()));
+                }
+                Command::None
+            }
+
             Msg::TreeEvent(event) => {
                 let old_selected = state.selected_item_id.clone();
                 state.tree_state.handle_event(event);
@@ -155,11 +288,15 @@ impl App for OperationQueueApp {
 
             Msg::TogglePlay => {
                 state.auto_play = !state.auto_play;
-                if state.auto_play {
+
+                let save_cmd = save_settings_command(state);
+                let exec_cmd = if state.auto_play {
                     execute_next_if_available(state)
                 } else {
                     Command::None
-                }
+                };
+
+                Command::Batch(vec![save_cmd, exec_cmd])
             }
 
             Msg::StepOne => {
@@ -171,6 +308,21 @@ impl App for OperationQueueApp {
                 if let Some(item) = state.queue_items.iter_mut().find(|i| i.id == id) {
                     if item.priority > 0 {
                         item.priority -= 1;
+                        let new_priority = item.priority;
+                        let item_id = id.clone();
+                        return Command::perform(
+                            async move {
+                                crate::global_config().update_queue_item_priority(&item_id, new_priority).await
+                                    .map_err(|e| format!("Failed to update priority: {}", e))
+                            },
+                            |result| {
+                                if let Err(err) = result {
+                                    Msg::PersistenceError(err)
+                                } else {
+                                    Msg::PersistenceError("".to_string())
+                                }
+                            }
+                        );
                     }
                 }
                 Command::None
@@ -180,6 +332,21 @@ impl App for OperationQueueApp {
                 if let Some(item) = state.queue_items.iter_mut().find(|i| i.id == id) {
                     if item.priority < 255 {
                         item.priority += 1;
+                        let new_priority = item.priority;
+                        let item_id = id.clone();
+                        return Command::perform(
+                            async move {
+                                crate::global_config().update_queue_item_priority(&item_id, new_priority).await
+                                    .map_err(|e| format!("Failed to update priority: {}", e))
+                            },
+                            |result| {
+                                if let Err(err) = result {
+                                    Msg::PersistenceError(err)
+                                } else {
+                                    Msg::PersistenceError("".to_string())
+                                }
+                            }
+                        );
                     }
                 }
                 Command::None
@@ -187,18 +354,47 @@ impl App for OperationQueueApp {
 
             Msg::TogglePauseItem(id) => {
                 if let Some(item) = state.queue_items.iter_mut().find(|i| i.id == id) {
-                    item.status = match item.status {
+                    let new_status = match item.status {
                         OperationStatus::Pending => OperationStatus::Paused,
                         OperationStatus::Paused => OperationStatus::Pending,
                         _ => item.status.clone(),
                     };
+                    item.status = new_status.clone();
+
+                    let item_id = id.clone();
+                    return Command::perform(
+                        async move {
+                            crate::global_config().update_queue_item_status(&item_id, new_status).await
+                                .map_err(|e| format!("Failed to update status: {}", e))
+                        },
+                        |result| {
+                            if let Err(err) = result {
+                                Msg::PersistenceError(err)
+                            } else {
+                                Msg::PersistenceError("".to_string())
+                            }
+                        }
+                    );
                 }
                 Command::None
             }
 
             Msg::DeleteItem(id) => {
                 state.queue_items.retain(|item| item.id != id);
-                Command::None
+
+                Command::perform(
+                    async move {
+                        crate::global_config().delete_queue_item(&id).await
+                            .map_err(|e| format!("Failed to delete queue item: {}", e))
+                    },
+                    |result| {
+                        if let Err(err) = result {
+                            Msg::PersistenceError(err)
+                        } else {
+                            Msg::PersistenceError("".to_string())
+                        }
+                    }
+                )
             }
 
             Msg::RetryItem(id) => {
@@ -206,12 +402,31 @@ impl App for OperationQueueApp {
                     item.status = OperationStatus::Pending;
                     item.result = None;
                     item.started_at = None;
+
+                    let item_id = id.clone();
+                    let persist_cmd = Command::perform(
+                        async move {
+                            crate::global_config().update_queue_item_status(&item_id, OperationStatus::Pending).await
+                                .map_err(|e| format!("Failed to update status: {}", e))
+                        },
+                        |result| {
+                            if let Err(err) = result {
+                                Msg::PersistenceError(err)
+                            } else {
+                                Msg::PersistenceError("".to_string())
+                            }
+                        }
+                    );
+
+                    let exec_cmd = if state.auto_play {
+                        execute_next_if_available(state)
+                    } else {
+                        Command::None
+                    };
+
+                    return Command::Batch(vec![persist_cmd, exec_cmd]);
                 }
-                if state.auto_play {
-                    execute_next_if_available(state)
-                } else {
-                    Command::None
-                }
+                Command::None
             }
 
             Msg::StartExecution(id) => {
@@ -222,11 +437,32 @@ impl App for OperationQueueApp {
                     state.currently_running.insert(id.clone());
                 }
 
+                // Persist Running status to database
+                let item_id_for_persist = id.clone();
+                let persist_cmd = Command::perform(
+                    async move {
+                        log::info!("Persisting Running status for item: {}", item_id_for_persist);
+                        let result = crate::global_config().update_queue_item_status(&item_id_for_persist, OperationStatus::Running).await;
+                        match &result {
+                            Ok(_) => log::info!("Successfully persisted Running status for item: {}", item_id_for_persist),
+                            Err(e) => log::error!("Failed to persist Running status: {}", e),
+                        }
+                        result.map_err(|e| format!("Failed to persist Running status: {}", e))
+                    },
+                    |result| {
+                        if let Err(err) = result {
+                            Msg::PersistenceError(err)
+                        } else {
+                            Msg::PersistenceError("".to_string())
+                        }
+                    }
+                );
+
                 // Get item for execution
                 let item = state.queue_items.iter().find(|i| i.id == id).cloned();
 
                 if let Some(item) = item {
-                    Command::perform(
+                    let exec_cmd = Command::perform(
                         async move {
                             let start = std::time::Instant::now();
 
@@ -266,9 +502,11 @@ impl App for OperationQueueApp {
                             (item.id.clone(), queue_result)
                         },
                         |(id, result)| Msg::ExecutionCompleted(id, result),
-                    )
+                    );
+
+                    Command::Batch(vec![persist_cmd, exec_cmd])
                 } else {
-                    Command::None
+                    persist_cmd
                 }
             }
 
@@ -276,14 +514,37 @@ impl App for OperationQueueApp {
                 state.currently_running.remove(&id);
 
                 let mut publish_cmd = Command::None;
+                let mut persist_cmd = Command::None;
 
                 if let Some(item) = state.queue_items.iter_mut().find(|i| i.id == id) {
-                    item.status = if result.success {
+                    let new_status = if result.success {
                         OperationStatus::Done
                     } else {
                         OperationStatus::Failed
                     };
+                    item.status = new_status.clone();
                     item.result = Some(result.clone());
+
+                    // Persist to database
+                    let item_id = id.clone();
+                    let result_clone = result.clone();
+                    persist_cmd = Command::perform(
+                        async move {
+                            let config = crate::global_config();
+                            config.update_queue_item_status(&item_id, new_status).await
+                                .map_err(|e| format!("Failed to update status: {}", e))?;
+                            config.update_queue_item_result(&item_id, &result_clone).await
+                                .map_err(|e| format!("Failed to update result: {}", e))?;
+                            Ok(())
+                        },
+                        |result| {
+                            if let Err(err) = result {
+                                Msg::PersistenceError(err)
+                            } else {
+                                Msg::PersistenceError("".to_string())
+                            }
+                        }
+                    );
 
                     // Track completion time for successful operations
                     if result.success {
@@ -349,56 +610,42 @@ impl App for OperationQueueApp {
                     Command::None
                 };
 
-                Command::Batch(vec![publish_cmd, next_cmd])
+                Command::Batch(vec![publish_cmd, persist_cmd, next_cmd])
             }
 
             Msg::SetFilter(filter) => {
                 state.filter = filter;
-                Command::None
+                save_settings_command(state)
             }
 
             Msg::SetSortMode(sort_mode) => {
                 state.sort_mode = sort_mode;
-                Command::None
+                save_settings_command(state)
             }
 
             Msg::SetMaxConcurrent(max) => {
                 state.max_concurrent = max;
-                Command::None
+                save_settings_command(state)
             }
 
             // Keyboard shortcuts operating on selected item
             Msg::IncreasePrioritySelected => {
-                if let Some(id) = &state.selected_item_id {
-                    if let Some(item) = state.queue_items.iter_mut().find(|i| &i.id == id) {
-                        if item.priority > 0 {
-                            item.priority -= 1;
-                        }
-                    }
+                if let Some(id) = state.selected_item_id.clone() {
+                    return Self::update(state, Msg::IncreasePriority(id));
                 }
                 Command::None
             }
 
             Msg::DecreasePrioritySelected => {
-                if let Some(id) = &state.selected_item_id {
-                    if let Some(item) = state.queue_items.iter_mut().find(|i| &i.id == id) {
-                        if item.priority < 255 {
-                            item.priority += 1;
-                        }
-                    }
+                if let Some(id) = state.selected_item_id.clone() {
+                    return Self::update(state, Msg::DecreasePriority(id));
                 }
                 Command::None
             }
 
             Msg::TogglePauseSelected => {
-                if let Some(id) = &state.selected_item_id {
-                    if let Some(item) = state.queue_items.iter_mut().find(|i| &i.id == id) {
-                        item.status = match item.status {
-                            OperationStatus::Pending => OperationStatus::Paused,
-                            OperationStatus::Paused => OperationStatus::Pending,
-                            _ => item.status.clone(),
-                        };
-                    }
+                if let Some(id) = state.selected_item_id.clone() {
+                    return Self::update(state, Msg::TogglePauseItem(id));
                 }
                 Command::None
             }
@@ -416,8 +663,23 @@ impl App for OperationQueueApp {
             Msg::ConfirmDeleteSelected => {
                 state.delete_confirm_modal.close();
                 if let Some(id) = &state.selected_item_id {
+                    let item_id = id.clone();
                     state.queue_items.retain(|item| &item.id != id);
                     state.selected_item_id = None; // Clear selection after delete
+
+                    return Command::perform(
+                        async move {
+                            crate::global_config().delete_queue_item(&item_id).await
+                                .map_err(|e| format!("Failed to delete queue item: {}", e))
+                        },
+                        |result| {
+                            if let Err(err) = result {
+                                Msg::PersistenceError(err)
+                            } else {
+                                Msg::PersistenceError("".to_string())
+                            }
+                        }
+                    );
                 }
                 Command::None
             }
@@ -432,16 +694,59 @@ impl App for OperationQueueApp {
                     if let Some(item) = state.queue_items.iter_mut().find(|i| &i.id == id) {
                         item.status = OperationStatus::Pending;
                         item.result = None;
-                    }
-                    if state.auto_play {
-                        return execute_next_if_available(state);
+
+                        let item_id = id.clone();
+                        let persist_cmd = Command::perform(
+                            async move {
+                                crate::global_config().update_queue_item_status(&item_id, OperationStatus::Pending).await
+                                    .map_err(|e| format!("Failed to update status: {}", e))
+                            },
+                            |result| {
+                                if let Err(err) = result {
+                                    Msg::PersistenceError(err)
+                                } else {
+                                    Msg::PersistenceError("".to_string())
+                                }
+                            }
+                        );
+
+                        let exec_cmd = if state.auto_play {
+                            execute_next_if_available(state)
+                        } else {
+                            Command::None
+                        };
+
+                        return Command::Batch(vec![persist_cmd, exec_cmd]);
                     }
                 }
                 Command::None
             }
 
-            Msg::AddItems(mut items) => {
+            Msg::AddItems(items) => {
                 let was_empty = state.queue_items.is_empty();
+
+                // Persist each item to database
+                let items_to_save = items.clone();
+                let persist_cmd = Command::perform(
+                    async move {
+                        let config = crate::global_config();
+                        for item in &items_to_save {
+                            if let Err(e) = config.save_queue_item(item).await {
+                                return Err(format!("Failed to save queue item: {}", e));
+                            }
+                        }
+                        Ok(())
+                    },
+                    |result| {
+                        if let Err(err) = result {
+                            Msg::PersistenceError(err)
+                        } else {
+                            Msg::PersistenceError("".to_string())
+                        }
+                    }
+                );
+
+                let mut items = items;
                 state.queue_items.append(&mut items);
 
                 // If queue was empty and we just added items, select the first one
@@ -450,11 +755,13 @@ impl App for OperationQueueApp {
                 }
 
                 // If in play mode and we have capacity, start executing
-                if state.auto_play && state.currently_running.len() < state.max_concurrent {
+                let exec_cmd = if state.auto_play && state.currently_running.len() < state.max_concurrent {
                     execute_next_if_available(state)
                 } else {
                     Command::None
-                }
+                };
+
+                Command::Batch(vec![persist_cmd, exec_cmd])
             }
 
             Msg::RequestClearQueue => {
@@ -466,7 +773,20 @@ impl App for OperationQueueApp {
                 state.clear_confirm_modal.close();
                 state.queue_items.clear();
                 state.selected_item_id = None;
-                Command::None
+
+                Command::perform(
+                    async move {
+                        crate::global_config().clear_queue().await
+                            .map_err(|e| format!("Failed to clear queue: {}", e))
+                    },
+                    |result| {
+                        if let Err(err) = result {
+                            Msg::PersistenceError(err)
+                        } else {
+                            Msg::PersistenceError("".to_string())
+                        }
+                    }
+                )
             }
 
             Msg::CancelModal => {
@@ -621,6 +941,12 @@ impl App for OperationQueueApp {
             view = view.with_app_modal(modal, Alignment::Center);
         }
 
+        // Add interruption warning modal if open
+        if state.interruption_warning_modal.is_open() {
+            let modal = build_interruption_warning_modal(state, theme);
+            view = view.with_app_modal(modal, Alignment::Center);
+        }
+
         view
     }
 
@@ -640,6 +966,7 @@ impl App for OperationQueueApp {
             Subscription::keyboard(KeyBinding::new(KeyCode::Char('-')), "Decrease priority (selected)", Msg::DecreasePrioritySelected),
             Subscription::keyboard(KeyBinding::new(KeyCode::Char('r')), "Retry (selected)", Msg::RetrySelected),
             Subscription::keyboard(KeyBinding::new(KeyCode::Char('d')), "Delete (selected)", Msg::RequestDeleteSelected),
+            Subscription::keyboard(KeyBinding::new(KeyCode::Char('c')), "Clear interruption warning (selected)", Msg::ClearInterruptionFlagSelected),
 
             // Event subscriptions
             Subscription::subscribe("queue:add_items", |value| {
@@ -655,9 +982,51 @@ impl App for OperationQueueApp {
         "Operation Queue"
     }
 
-    fn status(_state: &State, _theme: &Theme) -> Option<Line<'static>> {
-        None
+    fn status(state: &State, theme: &Theme) -> Option<Line<'static>> {
+        use ratatui::text::Span;
+        use ratatui::style::Style;
+
+        let interrupted_count = state.queue_items.iter()
+            .filter(|item| item.was_interrupted)
+            .count();
+
+        if interrupted_count > 0 {
+            Some(Line::from(vec![
+                Span::styled("⚠ ", Style::default().fg(theme.red)),
+                Span::styled(
+                    format!("{} interrupted operation(s) - verify before resuming", interrupted_count),
+                    Style::default().fg(theme.yellow)
+                ),
+            ]))
+        } else {
+            None
+        }
     }
+}
+
+/// Helper function to save queue settings to database
+/// Note: auto_play is NOT persisted (always starts paused)
+fn save_settings_command(state: &State) -> Command<Msg> {
+    let settings = crate::config::repository::queue::QueueSettings {
+        auto_play: false, // Never persist auto_play - always start paused
+        max_concurrent: state.max_concurrent,
+        filter: state.filter,
+        sort_mode: state.sort_mode,
+    };
+
+    Command::perform(
+        async move {
+            crate::global_config().save_queue_settings(&settings).await
+                .map_err(|e| format!("Failed to save queue settings: {}", e))
+        },
+        |result| {
+            if let Err(err) = result {
+                Msg::PersistenceError(err)
+            } else {
+                Msg::PersistenceError("".to_string())
+            }
+        }
+    )
 }
 
 /// Helper function to execute the next available operation
@@ -683,11 +1052,32 @@ fn execute_next_if_available(state: &mut State) -> Command<Msg> {
             state.currently_running.insert(id.clone());
         }
 
+        // Persist Running status to database
+        let item_id_for_persist = id.clone();
+        let persist_cmd = Command::perform(
+            async move {
+                log::info!("Persisting Running status for item: {}", item_id_for_persist);
+                let result = crate::global_config().update_queue_item_status(&item_id_for_persist, OperationStatus::Running).await;
+                match &result {
+                    Ok(_) => log::info!("Successfully persisted Running status for item: {}", item_id_for_persist),
+                    Err(e) => log::error!("Failed to persist Running status: {}", e),
+                }
+                result.map_err(|e| format!("Failed to persist Running status: {}", e))
+            },
+            |result| {
+                if let Err(err) = result {
+                    Msg::PersistenceError(err)
+                } else {
+                    Msg::PersistenceError("".to_string())
+                }
+            }
+        );
+
         // Get item for execution
         let item = state.queue_items.iter().find(|i| i.id == id).cloned();
 
         if let Some(item) = item {
-            Command::perform(
+            let exec_cmd = Command::perform(
                 async move {
                     let start = std::time::Instant::now();
 
@@ -727,9 +1117,11 @@ fn execute_next_if_available(state: &mut State) -> Command<Msg> {
                     (item.id.clone(), queue_result)
                 },
                 |(id, result)| Msg::ExecutionCompleted(id, result),
-            )
+            );
+
+            Command::Batch(vec![persist_cmd, exec_cmd])
         } else {
-            Command::None
+            persist_cmd
         }
     } else {
         Command::None
@@ -1069,6 +1461,46 @@ fn build_details_panel(state: &State, theme: &Theme, scroll_state: &ScrollableSt
             ])).build());
         }
 
+        // Warning section if interrupted
+        if item.was_interrupted {
+            lines.push(Element::text(""));
+            lines.push(Element::styled_text(RataLine::from(vec![
+                Span::styled("⚠ WARNING: ", Style::default().fg(theme.red).bold()),
+                Span::styled(
+                    "Operation was interrupted and may have partially executed.",
+                    Style::default().fg(theme.yellow)
+                ),
+            ])).build());
+
+            if let Some(interrupted_at) = item.interrupted_at {
+                lines.push(Element::styled_text(RataLine::from(vec![
+                    Span::styled("  Interrupted at: ", Style::default().fg(theme.overlay1)),
+                    Span::styled(
+                        interrupted_at.format("%Y-%m-%d %H:%M:%S UTC").to_string(),
+                        Style::default().fg(theme.text)
+                    ),
+                ])).build());
+            }
+
+            lines.push(Element::styled_text(RataLine::from(vec![
+                Span::styled(
+                    "  → Verify completion in Dynamics before retrying or deleting",
+                    Style::default().fg(theme.yellow).italic()
+                ),
+            ])).build());
+
+            // Add clear warning button
+            let clear_warning_btn = Element::button(
+                FocusId::new("clear-warning"),
+                "[c] Mark as Verified".to_string()
+            )
+            .on_press(Msg::ClearInterruptionFlag(item.id.clone()))
+            .build();
+
+            lines.push(Element::text(""));
+            lines.push(clear_warning_btn);
+        }
+
         lines.push(Element::text(""));
 
         // Operations list
@@ -1221,4 +1653,46 @@ fn build_delete_confirm_modal(theme: &Theme) -> Element<Msg> {
         .on_cancel(Msg::CancelModal)
         .width(60)
         .build(theme)
+}
+
+fn build_interruption_warning_modal(state: &State, theme: &Theme) -> Element<Msg> {
+    use crate::tui::modals::WarningModal;
+
+    let interrupted_items = if let Some(items) = state.interruption_warning_modal.data() {
+        items
+    } else {
+        return Element::None; // Should not happen
+    };
+
+    let count = interrupted_items.len();
+    let message = format!(
+        "The application was closed while {} operation(s) were executing.\n\
+        These may have partially completed in Dynamics 365.\n\
+        \n\
+        Before resuming:\n\
+        • Verify in Dynamics whether operations succeeded\n\
+        • Delete items that already completed (press 'd')\n\
+        • Keep items that need retry\n\
+        \n\
+        Items are marked with ⚠ in the queue.\n\
+        Press 'c' on an item to clear its warning.",
+        count
+    );
+
+    let mut modal = WarningModal::new("Interrupted Operations Detected")
+        .message(message)
+        .on_close(Msg::DismissInterruptionWarning)
+        .width(80);
+
+    // Add first few items as examples (limit to 5)
+    for item in interrupted_items.iter().take(5) {
+        let item_desc = format!("{} ({})", item.metadata.description, item.metadata.environment_name);
+        modal = modal.add_item(item_desc);
+    }
+
+    if interrupted_items.len() > 5 {
+        modal = modal.add_item(format!("... and {} more", interrupted_items.len() - 5));
+    }
+
+    modal.build(theme)
 }

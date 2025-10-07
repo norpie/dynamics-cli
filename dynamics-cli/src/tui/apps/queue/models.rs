@@ -22,6 +22,12 @@ pub struct QueueItem {
     /// When execution started (None if not started yet)
     #[serde(skip)]
     pub started_at: Option<Instant>,
+    /// True if this item was Running when the app exited
+    #[serde(default)]
+    pub was_interrupted: bool,
+    /// When the interruption occurred (app exit timestamp)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interrupted_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 impl QueueItem {
@@ -35,6 +41,8 @@ impl QueueItem {
             priority,
             result: None,
             started_at: None,
+            was_interrupted: false,
+            interrupted_at: None,
         }
     }
 }
@@ -107,7 +115,7 @@ pub struct QueueResult {
 }
 
 /// Filter for displaying queue items
-#[derive(Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum QueueFilter {
     /// Show all items
     #[default]
@@ -147,7 +155,7 @@ impl QueueFilter {
 }
 
 /// Sort mode for queue items
-#[derive(Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SortMode {
     /// Sort by priority (lower first)
     #[default]

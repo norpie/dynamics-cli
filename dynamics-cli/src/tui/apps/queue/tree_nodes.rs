@@ -107,10 +107,17 @@ impl TableTreeItem for QueueTreeNode {
                     "-".to_string()
                 };
 
+                // Add warning indicator if interrupted
+                let description = if item.was_interrupted {
+                    format!("{} ({}) ⚠", item.metadata.description, op_entity)
+                } else {
+                    format!("{} ({})", item.metadata.description, op_entity)
+                };
+
                 vec![
                     item.priority.to_string(),
                     status_word.to_string(),
-                    format!("{} ({})", item.metadata.description, op_entity),
+                    description,
                     op_type,
                     time_display,
                 ]

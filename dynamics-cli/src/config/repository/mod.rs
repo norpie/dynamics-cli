@@ -11,3 +11,4 @@ pub mod entity_data_cache;
 pub mod mappings;
 pub mod examples;
 pub mod update_metadata;
+pub mod queue;
