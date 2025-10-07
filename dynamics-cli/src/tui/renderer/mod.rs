@@ -370,6 +370,23 @@ impl Renderer {
                 render_tree(frame, theme, registry, focus_registry, dropdown_registry, focused_id, id, items, node_ids, selected, *scroll_offset, on_select, on_toggle, on_navigate, on_event, on_focus, on_blur, on_render, area, inside_panel, Self::render_element);
             }
 
+            Element::TableTree {
+                id,
+                flattened_nodes,
+                node_ids,
+                selected,
+                scroll_offset,
+                column_widths,
+                column_headers,
+                on_select,
+                on_event,
+                on_focus,
+                on_blur,
+                on_render,
+            } => {
+                render_table_tree(frame, theme, registry, focus_registry, dropdown_registry, focused_id, id, flattened_nodes, node_ids, selected, *scroll_offset, column_widths, column_headers, on_select, on_event, on_focus, on_blur, on_render, area, inside_panel);
+            }
+
             Element::Scrollable {
                 id,
                 child,
@@ -531,6 +548,10 @@ impl Renderer {
             Element::Tree { items, .. } => {
                 let height = (items.len() as u16).min(max_height);
                 (max_width.min(40), height)
+            }
+            Element::TableTree { flattened_nodes, .. } => {
+                let height = (flattened_nodes.len() as u16 + 3).min(max_height); // +3 for header and borders
+                (max_width.min(60), height)
             }
             Element::Scrollable { child, .. } => {
                 Self::calculate_content_size(child, max_width, max_height)

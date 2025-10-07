@@ -16,4 +16,4 @@ pub use list::{ListItem, ListState};
 pub use scrollable::ScrollableState;
 pub use select::SelectState;
 pub use text_input::TextInputState;
-pub use tree::{TreeItem, TreeState};
+pub use tree::{TreeItem, TableTreeItem, TreeState, FlatTableNode};

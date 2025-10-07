@@ -179,6 +179,22 @@ pub enum Element<Msg> {
         on_render: Option<fn(usize) -> Msg>,  // Called with actual viewport height from renderer
     },
 
+    /// Table-style tree with columns and borders
+    TableTree {
+        id: FocusId,
+        flattened_nodes: Vec<crate::tui::widgets::FlatTableNode>,  // Pre-flattened table nodes
+        node_ids: Vec<String>,           // Parallel array of node IDs
+        selected: Option<String>,        // Selected node ID (not index!)
+        scroll_offset: usize,
+        column_widths: Vec<ratatui::layout::Constraint>,  // Column layout constraints
+        column_headers: Vec<String>,     // Column header labels
+        on_select: Option<fn(String) -> Msg>,     // ID-based callbacks
+        on_event: Option<fn(crate::tui::widgets::TreeEvent) -> Msg>,  // Unified event pattern
+        on_focus: Option<Msg>,
+        on_blur: Option<Msg>,
+        on_render: Option<fn(usize) -> Msg>,  // Called with actual viewport height from renderer
+    },
+
     /// Scrollable wrapper for any element
     Scrollable {
         id: FocusId,
@@ -418,6 +434,7 @@ impl<Msg> Element<Msg> {
             Element::List { .. } => LayoutConstraint::Fill(1),
             Element::TextInput { .. } => LayoutConstraint::Length(1),
             Element::Tree { .. } => LayoutConstraint::Fill(1),
+            Element::TableTree { .. } => LayoutConstraint::Fill(1),
             Element::Scrollable { .. } => LayoutConstraint::Fill(1),
             Element::Select { .. } => LayoutConstraint::Length(1),  // Borderless like TextInput
             Element::Autocomplete { .. } => LayoutConstraint::Length(1),  // Borderless like TextInput
@@ -510,6 +527,44 @@ impl<Msg> Element<Msg> {
             on_select: None,
             on_toggle: None,
             on_navigate: None,
+            on_event: None,
+            on_focus: None,
+            on_blur: None,
+            on_render: None,
+        }
+    }
+
+    /// Create a table-style tree element from TableTreeItem-implementing items
+    pub fn table_tree<T>(
+        id: impl Into<FocusId>,
+        root_items: &[T],
+        state: &mut crate::tui::widgets::TreeState,
+    ) -> TableTreeBuilder<Msg>
+    where
+        T: crate::tui::widgets::TableTreeItem<Msg = Msg>,
+    {
+        // Force cache invalidation to rebuild visible_order with current items
+        state.invalidate_cache();
+
+        // Flatten tree based on expansion state
+        let flattened = crate::tui::widgets::tree::flatten_table_tree(root_items, state);
+
+        // Extract node IDs (parallel array)
+        let node_ids: Vec<String> = flattened.iter().map(|node| node.id.clone()).collect();
+
+        // Get column configuration from the trait
+        let column_widths = T::column_widths();
+        let column_headers = T::column_headers();
+
+        TableTreeBuilder {
+            id: id.into(),
+            flattened_nodes: flattened,
+            node_ids,
+            selected: state.selected().map(String::from),
+            scroll_offset: state.scroll_offset(),
+            column_widths,
+            column_headers,
+            on_select: None,
             on_event: None,
             on_focus: None,
             on_blur: None,

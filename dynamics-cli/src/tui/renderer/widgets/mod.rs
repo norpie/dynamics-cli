@@ -4,6 +4,7 @@ pub mod layout;
 pub mod button;
 pub mod list;
 pub mod tree;
+pub mod table_tree;
 pub mod text_input;
 pub mod scrollable;
 pub mod select;
@@ -17,6 +18,7 @@ pub use layout::{calculate_constraints, render_column, render_row, render_contai
 pub use button::render_button;
 pub use list::{render_list, render_file_browser};
 pub use tree::render_tree;
+pub use table_tree::render_table_tree;
 pub use text_input::render_text_input;
 pub use scrollable::render_scrollable;
 pub use select::render_select;

@@ -29,6 +29,40 @@ pub trait TreeItem: Clone {
     ) -> Element<Self::Msg>;
 }
 
+/// Trait for items that can be displayed in a table-style tree with columns
+///
+/// This extends TreeItem to support table rendering with proper column alignment
+/// and borders between columns, ideal for queue management UIs.
+pub trait TableTreeItem: TreeItem {
+    /// Return column values for this row as strings
+    ///
+    /// Each String represents the content for one column.
+    /// The first column will automatically have tree indentation applied.
+    ///
+    /// # Arguments
+    /// * `depth` - indentation level (0 = root)
+    /// * `is_selected` - whether this node is currently selected
+    /// * `is_expanded` - whether this node is currently expanded
+    fn to_table_columns(
+        &self,
+        depth: usize,
+        is_selected: bool,
+        is_expanded: bool,
+    ) -> Vec<String>;
+
+    /// Define column widths using ratatui Constraints
+    ///
+    /// This is a static method that returns the layout constraints for all columns.
+    /// Example: vec![Constraint::Length(5), Constraint::Fill(1), Constraint::Length(10)]
+    fn column_widths() -> Vec<ratatui::layout::Constraint>;
+
+    /// Define column headers
+    ///
+    /// This is a static method that returns the header labels for each column.
+    /// Example: vec!["Pri".to_string(), "Operation".to_string(), "Status".to_string()]
+    fn column_headers() -> Vec<String>;
+}
+
 /// Manages tree expansion, selection, and scrolling state
 #[derive(Debug, Clone)]
 pub struct TreeState {
@@ -342,6 +376,15 @@ pub(crate) struct FlatNode<Msg> {
     pub depth: usize,
 }
 
+/// Internal structure for flattened table tree nodes
+pub struct FlatTableNode {
+    pub id: String,
+    pub columns: Vec<String>,
+    pub depth: usize,
+    pub is_selected: bool,
+    pub is_expanded: bool,
+}
+
 /// Flatten tree into displayable nodes based on expansion state
 pub(crate) fn flatten_tree<T: TreeItem>(
     root_items: &[T],
@@ -385,6 +428,53 @@ fn flatten_recursive<T: TreeItem>(
     if is_expanded && has_children {
         for child in item.children() {
             flatten_recursive(&child, state, theme, depth + 1, result);
+        }
+    }
+}
+
+/// Flatten table tree into displayable rows based on expansion state
+pub(crate) fn flatten_table_tree<T: TableTreeItem>(
+    root_items: &[T],
+    state: &mut TreeState,
+) -> Vec<FlatTableNode> {
+    // Rebuild metadata cache if invalid
+    if !state.cache_valid {
+        state.rebuild_metadata(root_items);
+    }
+
+    let mut result = vec![];
+    for item in root_items {
+        flatten_table_recursive(item, state, 0, &mut result);
+    }
+    result
+}
+
+fn flatten_table_recursive<T: TableTreeItem>(
+    item: &T,
+    state: &TreeState,
+    depth: usize,
+    result: &mut Vec<FlatTableNode>,
+) {
+    let id = item.id();
+    let is_expanded = state.is_expanded(&id);
+    let is_selected = state.selected() == Some(&id);
+    let has_children = item.has_children();
+
+    // Get column data from item
+    let columns = item.to_table_columns(depth, is_selected, is_expanded);
+
+    result.push(FlatTableNode {
+        id: id.clone(),
+        columns,
+        depth,
+        is_selected,
+        is_expanded,
+    });
+
+    // Recursively flatten children if expanded
+    if is_expanded && has_children {
+        for child in item.children() {
+            flatten_table_recursive(&child, state, depth + 1, result);
         }
     }
 }
