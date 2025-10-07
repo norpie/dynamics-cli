@@ -26,10 +26,22 @@ impl KeyBinding {
     }
 
     /// Create a key binding with no modifiers
+    /// Automatically adds SHIFT modifier to uppercase letters
     pub fn new(code: KeyCode) -> Self {
-        Self {
-            code,
-            modifiers: KeyModifiers::empty(),
+        match code {
+            // Add SHIFT modifier to uppercase letters
+            // This is necessary because crossterm sends Char('C') WITH SHIFT modifier
+            KeyCode::Char(c) if c.is_ascii_uppercase() => {
+                Self {
+                    code,
+                    modifiers: KeyModifiers::SHIFT,
+                }
+            }
+            // Everything else: no modifiers
+            _ => Self {
+                code,
+                modifiers: KeyModifiers::empty(),
+            }
         }
     }
 

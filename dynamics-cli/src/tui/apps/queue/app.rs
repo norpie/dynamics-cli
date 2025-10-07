@@ -3,11 +3,12 @@
 use crate::tui::{
     app::App,
     command::{AppId, Command},
-    element::{Element, LayoutConstraint, FocusId},
+    element::{Element, LayoutConstraint, FocusId, Alignment},
     subscription::Subscription,
     state::theme::Theme,
     renderer::LayeredView,
     widgets::{TreeState, TreeEvent, ScrollableState},
+    ModalState,
 };
 use crate::{col, row, use_constraints};
 use crate::api::resilience::ResilienceConfig;
@@ -43,7 +44,11 @@ pub enum Msg {
 
     // Queue management
     AddItems(Vec<QueueItem>),
-    ClearQueue,
+    RequestClearQueue,
+    ConfirmClearQueue,
+    RequestDeleteSelected,
+    ConfirmDeleteSelected,
+    CancelModal,
 
     // Execution
     StartExecution(String),
@@ -80,6 +85,10 @@ pub struct State {
     sort_mode: SortMode,
     selected_item_id: Option<String>,
     details_scroll_state: ScrollableState,
+
+    // Modals
+    clear_confirm_modal: ModalState<()>,
+    delete_confirm_modal: ModalState<()>,
 }
 
 impl Default for State {
@@ -95,6 +104,8 @@ impl Default for State {
             sort_mode: SortMode::Priority,
             selected_item_id: None,
             details_scroll_state: ScrollableState::new(),
+            clear_confirm_modal: ModalState::Closed,
+            delete_confirm_modal: ModalState::Closed,
         }
     }
 }
@@ -392,11 +403,27 @@ impl App for OperationQueueApp {
                 Command::None
             }
 
-            Msg::DeleteSelected => {
+            Msg::RequestDeleteSelected => {
+                // Only show modal if there's a selected item
+                if state.selected_item_id.is_some() {
+                    state.delete_confirm_modal.open_empty();
+                    Command::set_focus(FocusId::new("confirmation-cancel"))
+                } else {
+                    Command::None
+                }
+            }
+
+            Msg::ConfirmDeleteSelected => {
+                state.delete_confirm_modal.close();
                 if let Some(id) = &state.selected_item_id {
                     state.queue_items.retain(|item| &item.id != id);
                     state.selected_item_id = None; // Clear selection after delete
                 }
+                Command::None
+            }
+
+            Msg::DeleteSelected => {
+                // Deprecated - use RequestDeleteSelected instead
                 Command::None
             }
 
@@ -424,9 +451,21 @@ impl App for OperationQueueApp {
                 }
             }
 
-            Msg::ClearQueue => {
+            Msg::RequestClearQueue => {
+                state.clear_confirm_modal.open_empty();
+                Command::set_focus(FocusId::new("confirmation-cancel"))
+            }
+
+            Msg::ConfirmClearQueue => {
+                state.clear_confirm_modal.close();
                 state.queue_items.clear();
                 state.selected_item_id = None;
+                Command::None
+            }
+
+            Msg::CancelModal => {
+                state.clear_confirm_modal.close();
+                state.delete_confirm_modal.close();
                 Command::None
             }
 
@@ -487,7 +526,7 @@ impl App for OperationQueueApp {
             .build();
 
         let clear_button = Element::button("clear-btn", "[C] Clear")
-            .on_press(Msg::ClearQueue)
+            .on_press(Msg::RequestClearQueue)
             .build();
 
         let count_by_status = |status: OperationStatus| {
@@ -560,7 +599,21 @@ impl App for OperationQueueApp {
             details_panel => Fill(1),
         ];
 
-        LayeredView::new(Element::panel(main_content).build())
+        let mut view = LayeredView::new(Element::panel(main_content).build());
+
+        // Add clear confirmation modal if open
+        if state.clear_confirm_modal.is_open() {
+            let modal = build_clear_confirm_modal(theme);
+            view = view.with_app_modal(modal, Alignment::Center);
+        }
+
+        // Add delete confirmation modal if open
+        if state.delete_confirm_modal.is_open() {
+            let modal = build_delete_confirm_modal(theme);
+            view = view.with_app_modal(modal, Alignment::Center);
+        }
+
+        view
     }
 
     fn subscriptions(_state: &State) -> Vec<Subscription<Msg>> {
@@ -572,13 +625,13 @@ impl App for OperationQueueApp {
             Subscription::keyboard(KeyBinding::new(KeyCode::Char('P')), "Toggle play/pause (queue)", Msg::TogglePlay),
             Subscription::keyboard(KeyBinding::new(KeyCode::Char('p')), "Toggle pause (selected)", Msg::TogglePauseSelected),
             Subscription::keyboard(KeyBinding::new(KeyCode::Char('s')), "Step one operation", Msg::StepOne),
-            Subscription::keyboard(KeyBinding::new(KeyCode::Char('C')), "Clear queue", Msg::ClearQueue),
+            Subscription::keyboard(KeyBinding::new(KeyCode::Char('C')), "Clear queue", Msg::RequestClearQueue),
             Subscription::keyboard(KeyBinding::new(KeyCode::Esc), "Back to launcher", Msg::Back),
             Subscription::keyboard(KeyBinding::new(KeyCode::Char('=')), "Increase priority (selected)", Msg::IncreasePrioritySelected),
             Subscription::keyboard(KeyBinding::new(KeyCode::Char('+')), "Increase priority (selected)", Msg::IncreasePrioritySelected),
             Subscription::keyboard(KeyBinding::new(KeyCode::Char('-')), "Decrease priority (selected)", Msg::DecreasePrioritySelected),
             Subscription::keyboard(KeyBinding::new(KeyCode::Char('r')), "Retry (selected)", Msg::RetrySelected),
-            Subscription::keyboard(KeyBinding::new(KeyCode::Char('d')), "Delete (selected)", Msg::DeleteSelected),
+            Subscription::keyboard(KeyBinding::new(KeyCode::Char('d')), "Delete (selected)", Msg::RequestDeleteSelected),
 
             // Event subscriptions
             Subscription::subscribe("queue:add_items", |value| {
@@ -1134,4 +1187,30 @@ fn build_details_panel(state: &State, theme: &Theme, scroll_state: &ScrollableSt
     Element::panel(scrollable_content)
         .title("Details")
         .build()
+}
+
+fn build_clear_confirm_modal(theme: &Theme) -> Element<Msg> {
+    use crate::tui::modals::ConfirmationModal;
+
+    ConfirmationModal::new("Clear Queue")
+        .message("Are you sure you want to clear all queue items?\nThis action cannot be undone.")
+        .confirm_text("Yes")
+        .cancel_text("No")
+        .on_confirm(Msg::ConfirmClearQueue)
+        .on_cancel(Msg::CancelModal)
+        .width(60)
+        .build(theme)
+}
+
+fn build_delete_confirm_modal(theme: &Theme) -> Element<Msg> {
+    use crate::tui::modals::ConfirmationModal;
+
+    ConfirmationModal::new("Delete Item")
+        .message("Are you sure you want to delete this queue item?\nThis action cannot be undone.")
+        .confirm_text("Yes")
+        .cancel_text("No")
+        .on_confirm(Msg::ConfirmDeleteSelected)
+        .on_cancel(Msg::CancelModal)
+        .width(60)
+        .build(theme)
 }
