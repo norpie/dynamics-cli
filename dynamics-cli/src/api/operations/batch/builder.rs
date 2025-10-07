@@ -163,6 +163,37 @@ impl BatchRequestBuilder {
                     body: Some(body),
                 }
             }
+            Operation::AssociateRef { entity, entity_ref, navigation_property, target_ref } => {
+                // POST /entities(id)/navigation_property/$ref with body {"@odata.id": "target"}
+                let path = format!("{}/{}({})/{}/$ref",
+                    constants::api_path(),
+                    entity,
+                    entity_ref,
+                    navigation_property
+                );
+
+                // Convert relative target_ref to absolute URL for @odata.id
+                let absolute_target_ref = if target_ref.starts_with("http://") || target_ref.starts_with("https://") {
+                    target_ref.clone()
+                } else {
+                    format!("{}{}", self.base_url, target_ref)
+                };
+
+                let body_json = serde_json::json!({
+                    "@odata.id": absolute_target_ref
+                });
+                let body = serde_json::to_string(&body_json).unwrap_or_default();
+
+                ChangeSetOperation {
+                    content_id,
+                    method: methods::POST.to_string(),
+                    path,
+                    headers: vec![
+                        ("Content-Type".to_string(), headers::CONTENT_TYPE_JSON.to_string()),
+                    ],
+                    body: Some(body),
+                }
+            }
         }
     }
 

@@ -18,50 +18,15 @@ use std::collections::HashMap;
 impl TransformedDeadline {
     /// Convert this TransformedDeadline to a list of Operations ready for batch execution
     ///
-    /// Returns a Vec of operations where:
-    /// - First operation (Content-ID 1): Creates the main deadline entity
-    /// - Subsequent operations (Content-ID 2, 3, ...): Create junction entities referencing $1
-    ///
-    /// All operations should be executed in a single changeset for atomicity.
+    /// Returns a Vec with a single operation that creates the deadline
     pub fn to_operations(&self, entity_type: &str) -> Vec<Operation> {
-        let mut operations = Vec::new();
-
-        // 1. Create main deadline entity (will get Content-ID 1 in batch)
         let entity_set = pluralize_entity_name(entity_type);
-        operations.push(Operation::Create {
+        let payload = self.build_create_payload(entity_type);
+
+        vec![Operation::Create {
             entity: entity_set,
-            data: self.build_create_payload(entity_type),
-        });
-
-        // 2. Create junction entities for N:N relationships (Content-ID 2, 3, ...)
-        for (relationship_name, related_ids) in &self.checkbox_relationships {
-            let junction_entity = get_junction_entity_name(entity_type, relationship_name);
-            // Junction entities are NOT pluralized (unlike main entities)
-            let deadline_field = format!("{}id@odata.bind", entity_type);
-            let related_entity = extract_related_entity_from_relationship(relationship_name);
-            let related_field = format!("{}id@odata.bind", related_entity);
-
-            for related_id in related_ids {
-                // Build junction record data
-                let mut data = json!({});
-
-                // Add the related entity binding (known GUID)
-                let related_entity_set = pluralize_entity_name(&related_entity);
-                data[&related_field] = json!(format!("/{}({})", related_entity_set, related_id));
-
-                // Build content-ID refs for the deadline (references $1)
-                let mut content_id_refs = HashMap::new();
-                content_id_refs.insert(deadline_field.clone(), "$1".to_string());
-
-                operations.push(Operation::CreateWithRefs {
-                    entity: junction_entity.clone(),
-                    data,
-                    content_id_refs,
-                });
-            }
-        }
-
-        operations
+            data: payload,
+        }]
     }
 
     /// Build the JSON payload for creating the main deadline entity
@@ -127,6 +92,9 @@ impl TransformedDeadline {
             payload[commission_field] = json!(date.format("%Y-%m-%d").to_string());
         }
 
+        // N:N relationships are handled separately via AssociateRef operations after deadline creation
+        // (see deadlines_inspection_app.rs)
+
         payload
     }
 }
@@ -137,19 +105,19 @@ impl TransformedDeadline {
 /// - cgk_deadline_cgk_support → cgk_cgk_deadline_cgk_support
 /// - cgk_deadline_cgk_category → cgk_cgk_deadline_cgk_category
 /// - cgk_deadline_cgk_length → cgk_cgk_deadline_cgk_length
-/// - cgk_deadline_cgk_flemishshare → cgk_cgk_flemishshare_cgk_deadline (REVERSED!)
+/// - cgk_deadline_cgk_flemishshare → cgk_cgk_flemishshare_cgk_deadline (REVERSED ORDER!)
 ///
 /// # NRQ Pattern (different!)
 /// - nrq_deadline_nrq_support → nrq_Deadline_nrq_Support_nrq_Support
 /// - nrq_deadline_nrq_category → nrq_Deadline_nrq_Category_nrq_Category
-fn get_junction_entity_name(entity_type: &str, relationship_name: &str) -> String {
+pub fn get_junction_entity_name(entity_type: &str, relationship_name: &str) -> String {
     if entity_type == "cgk_deadline" {
         // CGK: Pattern varies by entity
         match relationship_name {
             "cgk_deadline_cgk_support" => "cgk_cgk_deadline_cgk_support".to_string(),
             "cgk_deadline_cgk_category" => "cgk_cgk_deadline_cgk_category".to_string(),
             "cgk_deadline_cgk_length" => "cgk_cgk_deadline_cgk_length".to_string(),
-            "cgk_deadline_cgk_flemishshare" => "cgk_cgk_deadline_cgk_flemishshare".to_string(),
+            "cgk_deadline_cgk_flemishshare" => "cgk_cgk_flemishshare_cgk_deadline".to_string(), // REVERSED ORDER!
             _ => {
                 log::warn!("Unknown CGK relationship '{}', using fallback pattern", relationship_name);
                 format!("cgk_{}", relationship_name)
@@ -182,7 +150,7 @@ fn get_junction_entity_name(entity_type: &str, relationship_name: &str) -> Strin
 /// Examples:
 /// - "cgk_deadline_cgk_support" → "cgk_support"
 /// - "nrq_deadline_nrq_category" → "nrq_category"
-fn extract_related_entity_from_relationship(relationship_name: &str) -> String {
+pub fn extract_related_entity_from_relationship(relationship_name: &str) -> String {
     // Split on underscores and skip first 2 parts (entity_deadline_)
     let parts: Vec<&str> = relationship_name.split('_').collect();
 

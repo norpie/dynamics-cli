@@ -71,6 +71,8 @@ pub struct State {
     transformed_records: Vec<TransformedDeadline>,
     list_state: ListState,
     selected_record_idx: usize,
+    /// Track queue items created from this inspection session (queue_item_id -> TransformedDeadline)
+    queued_items: HashMap<String, TransformedDeadline>,
 }
 
 impl State {
@@ -87,6 +89,7 @@ impl State {
             transformed_records,
             list_state,
             selected_record_idx: 0,
+            queued_items: HashMap::new(),
         }
     }
 }
@@ -104,6 +107,7 @@ pub enum Msg {
     SetViewportHeight(usize),
     Back,
     AddToQueueAndView,
+    QueueItemCompleted(String, crate::tui::apps::queue::models::QueueResult, crate::tui::apps::queue::models::QueueMetadata),
 }
 
 impl crate::tui::AppState for State {}
@@ -163,10 +167,23 @@ impl App for DeadlinesInspectionApp {
                 // Convert all transformed records (without warnings) to queue items
                 let mut queue_items = Vec::new();
 
+                // ============================================================================
+                // TEMPORARY TESTING LIMIT: Only process 1 deadline for testing associations
+                // TODO: Remove this limit once associations are verified working
+                // ============================================================================
+                let mut processed_count = 0;
+                const MAX_DEADLINES_FOR_TESTING: usize = 1;
+
                 for record in &state.transformed_records {
                     // Skip records with warnings
                     if record.has_warnings() {
                         continue;
+                    }
+
+                    // TEMPORARY: Stop after first valid record
+                    if processed_count >= MAX_DEADLINES_FOR_TESTING {
+                        log::warn!("TESTING MODE: Limiting to {} deadline(s)", MAX_DEADLINES_FOR_TESTING);
+                        break;
                     }
 
                     // Get name for description
@@ -175,7 +192,7 @@ impl App for DeadlinesInspectionApp {
                         .map(|s| s.as_str())
                         .unwrap_or("<No Name>");
 
-                    // Convert to operations
+                    // Convert to operations (without N:N relationships for now)
                     let operations_vec = record.to_operations(&state.entity_type);
                     let operations = Operations::from_operations(operations_vec);
 
@@ -191,7 +208,12 @@ impl App for DeadlinesInspectionApp {
                     // Create queue item (priority based on row number - earlier rows = higher priority)
                     let priority = (record.source_row.min(255)) as u8;
                     let queue_item = QueueItem::new(operations, metadata, priority);
+
+                    // Track this queue item for later association creation
+                    state.queued_items.insert(queue_item.id.clone(), record.clone());
+
                     queue_items.push(queue_item);
+                    processed_count += 1;
                 }
 
                 // Serialize queue items to JSON for pub/sub
@@ -211,6 +233,69 @@ impl App for DeadlinesInspectionApp {
                     },
                     Command::navigate_to(AppId::OperationQueue),
                 ])
+            }
+
+            Msg::QueueItemCompleted(item_id, result, metadata) => {
+                // Check if this was a deadline create from our session
+                if let Some(record) = state.queued_items.get(&item_id) {
+                    // Only process successful creates
+                    if !result.success || result.operation_results.is_empty() {
+                        return Command::None;
+                    }
+
+                    // Extract created entity GUID from first operation result
+                    let created_guid = match extract_entity_guid_from_result(&result.operation_results[0]) {
+                        Some(guid) => guid,
+                        None => {
+                            log::error!("Failed to extract entity GUID from queue item {}", item_id);
+                            log::error!("Available headers: {:?}", result.operation_results[0].headers);
+                            return Command::None;
+                        }
+                    };
+
+                    log::info!("Deadline created with GUID: {}, generating associations", created_guid);
+
+                    // Generate AssociateRef operations for N:N relationships
+                    let association_ops = build_association_operations(
+                        &created_guid,
+                        &state.entity_type,
+                        &record.checkbox_relationships
+                    );
+
+                    if association_ops.is_empty() {
+                        log::info!("No associations to create for deadline {}", created_guid);
+                        return Command::None;
+                    }
+
+                    // Create queue item for associations
+                    let operations = Operations::from_operations(association_ops);
+                    let assoc_metadata = QueueMetadata {
+                        source: "Deadlines Excel (Associations)".to_string(),
+                        entity_type: state.entity_type.clone(),
+                        description: format!("{} (associations)", metadata.description),
+                        row_number: metadata.row_number,
+                        environment_name: metadata.environment_name,
+                    };
+
+                    let priority = 128; // Medium priority for associations
+                    let queue_item = QueueItem::new(operations, assoc_metadata, priority);
+
+                    // Serialize and queue
+                    let queue_items_json = match serde_json::to_value(&vec![queue_item]) {
+                        Ok(json) => json,
+                        Err(e) => {
+                            log::error!("Failed to serialize association queue item: {}", e);
+                            return Command::None;
+                        }
+                    };
+
+                    Command::Publish {
+                        topic: "queue:add_items".to_string(),
+                        data: queue_items_json,
+                    }
+                } else {
+                    Command::None
+                }
             }
         }
     }
@@ -303,7 +388,15 @@ impl App for DeadlinesInspectionApp {
     }
 
     fn subscriptions(_state: &State) -> Vec<Subscription<Msg>> {
-        vec![]
+        vec![
+            Subscription::subscribe("queue:item_completed", |value| {
+                // Extract id, result, metadata from the completion event
+                let id = value.get("id")?.as_str()?.to_string();
+                let result: crate::tui::apps::queue::models::QueueResult = serde_json::from_value(value.get("result")?.clone()).ok()?;
+                let metadata: crate::tui::apps::queue::models::QueueMetadata = serde_json::from_value(value.get("metadata")?.clone()).ok()?;
+                Some(Msg::QueueItemCompleted(id, result, metadata))
+            }),
+        ]
     }
 
     fn title() -> &'static str {
@@ -459,4 +552,75 @@ fn build_detail_panel(record: &TransformedDeadline, entity_type: &str, theme: &T
     }
 
     builder.build()
+}
+
+/// Extract entity GUID from OperationResult headers or body
+fn extract_entity_guid_from_result(result: &crate::api::operations::OperationResult) -> Option<String> {
+    // Try headers first (OData-EntityId or Location)
+    for (key, value) in &result.headers {
+        if key.eq_ignore_ascii_case("odata-entityid") || key.eq_ignore_ascii_case("location") {
+            // Format: /entityset(guid) or https://host/api/data/v9.2/entityset(guid)
+            // Extract GUID using regex
+            if let Some(start) = value.rfind('(') {
+                if let Some(end) = value.rfind(')') {
+                    if end > start {
+                        return Some(value[start + 1..end].to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    // Try response body (when Prefer: return=representation is used)
+    if let Some(ref data) = result.data {
+        // Look for common ID field names
+        if let Some(id_value) = data.get("cgk_deadlineid")
+            .or_else(|| data.get("nrq_deadlineid"))
+            .or_else(|| data.get("id"))
+        {
+            if let Some(guid_str) = id_value.as_str() {
+                return Some(guid_str.to_string());
+            }
+        }
+    }
+
+    None
+}
+
+/// Build AssociateRef operations for N:N relationships
+fn build_association_operations(
+    entity_guid: &str,
+    entity_type: &str,
+    checkbox_relationships: &HashMap<String, Vec<String>>,
+) -> Vec<crate::api::operations::Operation> {
+    use crate::api::operations::Operation;
+    use crate::api::pluralization::pluralize_entity_name;
+    use super::operation_builder::{get_junction_entity_name, extract_related_entity_from_relationship};
+
+    let mut operations = Vec::new();
+    let entity_set = pluralize_entity_name(entity_type);
+
+    for (relationship_name, related_ids) in checkbox_relationships {
+        if related_ids.is_empty() {
+            continue;
+        }
+
+        let junction_entity = get_junction_entity_name(entity_type, relationship_name);
+        let related_entity = extract_related_entity_from_relationship(relationship_name);
+        let related_entity_set = pluralize_entity_name(&related_entity);
+
+        for related_id in related_ids {
+            // Relative URI - batch builder will convert to absolute
+            let target_ref = format!("/api/data/v9.2/{}({})", related_entity_set, related_id);
+
+            operations.push(Operation::AssociateRef {
+                entity: entity_set.clone(),
+                entity_ref: entity_guid.to_string(),
+                navigation_property: junction_entity.clone(),
+                target_ref,
+            });
+        }
+    }
+
+    operations
 }

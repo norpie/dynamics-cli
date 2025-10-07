@@ -52,6 +52,18 @@ pub enum Operation {
         /// Record data as JSON
         data: Value,
     },
+    /// Associate records via navigation property (N:N relationships using $ref)
+    /// POST /entities(id)/navigation_property/$ref with body {"@odata.id": "target"}
+    AssociateRef {
+        /// Base entity collection name (e.g., "cgk_deadlines")
+        entity: String,
+        /// Entity ID or Content-ID reference (e.g., "guid" or "$1")
+        entity_ref: String,
+        /// Navigation property name (e.g., "cgk_cgk_deadline_cgk_support")
+        navigation_property: String,
+        /// Target entity reference (e.g., "/cgk_supports(guid)")
+        target_ref: String,
+    },
 }
 
 /// Result of executing an Operation
@@ -120,6 +132,7 @@ impl Operation {
             Self::Update { entity, .. } => entity,
             Self::Delete { entity, .. } => entity,
             Self::Upsert { entity, .. } => entity,
+            Self::AssociateRef { entity, .. } => entity,
         }
     }
 
@@ -131,6 +144,7 @@ impl Operation {
             Self::Update { .. } => "PATCH",
             Self::Delete { .. } => "DELETE",
             Self::Upsert { .. } => "PATCH", // Upsert uses PATCH with specific headers
+            Self::AssociateRef { .. } => "POST",
         }
     }
 
@@ -142,6 +156,7 @@ impl Operation {
             Self::Update { .. } => "update",
             Self::Delete { .. } => "delete",
             Self::Upsert { .. } => "upsert",
+            Self::AssociateRef { .. } => "associate_ref",
         }
     }
 

@@ -105,6 +105,9 @@ impl DynamicsClient {
             Operation::Upsert { entity, key_field, key_value, data } => {
                 self.upsert_record(entity, key_field, key_value, data, resilience).await
             }
+            Operation::AssociateRef { entity, entity_ref, navigation_property, target_ref } => {
+                self.associate_ref(entity, entity_ref, navigation_property, target_ref, resilience).await
+            }
         }
     }
 
@@ -214,6 +217,10 @@ impl DynamicsClient {
         request_headers.insert("OData-Version".to_string(), headers::ODATA_VERSION.to_string());
         request_headers.insert(headers::X_CORRELATION_ID.to_string(), correlation_id.clone());
         logger.log_request(&context, "POST", &url, &request_headers);
+
+        // Log request body for debugging
+        let body_str = serde_json::to_string_pretty(data).unwrap_or_default();
+        log::debug!("Create request body:\n{}", body_str);
 
         let retry_policy = crate::api::resilience::RetryPolicy::new(resilience.retry.clone());
         let request_start = std::time::Instant::now();
@@ -343,6 +350,40 @@ impl DynamicsClient {
             key_field: key_field.to_string(),
             key_value: key_value.to_string(),
             data: data.clone(),
+        }, response).await
+    }
+
+    /// Associate records via navigation property ($ref)
+    async fn associate_ref(&self, entity: &str, entity_ref: &str, navigation_property: &str, target_ref: &str, resilience: &ResilienceConfig) -> anyhow::Result<OperationResult> {
+        // POST /entities(id)/navigation_property/$ref with body {"@odata.id": "target"}
+        let url = format!("{}/{}({})/{}/$ref", self.base_url, entity, entity_ref, navigation_property);
+        let correlation_id = uuid::Uuid::new_v4().to_string();
+
+        // Apply rate limiting before making the request
+        self.apply_rate_limiting().await?;
+
+        let body = serde_json::json!({
+            "@odata.id": target_ref
+        });
+
+        let retry_policy = crate::api::resilience::RetryPolicy::new(resilience.retry.clone());
+        let response = retry_policy.execute(|| async {
+            self.http_client
+                .post(&url)
+                .bearer_auth(&self.access_token)
+                .header("Content-Type", headers::CONTENT_TYPE_JSON)
+                .header("OData-Version", headers::ODATA_VERSION)
+                .header(headers::X_CORRELATION_ID, &correlation_id)
+                .json(&body)
+                .send()
+                .await
+        }).await?;
+
+        self.parse_response(Operation::AssociateRef {
+            entity: entity.to_string(),
+            entity_ref: entity_ref.to_string(),
+            navigation_property: navigation_property.to_string(),
+            target_ref: target_ref.to_string(),
         }, response).await
     }
 

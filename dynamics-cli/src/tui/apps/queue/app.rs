@@ -235,6 +235,8 @@ impl App for OperationQueueApp {
             Msg::ExecutionCompleted(id, result) => {
                 state.currently_running.remove(&id);
 
+                let mut publish_cmd = Command::None;
+
                 if let Some(item) = state.queue_items.iter_mut().find(|i| i.id == id) {
                     item.status = if result.success {
                         OperationStatus::Done
@@ -278,14 +280,27 @@ impl App for OperationQueueApp {
                             }
                         }
                     }
+
+                    // Publish completion event for subscribers
+                    let completion_data = serde_json::json!({
+                        "id": id,
+                        "result": result,
+                        "metadata": item.metadata,
+                    });
+                    publish_cmd = Command::Publish {
+                        topic: "queue:item_completed".to_string(),
+                        data: completion_data,
+                    };
                 }
 
                 // Continue if auto-play
-                if state.auto_play {
+                let next_cmd = if state.auto_play {
                     execute_next_if_available(state)
                 } else {
                     Command::None
-                }
+                };
+
+                Command::Batch(vec![publish_cmd, next_cmd])
             }
 
             Msg::SetFilter(filter) => {
