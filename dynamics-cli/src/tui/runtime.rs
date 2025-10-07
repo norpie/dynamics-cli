@@ -539,7 +539,7 @@ impl<A: App> Runtime<A> {
                 self.last_hover_pos = Some(pos);
             }
             MouseEventKind::ScrollUp => {
-                // Scroll up - send as Up arrow key to focused element
+                // Scroll up - send as Up arrow key (or Left if Shift is held) to focused element
                 if let Some(focused_id) = &self.focused_id {
                     if let Some(focusable) = self.focus_registry.find_in_active_layer(focused_id) {
                         // Check if scroll happened over the focused element
@@ -548,7 +548,13 @@ impl<A: App> Runtime<A> {
                             && pos.1 >= focusable.rect.y
                             && pos.1 < focusable.rect.y + focusable.rect.height
                         {
-                            let scroll_up_event = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::empty());
+                            // If Shift is held, scroll left (horizontal); otherwise scroll up (vertical)
+                            let key_code = if mouse_event.modifiers.contains(crossterm::event::KeyModifiers::SHIFT) {
+                                KeyCode::Left
+                            } else {
+                                KeyCode::Up
+                            };
+                            let scroll_up_event = KeyEvent::new(key_code, mouse_event.modifiers);
                             match (focusable.on_key)(scroll_up_event) {
                                 DispatchTarget::WidgetEvent(boxed_event) => {
                                     if self.state.dispatch_widget_event(focused_id, boxed_event.as_ref()) {
@@ -571,7 +577,7 @@ impl<A: App> Runtime<A> {
                 }
             }
             MouseEventKind::ScrollDown => {
-                // Scroll down - send as Down arrow key to focused element
+                // Scroll down - send as Down arrow key (or Right if Shift is held) to focused element
                 if let Some(focused_id) = &self.focused_id {
                     if let Some(focusable) = self.focus_registry.find_in_active_layer(focused_id) {
                         // Check if scroll happened over the focused element
@@ -580,7 +586,13 @@ impl<A: App> Runtime<A> {
                             && pos.1 >= focusable.rect.y
                             && pos.1 < focusable.rect.y + focusable.rect.height
                         {
-                            let scroll_down_event = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::empty());
+                            // If Shift is held, scroll right (horizontal); otherwise scroll down (vertical)
+                            let key_code = if mouse_event.modifiers.contains(crossterm::event::KeyModifiers::SHIFT) {
+                                KeyCode::Right
+                            } else {
+                                KeyCode::Down
+                            };
+                            let scroll_down_event = KeyEvent::new(key_code, mouse_event.modifiers);
                             match (focusable.on_key)(scroll_down_event) {
                                 DispatchTarget::WidgetEvent(boxed_event) => {
                                     if self.state.dispatch_widget_event(focused_id, boxed_event.as_ref()) {
