@@ -112,6 +112,9 @@ impl MultiAppRuntime {
         // Eagerly create the AppLauncher since it's the starting app
         runtime.ensure_app_exists(AppId::AppLauncher, Box::new(())).ok();
 
+        // Eagerly create the OperationQueue so it can receive pub/sub messages from any app
+        runtime.ensure_app_exists(AppId::OperationQueue, Box::new(())).ok();
+
         runtime
     }
 
