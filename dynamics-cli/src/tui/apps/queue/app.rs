@@ -735,13 +735,212 @@ fn build_details_panel(state: &State, theme: &Theme, scroll_state: &ScrollableSt
     use ratatui::text::{Line as RataLine, Span};
     use ratatui::prelude::Stylize;
 
-    let selected_item = state.selected_item_id.as_ref()
-        .and_then(|id| state.queue_items.iter().find(|item| &item.id == id))
-        .cloned();
+    // Check if selected ID is a child node (format: "parent_id_index")
+    let (selected_item, child_index) = if let Some(selected_id) = &state.selected_item_id {
+        // Try to parse as child ID
+        if let Some(last_underscore_pos) = selected_id.rfind('_') {
+            let potential_parent_id = &selected_id[..last_underscore_pos];
+            let potential_index = &selected_id[last_underscore_pos + 1..];
+
+            // Check if the part after underscore is a number and parent exists
+            if let Ok(index) = potential_index.parse::<usize>() {
+                if let Some(item) = state.queue_items.iter().find(|item| item.id == potential_parent_id) {
+                    (Some(item.clone()), Some(index))
+                } else {
+                    // Not a valid child, try as parent
+                    (state.queue_items.iter().find(|item| &item.id == selected_id).cloned(), None)
+                }
+            } else {
+                // Not a number, must be a parent ID
+                (state.queue_items.iter().find(|item| &item.id == selected_id).cloned(), None)
+            }
+        } else {
+            // No underscore, must be a parent ID
+            (state.queue_items.iter().find(|item| &item.id == selected_id).cloned(), None)
+        }
+    } else {
+        (None, None)
+    };
 
     let content = if let Some(item) = selected_item {
-        // Build detailed information about the selected item
-        let mut lines = vec![
+        // If viewing a child node, show details about that specific operation
+        if let Some(child_idx) = child_index {
+            // Get the specific operation (child_idx is 1-based from tree_nodes.rs, but we skip(1) in the tree)
+            // So child_idx=1 means index 1 in the operations array (second operation)
+            let operations = item.operations.operations();
+            if child_idx < operations.len() {
+                let operation = &operations[child_idx];
+
+                let mut lines = vec![
+                    // Header
+                    Element::styled_text(RataLine::from(vec![
+                        Span::styled(
+                            format!("Operation {} of {}", child_idx + 1, operations.len()),
+                            Style::default().fg(theme.text).bold()
+                        ),
+                    ])).build(),
+                    Element::text(""),
+
+                    // Parent batch info
+                    Element::styled_text(RataLine::from(vec![
+                        Span::styled("Batch: ", Style::default().fg(theme.overlay1)),
+                        Span::styled(
+                            item.metadata.description.clone(),
+                            Style::default().fg(theme.text)
+                        ),
+                    ])).build(),
+                    Element::text(""),
+
+                    // Operation type
+                    Element::styled_text(RataLine::from(vec![
+                        Span::styled("Type: ", Style::default().fg(theme.overlay1)),
+                        Span::styled(
+                            operation.operation_type().to_string(),
+                            Style::default().fg(theme.blue)
+                        ),
+                    ])).build(),
+
+                    // Entity
+                    Element::styled_text(RataLine::from(vec![
+                        Span::styled("Entity: ", Style::default().fg(theme.overlay1)),
+                        Span::styled(
+                            operation.entity().to_string(),
+                            Style::default().fg(theme.text)
+                        ),
+                    ])).build(),
+                ];
+
+                // Construct endpoint
+                use crate::api::operations::Operation;
+                let endpoint = match operation {
+                    Operation::Create { entity, .. } | Operation::CreateWithRefs { entity, .. } => {
+                        format!("POST /{}", entity)
+                    }
+                    Operation::Update { entity, id, .. } => {
+                        format!("PATCH /{}({})", entity, id)
+                    }
+                    Operation::Delete { entity, id, .. } => {
+                        format!("DELETE /{}({})", entity, id)
+                    }
+                    Operation::Upsert { entity, key_field, key_value, .. } => {
+                        format!("PATCH /{}({}='{}')", entity, key_field, key_value)
+                    }
+                    Operation::AssociateRef { entity, entity_ref, navigation_property, .. } => {
+                        format!("POST /{}({})/{}/$ref", entity, entity_ref, navigation_property)
+                    }
+                };
+
+                lines.push(Element::styled_text(RataLine::from(vec![
+                    Span::styled("Endpoint: ", Style::default().fg(theme.overlay1)),
+                    Span::styled(
+                        endpoint,
+                        Style::default().fg(theme.blue)
+                    ),
+                ])).build());
+
+                // Show data based on operation type
+                match operation {
+                    Operation::Create { data, .. } | Operation::CreateWithRefs { data, .. }
+                    | Operation::Update { data, .. } | Operation::Upsert { data, .. } => {
+                        lines.push(Element::text(""));
+                        lines.push(Element::styled_text(RataLine::from(vec![
+                            Span::styled("Data:", Style::default().fg(theme.peach).bold()),
+                        ])).build());
+
+                        // Pretty print JSON data (limit to reasonable size)
+                        if let Ok(json_str) = serde_json::to_string_pretty(data) {
+                            for line in json_str.lines().take(20) {
+                                lines.push(Element::styled_text(RataLine::from(vec![
+                                    Span::styled(format!("  {}", line), Style::default().fg(theme.text)),
+                                ])).build());
+                            }
+                            if json_str.lines().count() > 20 {
+                                lines.push(Element::styled_text(RataLine::from(vec![
+                                    Span::styled("  ... (truncated)", Style::default().fg(theme.overlay1).italic()),
+                                ])).build());
+                            }
+                        }
+                    }
+                    Operation::Delete { id, .. } => {
+                        lines.push(Element::text(""));
+                        lines.push(Element::styled_text(RataLine::from(vec![
+                            Span::styled("Record ID: ", Style::default().fg(theme.overlay1)),
+                            Span::styled(id.clone(), Style::default().fg(theme.text)),
+                        ])).build());
+                    }
+                    Operation::AssociateRef { entity_ref, navigation_property, target_ref, .. } => {
+                        lines.push(Element::text(""));
+                        lines.push(Element::styled_text(RataLine::from(vec![
+                            Span::styled("Entity Ref: ", Style::default().fg(theme.overlay1)),
+                            Span::styled(entity_ref.clone(), Style::default().fg(theme.text)),
+                        ])).build());
+                        lines.push(Element::styled_text(RataLine::from(vec![
+                            Span::styled("Navigation: ", Style::default().fg(theme.overlay1)),
+                            Span::styled(navigation_property.clone(), Style::default().fg(theme.text)),
+                        ])).build());
+                        lines.push(Element::styled_text(RataLine::from(vec![
+                            Span::styled("Target: ", Style::default().fg(theme.overlay1)),
+                            Span::styled(target_ref.clone(), Style::default().fg(theme.text)),
+                        ])).build());
+                    }
+                }
+
+                // Show result if operation completed
+                if let Some(result) = &item.result {
+                    if child_idx < result.operation_results.len() {
+                        let op_result = &result.operation_results[child_idx];
+
+                        lines.push(Element::text(""));
+                        lines.push(Element::styled_text(RataLine::from(vec![
+                            Span::styled("Result:", Style::default().fg(theme.peach).bold()),
+                        ])).build());
+
+                        let status_color = if op_result.success { theme.green } else { theme.red };
+                        lines.push(Element::styled_text(RataLine::from(vec![
+                            Span::styled("  Status: ", Style::default().fg(theme.overlay1)),
+                            Span::styled(
+                                if op_result.success { "Success" } else { "Failed" },
+                                Style::default().fg(status_color)
+                            ),
+                        ])).build());
+
+                        if let Some(status_code) = op_result.status_code {
+                            lines.push(Element::styled_text(RataLine::from(vec![
+                                Span::styled("  Status Code: ", Style::default().fg(theme.overlay1)),
+                                Span::styled(
+                                    status_code.to_string(),
+                                    Style::default().fg(theme.text)
+                                ),
+                            ])).build());
+                        }
+
+                        if let Some(error) = &op_result.error {
+                            lines.push(Element::text(""));
+                            lines.push(Element::styled_text(RataLine::from(vec![
+                                Span::styled("  Error:", Style::default().fg(theme.red).bold()),
+                            ])).build());
+
+                            for error_line in error.lines() {
+                                lines.push(Element::styled_text(RataLine::from(vec![
+                                    Span::styled(format!("    {}", error_line), Style::default().fg(theme.red)),
+                                ])).build());
+                            }
+                        }
+                    }
+                }
+
+                Element::column(lines).spacing(0).build()
+            } else {
+                // Invalid child index
+                Element::column(vec![
+                    Element::styled_text(RataLine::from(vec![
+                        Span::styled("Invalid operation index", Style::default().fg(theme.red)),
+                    ])).build(),
+                ]).spacing(0).build()
+            }
+        } else {
+            // Parent node - show batch overview
+            let mut lines = vec![
             // Header with status
             Element::styled_text(RataLine::from(vec![
                 Span::styled(
@@ -911,7 +1110,8 @@ fn build_details_panel(state: &State, theme: &Theme, scroll_state: &ScrollableSt
             }
         }
 
-        Element::column(lines).spacing(0).build()
+            Element::column(lines).spacing(0).build()
+        }
     } else {
         // No selection
         Element::column(vec![
