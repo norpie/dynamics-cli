@@ -115,8 +115,11 @@ impl SelectField {
     }
 
     /// Handle select event and update selected value
-    pub fn handle_event<Msg>(&mut self, event: SelectEvent, options: &[String]) -> Command<Msg> {
+    /// Returns a SelectEvent::Select if an item was selected (for app notification)
+    pub fn handle_event<Msg>(&mut self, event: SelectEvent, options: &[String]) -> (Command<Msg>, Option<SelectEvent>) {
         use crossterm::event::KeyCode;
+
+        let mut selection_made = None;
 
         match event {
             SelectEvent::Navigate(key) => {
@@ -139,6 +142,7 @@ impl SelectField {
                             let idx = self.state.selected();
                             if idx < options.len() {
                                 self.selected_option = Some(options[idx].clone());
+                                selection_made = Some(SelectEvent::Select(idx));
                             }
                         }
                         KeyCode::Esc => {
@@ -152,10 +156,11 @@ impl SelectField {
                 self.state.select(idx);
                 if idx < options.len() {
                     self.selected_option = Some(options[idx].clone());
+                    selection_made = Some(SelectEvent::Select(idx));
                 }
             }
         }
-        Command::None
+        (Command::None, selection_made)
     }
 
     /// Get selected value as Option

@@ -159,17 +159,16 @@ impl App for DeadlinesFileSelectApp {
             }
             Msg::SheetSelectorEvent(event) => {
                 if let Resource::Success(ref sheets) = state.available_sheets {
-                    let cmd = state.sheet_selector.handle_event(event.clone(), sheets);
+                    let (cmd, selection_event) = state.sheet_selector.handle_event(event.clone(), sheets);
 
-                    // Focus continue button after selecting a sheet with Enter
-                    match event {
-                        SelectEvent::Navigate(KeyCode::Enter) => {
-                            Command::batch(vec![
-                                cmd,
-                                Command::set_focus(FocusId::new("continue-button"))
-                            ])
-                        }
-                        _ => cmd
+                    // Focus continue button after selecting a sheet
+                    if selection_event.is_some() {
+                        Command::batch(vec![
+                            cmd,
+                            Command::set_focus(FocusId::new("continue-button"))
+                        ])
+                    } else {
+                        cmd
                     }
                 } else {
                     Command::None

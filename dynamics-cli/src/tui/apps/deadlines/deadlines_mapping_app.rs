@@ -990,7 +990,7 @@ impl App for DeadlinesMappingApp {
             }
             Msg::EntitySelectorEvent(event) => {
                 let options = vec!["cgk_deadline".to_string(), "nrq_deadline".to_string()];
-                let cmd = state.entity_selector.handle_event(event, &options);
+                let (cmd, _selection_event) = state.entity_selector.handle_event(event, &options);
 
                 // If the selection changed, update manual override and reload entity data
                 if let Some(new_selection) = state.entity_selector.value() {
