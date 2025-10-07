@@ -56,6 +56,7 @@ pub enum Msg {
 
     // Details panel scrolling
     DetailsScroll(crossterm::event::KeyCode),
+    DetailsSetDimensions(usize, usize),  // (viewport_height, content_height)
 
     // Navigation
     Back,
@@ -418,9 +419,17 @@ impl App for OperationQueueApp {
             }
 
             Msg::DetailsScroll(key) => {
-                // Handle scrolling in details panel
-                // Content height will be updated by the scrollable widget
-                state.details_scroll_state.handle_key(key, 100, 20);
+                // Dimensions are tracked from last on_render call
+                let viewport_height = state.details_scroll_state.viewport_height().unwrap_or(20);
+                let content_height = state.details_scroll_state.content_height().unwrap_or(20);
+                state.details_scroll_state.handle_key(key, content_height, viewport_height);
+                Command::None
+            }
+
+            Msg::DetailsSetDimensions(viewport_height, content_height) => {
+                // Called every frame by renderer with actual dimensions
+                state.details_scroll_state.set_viewport_height(viewport_height);
+                state.details_scroll_state.update_scroll(viewport_height, content_height);
                 Command::None
             }
 
@@ -890,14 +899,14 @@ fn build_details_panel(state: &State, theme: &Theme, scroll_state: &ScrollableSt
             }
         }
 
-        Element::column(lines).build()
+        Element::column(lines).spacing(0).build()
     } else {
         // No selection
         Element::column(vec![
             Element::styled_text(RataLine::from(vec![
                 Span::styled("No item selected", Style::default().fg(theme.overlay1).italic()),
             ])).build(),
-        ]).build()
+        ]).spacing(0).build()
     };
 
     // Wrap content in scrollable
@@ -907,6 +916,7 @@ fn build_details_panel(state: &State, theme: &Theme, scroll_state: &ScrollableSt
         scroll_state
     )
     .on_navigate(Msg::DetailsScroll)
+    .on_render(Msg::DetailsSetDimensions)
     .build();
 
     Element::panel(scrollable_content)

@@ -40,6 +40,7 @@ pub fn render_scrollable<Msg: Clone + Send + 'static>(
     scroll_offset: usize,
     content_height: &Option<usize>,
     on_navigate: &Option<fn(KeyCode) -> Msg>,
+    on_render: &Option<fn(usize, usize) -> Msg>,
     on_focus: &Option<Msg>,
     on_blur: &Option<Msg>,
     area: Rect,
@@ -65,12 +66,26 @@ pub fn render_scrollable<Msg: Clone + Send + 'static>(
     // Determine content height
     let detected_content_height = match child {
         Element::Column { items, spacing } => {
-            // Account for spacing: N items need N + (N-1)*spacing lines
-            items.len() + items.len().saturating_sub(1) * (*spacing as usize)
+            // Sum up item heights + spacing between items
+            let total_item_height: usize = items.iter().map(|(constraint, _)| {
+                match constraint {
+                    LayoutConstraint::Length(n) => *n as usize,
+                    _ => 1, // Default to 1 for other constraint types
+                }
+            }).sum();
+
+            // Add spacing between items (N items = N-1 gaps)
+            let total_spacing = items.len().saturating_sub(1) * (*spacing as usize);
+            total_item_height + total_spacing
         }
         _ => content_height.unwrap_or(viewport_height),
     };
     let actual_content_height = content_height.unwrap_or(detected_content_height);
+
+    // Call on_render with actual dimensions
+    if let Some(render_fn) = on_render {
+        registry.add_render_message(render_fn(viewport_height, actual_content_height));
+    }
 
     // Reserve space for scrollbar if needed
     let needs_scrollbar = actual_content_height > viewport_height;
@@ -94,31 +109,43 @@ pub fn render_scrollable<Msg: Clone + Send + 'static>(
     // Render content based on type
     match child {
         Element::Column { items, spacing } => {
-            // Virtual scrolling for Column - slice and iterate without cloning
-            let start_idx = clamped_scroll;
-            let end_idx = (start_idx + viewport_height).min(items.len());
+            // Manually position each item with proper spacing, accounting for scroll
+            let mut current_y = 0i32; // Virtual Y position (0 = top of content, can be negative due to scroll)
 
-            if start_idx < items.len() {
-                let visible_items = &items[start_idx..end_idx];
+            for (idx, (constraint, item_child)) in items.iter().enumerate() {
+                // Get item height from constraint (simplified - assume Length constraints for now)
+                let item_height = match constraint {
+                    LayoutConstraint::Length(n) => *n as usize,
+                    _ => 1, // Default to 1 line for other constraint types
+                };
 
-                let constraints = visible_items
-                    .iter()
-                    .map(|(constraint, _)| match constraint {
-                        LayoutConstraint::Length(n) => Constraint::Length(*n),
-                        LayoutConstraint::Min(n) => Constraint::Min(*n),
-                        LayoutConstraint::Fill(n) => Constraint::Ratio(*n as u32, visible_items.len() as u32),
-                    })
-                    .collect::<Vec<_>>();
+                // Calculate where this item appears after scrolling
+                let scrolled_y = current_y - clamped_scroll as i32;
 
-                let chunks = Layout::default()
-                    .direction(Direction::Vertical)
-                    .constraints(constraints)
-                    .spacing(*spacing)
-                    .split(content_area);
+                // Check if item is within visible viewport
+                if scrolled_y + item_height as i32 > 0 && scrolled_y < viewport_height as i32 {
+                    // Calculate actual screen position
+                    let screen_y = (content_area.y as i32 + scrolled_y).max(content_area.y as i32) as u16;
+                    let available_height = (content_area.y + content_area.height).saturating_sub(screen_y);
 
-                // Render each visible item
-                for ((_, item_child), chunk) in visible_items.iter().zip(chunks.iter()) {
-                    render_fn(frame, theme, registry, focus_registry, dropdown_registry, focused_id, item_child, *chunk, inside_panel);
+                    if available_height > 0 {
+                        let item_area = Rect {
+                            x: content_area.x,
+                            y: screen_y,
+                            width: content_area.width,
+                            height: (item_height as u16).min(available_height),
+                        };
+
+                        render_fn(frame, theme, registry, focus_registry, dropdown_registry, focused_id, item_child, item_area, inside_panel);
+                    }
+                }
+
+                // Advance Y position (item height)
+                current_y += item_height as i32;
+
+                // Add spacing only between items, not after the last one
+                if idx < items.len() - 1 && *spacing > 0 {
+                    current_y += *spacing as i32;
                 }
             }
         }

@@ -2,9 +2,8 @@
 #[derive(Debug, Clone)]
 pub struct ScrollableState {
     scroll_offset: usize,
-    scroll_off: usize,  // Distance from edge before scrolling (vim scrolloff)
-    content_height: Option<usize>,  // Cached content height
-    viewport_height: Option<usize>, // Cached viewport height
+    viewport_height: Option<usize>, // Last known viewport height from renderer
+    content_height: Option<usize>,  // Last known content height from renderer
 }
 
 impl Default for ScrollableState {
@@ -18,16 +17,14 @@ impl ScrollableState {
     pub fn new() -> Self {
         Self {
             scroll_offset: 0,
-            scroll_off: 3,
-            content_height: None,
             viewport_height: None,
+            content_height: None,
         }
     }
 
-    /// Set the scroll-off distance (rows from edge before scrolling)
-    pub fn with_scroll_off(mut self, scroll_off: usize) -> Self {
-        self.scroll_off = scroll_off;
-        self
+    /// Set the viewport height (called by renderer with actual area height)
+    pub fn set_viewport_height(&mut self, height: usize) {
+        self.viewport_height = Some(height);
     }
 
     /// Get current scroll offset
@@ -35,75 +32,67 @@ impl ScrollableState {
         self.scroll_offset
     }
 
-    /// Set scroll offset directly (will be clamped)
-    pub fn set_scroll_offset(&mut self, offset: usize) {
-        self.scroll_offset = offset;
-        self.clamp_scroll();
+    /// Get viewport height
+    pub fn viewport_height(&self) -> Option<usize> {
+        self.viewport_height
     }
 
-    /// Update content and viewport dimensions
-    pub fn update_dimensions(&mut self, content_height: usize, viewport_height: usize) {
-        self.content_height = Some(content_height);
-        self.viewport_height = Some(viewport_height);
-        self.clamp_scroll();
+    /// Get content height
+    pub fn content_height(&self) -> Option<usize> {
+        self.content_height
     }
 
-    /// Scroll up by one line
-    pub fn scroll_up(&mut self, amount: usize) {
-        self.scroll_offset = self.scroll_offset.saturating_sub(amount);
-    }
-
-    /// Scroll down by one line
-    pub fn scroll_down(&mut self, amount: usize) {
-        self.scroll_offset = self.scroll_offset.saturating_add(amount);
-        self.clamp_scroll();
-    }
-
-    /// Scroll to top
-    pub fn scroll_to_top(&mut self) {
-        self.scroll_offset = 0;
-    }
-
-    /// Scroll to bottom
-    pub fn scroll_to_bottom(&mut self) {
-        if let (Some(content), Some(viewport)) = (self.content_height, self.viewport_height) {
-            self.scroll_offset = content.saturating_sub(viewport);
+    /// Handle keyboard navigation
+    pub fn handle_key(&mut self, key: crossterm::event::KeyCode, content_height: usize, visible_height: usize) {
+        if content_height == 0 {
+            return;
         }
-    }
 
-    /// Page up
-    pub fn page_up(&mut self) {
-        let page_size = self.viewport_height.unwrap_or(10);
-        self.scroll_up(page_size);
-    }
-
-    /// Page down
-    pub fn page_down(&mut self) {
-        let page_size = self.viewport_height.unwrap_or(10);
-        self.scroll_down(page_size);
-    }
-
-    /// Clamp scroll offset to valid range
-    fn clamp_scroll(&mut self) {
-        if let (Some(content), Some(viewport)) = (self.content_height, self.viewport_height) {
-            let max_scroll = content.saturating_sub(viewport);
-            self.scroll_offset = self.scroll_offset.min(max_scroll);
-        }
-    }
-
-    /// Handle keyboard navigation (like ListState::handle_key)
-    pub fn handle_key(&mut self, key: crossterm::event::KeyCode, content_height: usize, viewport_height: usize) {
-        // Update dimensions first
-        self.update_dimensions(content_height, viewport_height);
+        // Use stored viewport_height if available, otherwise use provided value
+        let height = self.viewport_height.unwrap_or(visible_height);
+        let max_scroll = content_height.saturating_sub(height);
 
         match key {
-            crossterm::event::KeyCode::Up => self.scroll_up(1),
-            crossterm::event::KeyCode::Down => self.scroll_down(1),
-            crossterm::event::KeyCode::PageUp => self.page_up(),
-            crossterm::event::KeyCode::PageDown => self.page_down(),
-            crossterm::event::KeyCode::Home => self.scroll_to_top(),
-            crossterm::event::KeyCode::End => self.scroll_to_bottom(),
+            crossterm::event::KeyCode::Up => {
+                self.scroll_offset = self.scroll_offset.saturating_sub(1);
+            }
+            crossterm::event::KeyCode::Down => {
+                self.scroll_offset = (self.scroll_offset + 1).min(max_scroll);
+            }
+            crossterm::event::KeyCode::PageUp => {
+                self.scroll_offset = self.scroll_offset.saturating_sub(height);
+            }
+            crossterm::event::KeyCode::PageDown => {
+                self.scroll_offset = (self.scroll_offset + height).min(max_scroll);
+            }
+            crossterm::event::KeyCode::Home => {
+                self.scroll_offset = 0;
+            }
+            crossterm::event::KeyCode::End => {
+                self.scroll_offset = max_scroll;
+            }
             _ => {}
         }
+    }
+
+    /// Update scroll offset to stay within bounds
+    /// Called during rendering with actual dimensions
+    pub fn update_scroll(&mut self, visible_height: usize, content_height: usize) {
+        self.content_height = Some(content_height);
+
+        if content_height == 0 {
+            self.scroll_offset = 0;
+            return;
+        }
+
+        // Don't scroll if all content fits on screen
+        if content_height <= visible_height {
+            self.scroll_offset = 0;
+            return;
+        }
+
+        // Clamp scroll to valid range
+        let max_offset = content_height.saturating_sub(visible_height);
+        self.scroll_offset = self.scroll_offset.min(max_offset);
     }
 }

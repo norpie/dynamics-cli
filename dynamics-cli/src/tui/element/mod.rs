@@ -202,6 +202,7 @@ pub enum Element<Msg> {
         scroll_offset: usize,
         content_height: Option<usize>,   // If None, auto-detect from Column
         on_navigate: Option<fn(crossterm::event::KeyCode) -> Msg>,
+        on_render: Option<fn(usize, usize) -> Msg>,  // (viewport_height, content_height)
         on_focus: Option<Msg>,
         on_blur: Option<Msg>,
     },
@@ -584,6 +585,7 @@ impl<Msg> Element<Msg> {
             scroll_offset: state.scroll_offset(),
             content_height: None,
             on_navigate: None,
+            on_render: None,
             on_focus: None,
             on_blur: None,
         }

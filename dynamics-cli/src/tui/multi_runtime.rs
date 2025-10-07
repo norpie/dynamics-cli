@@ -285,7 +285,8 @@ impl MultiAppRuntime {
         // Priority 4: F1 toggles help menu
         if key_event.code == KeyCode::F(1) {
             self.help_modal.open_empty();
-            self.help_scroll_state.scroll_to_top();
+            // Reset scroll state to top
+            self.help_scroll_state = ScrollableState::new();
             self.global_focused_id = Some(FocusId::new("help-scroll")); // Auto-focus scrollable
             return Ok(true);
         }
@@ -307,29 +308,10 @@ impl MultiAppRuntime {
                     self.help_modal.close();
                     return Ok(true);
                 }
-                KeyCode::Up => {
-                    self.help_scroll_state.scroll_up(1);
-                    return Ok(true);
-                }
-                KeyCode::Down => {
-                    self.help_scroll_state.scroll_down(1);
-                    return Ok(true);
-                }
-                KeyCode::PageUp => {
-                    self.help_scroll_state.page_up();
-                    return Ok(true);
-                }
-                KeyCode::PageDown => {
-                    self.help_scroll_state.page_down();
-                    return Ok(true);
-                }
-                KeyCode::Home => {
-                    self.help_scroll_state.scroll_to_top();
-                    return Ok(true);
-                }
-                KeyCode::End => {
-                    self.help_scroll_state.scroll_to_bottom();
-                    return Ok(true);
+                KeyCode::Up | KeyCode::Down | KeyCode::PageUp | KeyCode::PageDown
+                | KeyCode::Home | KeyCode::End => {
+                    // Delegate to GlobalMsg::HelpScroll handler which knows the dimensions
+                    return self.handle_global_msg(GlobalMsg::HelpScroll(key_event.code));
                 }
                 _ => {
                     // Consume all other keys when help is open
@@ -379,13 +361,19 @@ impl MultiAppRuntime {
                 }
                 MouseEventKind::ScrollUp => {
                     if self.help_modal.is_open() {
-                        self.help_scroll_state.scroll_up(3);  // 3 lines per scroll
+                        // Simulate 3 Up key presses for smooth scrolling
+                        for _ in 0..3 {
+                            let _ = self.handle_global_msg(GlobalMsg::HelpScroll(KeyCode::Up));
+                        }
                     }
                     return Ok(true);
                 }
                 MouseEventKind::ScrollDown => {
                     if self.help_modal.is_open() {
-                        self.help_scroll_state.scroll_down(3);  // 3 lines per scroll
+                        // Simulate 3 Down key presses for smooth scrolling
+                        for _ in 0..3 {
+                            let _ = self.handle_global_msg(GlobalMsg::HelpScroll(KeyCode::Down));
+                        }
                     }
                     return Ok(true);
                 }
@@ -638,7 +626,9 @@ impl MultiAppRuntime {
             other_apps.iter().map(|(_, _, bindings)| 2 + bindings.len()).sum::<usize>() +
             2; // blank + footer
 
-        self.help_scroll_state.update_dimensions(total_items, content_height);
+        // Set viewport height for scrolloff calculations
+        self.help_scroll_state.set_viewport_height(content_height);
+        self.help_scroll_state.update_scroll(content_height, total_items);
 
         // Wrap in scrollable with on_navigate
         let scrollable = Element::scrollable("help-scroll", help_column, &self.help_scroll_state)
