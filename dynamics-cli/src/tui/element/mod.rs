@@ -35,6 +35,7 @@ pub enum Alignment {
 }
 
 /// A layer in a stack of UI elements
+#[derive(Clone)]
 pub struct Layer<Msg> {
     pub element: Element<Msg>,
     pub alignment: Alignment,
@@ -78,6 +79,7 @@ pub enum LayoutConstraint {
 }
 
 /// Declarative UI elements that compose to form the view
+#[derive(Clone)]
 pub enum Element<Msg> {
     /// Empty element that renders nothing
     None,
@@ -201,8 +203,10 @@ pub enum Element<Msg> {
         child: Box<Element<Msg>>,
         scroll_offset: usize,
         content_height: Option<usize>,   // If None, auto-detect from Column
+        horizontal_scroll_offset: usize,
+        content_width: Option<usize>,    // If None, auto-detect
         on_navigate: Option<fn(crossterm::event::KeyCode) -> Msg>,
-        on_render: Option<fn(usize, usize) -> Msg>,  // (viewport_height, content_height)
+        on_render: Option<fn(usize, usize, usize, usize) -> Msg>,  // (viewport_height, content_height, viewport_width, content_width)
         on_focus: Option<Msg>,
         on_blur: Option<Msg>,
     },
@@ -584,6 +588,8 @@ impl<Msg> Element<Msg> {
             child: Box::new(child),
             scroll_offset: state.scroll_offset(),
             content_height: None,
+            horizontal_scroll_offset: state.horizontal_scroll_offset(),
+            content_width: None,
             on_navigate: None,
             on_render: None,
             on_focus: None,

@@ -61,7 +61,7 @@ pub enum Msg {
 
     // Details panel scrolling
     DetailsScroll(crossterm::event::KeyCode),
-    DetailsSetDimensions(usize, usize),  // (viewport_height, content_height)
+    DetailsSetDimensions(usize, usize, usize, usize),  // (viewport_height, content_height, viewport_width, content_width)
 
     // Navigation
     Back,
@@ -441,7 +441,13 @@ impl App for OperationQueueApp {
             }
 
             Msg::AddItems(mut items) => {
+                let was_empty = state.queue_items.is_empty();
                 state.queue_items.append(&mut items);
+
+                // If queue was empty and we just added items, select the first one
+                if was_empty && !state.queue_items.is_empty() && state.selected_item_id.is_none() {
+                    state.selected_item_id = state.queue_items.first().map(|item| item.id.clone());
+                }
 
                 // If in play mode and we have capacity, start executing
                 if state.auto_play && state.currently_running.len() < state.max_concurrent {
@@ -477,10 +483,12 @@ impl App for OperationQueueApp {
                 Command::None
             }
 
-            Msg::DetailsSetDimensions(viewport_height, content_height) => {
+            Msg::DetailsSetDimensions(viewport_height, content_height, viewport_width, content_width) => {
                 // Called every frame by renderer with actual dimensions
                 state.details_scroll_state.set_viewport_height(viewport_height);
                 state.details_scroll_state.update_scroll(viewport_height, content_height);
+                state.details_scroll_state.set_viewport_width(viewport_width);
+                state.details_scroll_state.update_horizontal_scroll(viewport_width, content_width);
                 Command::None
             }
 

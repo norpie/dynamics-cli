@@ -7,8 +7,10 @@ pub struct ScrollableBuilder<Msg> {
     pub(crate) child: Box<Element<Msg>>,
     pub(crate) scroll_offset: usize,
     pub(crate) content_height: Option<usize>,
+    pub(crate) horizontal_scroll_offset: usize,
+    pub(crate) content_width: Option<usize>,
     pub(crate) on_navigate: Option<fn(crossterm::event::KeyCode) -> Msg>,
-    pub(crate) on_render: Option<fn(usize, usize) -> Msg>,
+    pub(crate) on_render: Option<fn(usize, usize, usize, usize) -> Msg>,
     pub(crate) on_focus: Option<Msg>,
     pub(crate) on_blur: Option<Msg>,
 }
@@ -20,14 +22,20 @@ impl<Msg> ScrollableBuilder<Msg> {
         self
     }
 
-    /// Set callback for navigation keys (Up/Down/PageUp/PageDown/Home/End)
+    /// Set explicit content width (optional, auto-detected)
+    pub fn content_width(mut self, width: usize) -> Self {
+        self.content_width = Some(width);
+        self
+    }
+
+    /// Set callback for navigation keys (Up/Down/PageUp/PageDown/Home/End/Left/Right)
     pub fn on_navigate(mut self, msg: fn(crossterm::event::KeyCode) -> Msg) -> Self {
         self.on_navigate = Some(msg);
         self
     }
 
-    /// Set callback for render events (called each frame with viewport_height, content_height)
-    pub fn on_render(mut self, msg: fn(usize, usize) -> Msg) -> Self {
+    /// Set callback for render events (called each frame with viewport_height, content_height, viewport_width, content_width)
+    pub fn on_render(mut self, msg: fn(usize, usize, usize, usize) -> Msg) -> Self {
         self.on_render = Some(msg);
         self
     }
@@ -48,6 +56,8 @@ impl<Msg> ScrollableBuilder<Msg> {
             child: self.child,
             scroll_offset: self.scroll_offset,
             content_height: self.content_height,
+            horizontal_scroll_offset: self.horizontal_scroll_offset,
+            content_width: self.content_width,
             on_navigate: self.on_navigate,
             on_render: self.on_render,
             on_focus: self.on_focus,

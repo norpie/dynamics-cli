@@ -377,6 +377,7 @@ pub(crate) struct FlatNode<Msg> {
 }
 
 /// Internal structure for flattened table tree nodes
+#[derive(Clone)]
 pub struct FlatTableNode {
     pub id: String,
     pub columns: Vec<String>,
