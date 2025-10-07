@@ -12,7 +12,7 @@ use crate::tui::{
 use crate::{col, row, use_constraints};
 use crate::api::resilience::ResilienceConfig;
 use ratatui::text::Line;
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use super::models::{QueueItem, QueueFilter, SortMode, OperationStatus, QueueResult};
 use super::tree_nodes::QueueTreeNode;
 
@@ -58,7 +58,6 @@ pub enum Msg {
     Back,
 }
 
-#[derive(Default)]
 pub struct State {
     // Queue data
     queue_items: Vec<QueueItem>,
@@ -69,10 +68,29 @@ pub struct State {
     max_concurrent: usize,
     currently_running: HashSet<String>,
 
+    // Performance tracking
+    recent_completion_times: VecDeque<u64>, // Store last 10 completion times in ms
+
     // UI state
     filter: QueueFilter,
     sort_mode: SortMode,
     selected_item_id: Option<String>,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            queue_items: Vec::new(),
+            tree_state: TreeState::with_selection(),
+            auto_play: false,
+            max_concurrent: 3,
+            currently_running: HashSet::new(),
+            recent_completion_times: VecDeque::with_capacity(10),
+            filter: QueueFilter::All,
+            sort_mode: SortMode::Priority,
+            selected_item_id: None,
+        }
+    }
 }
 
 impl crate::tui::AppState for State {}
@@ -83,18 +101,7 @@ impl App for OperationQueueApp {
     type InitParams = ();
 
     fn init(_params: ()) -> (State, Command<Msg>) {
-        let state = State {
-            queue_items: Vec::new(),
-            tree_state: TreeState::with_selection(),
-            auto_play: false,
-            max_concurrent: 3,
-            currently_running: HashSet::new(),
-            filter: QueueFilter::All,
-            sort_mode: SortMode::Priority,
-            selected_item_id: None,
-        };
-
-        (state, Command::set_focus(FocusId::new("queue-tree")))
+        (State::default(), Command::set_focus(FocusId::new("queue-tree")))
     }
 
     fn update(state: &mut State, msg: Msg) -> Command<Msg> {
@@ -246,6 +253,15 @@ impl App for OperationQueueApp {
                         OperationStatus::Failed
                     };
                     item.result = Some(result.clone());
+
+                    // Track completion time for successful operations
+                    if result.success {
+                        state.recent_completion_times.push_back(result.duration_ms);
+                        // Keep only last 10 completion times
+                        if state.recent_completion_times.len() > 10 {
+                            state.recent_completion_times.pop_front();
+                        }
+                    }
 
                     // Log completion with error details
                     if result.success {
@@ -423,29 +439,18 @@ impl App for OperationQueueApp {
             .map(QueueTreeNode::Parent)
             .collect();
 
-        // Controls row
+        // Controls and stats row
         let play_button = if state.auto_play {
-            Element::button("pause-btn", "⏸ Pause").on_press(Msg::TogglePlay)
+            Element::button("pause-btn", "[P] Pause").on_press(Msg::TogglePlay)
         } else {
-            Element::button("play-btn", "▶ Play").on_press(Msg::TogglePlay)
+            Element::button("play-btn", "[P] Play").on_press(Msg::TogglePlay)
         }
         .build();
 
-        let step_button = Element::button("step-btn", "→ Step")
+        let step_button = Element::button("step-btn", "[s] Step")
             .on_press(Msg::StepOne)
             .build();
 
-        let max_concurrent_text =
-            Element::text(format!("Max Concurrent: {}", state.max_concurrent));
-
-        let controls = row![
-            play_button => Length(12),
-            step_button => Length(10),
-            max_concurrent_text => Length(20),
-            Element::None => Fill(1),
-        ];
-
-        // Stats row
         let count_by_status = |status: OperationStatus| {
             state
                 .queue_items
@@ -454,22 +459,42 @@ impl App for OperationQueueApp {
                 .count()
         };
 
-        let stats = Element::text(format!(
-            "Total: {}  Pending: {}  Running: {}  Paused: {}  Done: {}  Failed: {}",
+        let stats_text = format!(
+            "Total: {}  Pending: {}  Running: {}  Done: {}  Failed: {}",
             state.queue_items.len(),
             count_by_status(OperationStatus::Pending),
             state.currently_running.len(),
-            count_by_status(OperationStatus::Paused),
             count_by_status(OperationStatus::Done),
             count_by_status(OperationStatus::Failed),
-        ));
+        );
 
-        // Filter row (simplified for now)
-        let filter_text = Element::text(format!(
-            "Filter: {}  Sort: {}",
-            state.filter.label(),
-            state.sort_mode.label()
-        ));
+        // Time estimates
+        let est_3 = estimate_remaining_time(state, 3).unwrap_or_else(|| "-".to_string());
+        let est_5 = estimate_remaining_time(state, 5).unwrap_or_else(|| "-".to_string());
+        let est_10 = estimate_remaining_time(state, 10).unwrap_or_else(|| "-".to_string());
+
+        let estimates_text = format!(
+            "⏱ Est. remaining (last 3/5/10): {} / {} / {}",
+            est_3, est_5, est_10
+        );
+
+        let buttons = row![
+            play_button => Length(14),
+            Element::None => Length(1),
+            step_button => Length(11),
+        ];
+
+        let stats_and_estimates = col![
+            Element::text(stats_text) => Length(1),
+            Element::None => Length(1),
+            Element::text(estimates_text) => Length(1),
+        ];
+
+        let header = row![
+            buttons => Length(26),
+            Element::None => Length(2),
+            stats_and_estimates => Fill(1),
+        ];
 
         // Table tree
         let tree = Element::table_tree("queue-tree", &tree_nodes, &mut state.tree_state)
@@ -484,15 +509,13 @@ impl App for OperationQueueApp {
         // Split into tree (left, larger) and details (right, smaller)
         let main_content = row![
             col![
-                controls => Length(3),
-                stats => Length(1),
-                filter_text => Length(1),
+                header => Length(3),
                 tree => Fill(1),
             ] => Fill(3),
             details_panel => Fill(1),
         ];
 
-        LayeredView::new(Element::panel(main_content).title("Operation Queue").build())
+        LayeredView::new(Element::panel(main_content).build())
     }
 
     fn subscriptions(_state: &State) -> Vec<Subscription<Msg>> {
@@ -501,14 +524,13 @@ impl App for OperationQueueApp {
 
         vec![
             // Keyboard shortcuts
-            Subscription::keyboard(KeyBinding::new(KeyCode::Char(' ')), "Toggle play/pause", Msg::TogglePlay),
-            Subscription::keyboard(KeyBinding::new(KeyCode::Char('p')), "Toggle play/pause", Msg::TogglePlay),
+            Subscription::keyboard(KeyBinding::new(KeyCode::Char('P')), "Toggle play/pause (queue)", Msg::TogglePlay),
+            Subscription::keyboard(KeyBinding::new(KeyCode::Char('p')), "Toggle pause (selected)", Msg::TogglePauseSelected),
             Subscription::keyboard(KeyBinding::new(KeyCode::Char('s')), "Step one operation", Msg::StepOne),
             Subscription::keyboard(KeyBinding::new(KeyCode::Esc), "Back to launcher", Msg::Back),
             Subscription::keyboard(KeyBinding::new(KeyCode::Char('=')), "Increase priority (selected)", Msg::IncreasePrioritySelected),
             Subscription::keyboard(KeyBinding::new(KeyCode::Char('+')), "Increase priority (selected)", Msg::IncreasePrioritySelected),
             Subscription::keyboard(KeyBinding::new(KeyCode::Char('-')), "Decrease priority (selected)", Msg::DecreasePrioritySelected),
-            Subscription::keyboard(KeyBinding::new(KeyCode::Char('P')), "Toggle pause (selected)", Msg::TogglePauseSelected),
             Subscription::keyboard(KeyBinding::new(KeyCode::Char('r')), "Retry (selected)", Msg::RetrySelected),
             Subscription::keyboard(KeyBinding::new(KeyCode::Char('d')), "Delete (selected)", Msg::DeleteSelected),
 
@@ -608,6 +630,60 @@ fn execute_next_if_available(state: &mut State) -> Command<Msg> {
 }
 
 /// Build the details panel for the selected queue item
+/// Calculate average completion time from last N successful operations
+fn calculate_avg_time(recent_times: &VecDeque<u64>, n: usize) -> Option<u64> {
+    if recent_times.is_empty() {
+        return None;
+    }
+
+    let count = recent_times.len().min(n);
+    let sum: u64 = recent_times.iter().rev().take(count).sum();
+    Some(sum / count as u64)
+}
+
+/// Estimate time remaining for pending operations
+fn estimate_remaining_time(state: &State, n: usize) -> Option<String> {
+    let avg_time = calculate_avg_time(&state.recent_completion_times, n)?;
+    let pending_count = state.queue_items.iter()
+        .filter(|item| item.status == OperationStatus::Pending)
+        .count();
+
+    if pending_count == 0 {
+        return None;
+    }
+
+    // Account for concurrent execution
+    let concurrent = state.max_concurrent.max(1);
+    let estimated_ms = (avg_time * pending_count as u64) / concurrent as u64;
+
+    Some(format_duration_estimate(estimated_ms))
+}
+
+/// Format duration estimate in a readable way
+fn format_duration_estimate(ms: u64) -> String {
+    if ms < 1000 {
+        format!("{}ms", ms)
+    } else if ms < 60_000 {
+        format!("{:.0}s", ms as f64 / 1000.0)
+    } else if ms < 3_600_000 {
+        let minutes = ms / 60_000;
+        let seconds = (ms % 60_000) / 1000;
+        if seconds > 0 {
+            format!("{}m{}s", minutes, seconds)
+        } else {
+            format!("{}m", minutes)
+        }
+    } else {
+        let hours = ms / 3_600_000;
+        let minutes = (ms % 3_600_000) / 60_000;
+        if minutes > 0 {
+            format!("{}h{}m", hours, minutes)
+        } else {
+            format!("{}h", hours)
+        }
+    }
+}
+
 fn build_details_panel(state: &State, theme: &Theme) -> Element<Msg> {
     use ratatui::style::Style;
     use ratatui::text::{Line as RataLine, Span};
