@@ -238,6 +238,8 @@ impl MultiAppRuntime {
     }
 
     pub fn handle_key(&mut self, key_event: KeyEvent) -> Result<bool> {
+        log::debug!("🎹 MultiRuntime::handle_key: key={:?}, mods={:?}", key_event.code, key_event.modifiers);
+
         // Priority 1: Global modal keyboard handling (Tab, focused elements)
         if self.quit_modal.is_open() || self.help_modal.is_open() {
             // Tab/Shift-Tab: Move focus within global modal
@@ -285,8 +287,8 @@ impl MultiAppRuntime {
             return Ok(true);
         }
 
-        // Priority 5: Ctrl+Space navigates to app launcher
-        if KeyBinding::ctrl(KeyCode::Char(' ')).matches(&key_event) {
+        // Priority 5: Ctrl+A navigates to app launcher
+        if KeyBinding::ctrl(KeyCode::Char('a')).matches(&key_event) {
             // Clear any stale navigation from app launcher before switching to it
             self.runtimes.get_mut(&AppId::AppLauncher)
                 .expect("AppLauncher not found in runtimes")
@@ -490,7 +492,7 @@ impl MultiAppRuntime {
         // Build help content directly as Element<GlobalMsg>
         let global_bindings = vec![
             (KeyBinding::new(KeyCode::F(1)), "Toggle help menu"),
-            (KeyBinding::ctrl(KeyCode::Char(' ')), "Go to app launcher"),
+            (KeyBinding::ctrl(KeyCode::Char('a')), "Go to app launcher"),
             (KeyBinding::new(KeyCode::Esc), "Close help menu"),
         ];
 

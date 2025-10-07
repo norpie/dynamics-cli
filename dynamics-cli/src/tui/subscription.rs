@@ -10,6 +10,21 @@ pub struct KeyBinding {
 }
 
 impl KeyBinding {
+    /// Normalize modifiers to only include SHIFT, CONTROL, ALT (strip state flags)
+    fn normalize_modifiers(modifiers: KeyModifiers) -> KeyModifiers {
+        let mut result = KeyModifiers::empty();
+        if modifiers.contains(KeyModifiers::SHIFT) {
+            result |= KeyModifiers::SHIFT;
+        }
+        if modifiers.contains(KeyModifiers::CONTROL) {
+            result |= KeyModifiers::CONTROL;
+        }
+        if modifiers.contains(KeyModifiers::ALT) {
+            result |= KeyModifiers::ALT;
+        }
+        result
+    }
+
     /// Create a key binding with no modifiers
     pub fn new(code: KeyCode) -> Self {
         Self {
@@ -42,14 +57,18 @@ impl KeyBinding {
         }
     }
 
-    /// Create a key binding with custom modifiers
+    /// Create a key binding with custom modifiers (normalized to only SHIFT, CONTROL, ALT)
     pub fn with_modifiers(code: KeyCode, modifiers: KeyModifiers) -> Self {
-        Self { code, modifiers }
+        Self {
+            code,
+            modifiers: Self::normalize_modifiers(modifiers),
+        }
     }
 
     /// Check if this key binding matches the given key event
     pub fn matches(&self, event: &KeyEvent) -> bool {
-        self.code == event.code && self.modifiers == event.modifiers
+        // Normalize event modifiers and compare
+        self.code == event.code && self.modifiers == Self::normalize_modifiers(event.modifiers)
     }
 
     /// Format the key code as a human-readable string
