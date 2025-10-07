@@ -167,6 +167,7 @@ impl App for OperationQueueApp {
                 if let Some(item) = state.queue_items.iter_mut().find(|i| i.id == id) {
                     item.status = OperationStatus::Pending;
                     item.result = None;
+                    item.started_at = None;
                 }
                 if state.auto_play {
                     execute_next_if_available(state)
@@ -176,9 +177,10 @@ impl App for OperationQueueApp {
             }
 
             Msg::StartExecution(id) => {
-                // Mark as running
+                // Mark as running and set start time
                 if let Some(item) = state.queue_items.iter_mut().find(|i| i.id == id) {
                     item.status = OperationStatus::Running;
+                    item.started_at = Some(std::time::Instant::now());
                     state.currently_running.insert(id.clone());
                 }
 
@@ -539,9 +541,10 @@ fn execute_next_if_available(state: &mut State) -> Command<Msg> {
         .map(|item| item.id.clone());
 
     if let Some(id) = next {
-        // Mark as running immediately
+        // Mark as running immediately and set start time
         if let Some(item) = state.queue_items.iter_mut().find(|i| i.id == id) {
             item.status = OperationStatus::Running;
+            item.started_at = Some(std::time::Instant::now());
             state.currently_running.insert(id.clone());
         }
 

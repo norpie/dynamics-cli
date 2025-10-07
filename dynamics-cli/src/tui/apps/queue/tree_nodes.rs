@@ -81,11 +81,24 @@ impl TableTreeItem for QueueTreeNode {
     ) -> Vec<String> {
         match self {
             Self::Parent(item) => {
-                let status_symbol = item.status.symbol();
+                let status_word = item.status.word();
 
                 // Get first operation for display
                 let first_op = item.operations.operations().first();
                 let op_entity = first_op.map(|op| op.entity()).unwrap_or("unknown");
+
+                // Calculate duration/time
+                let time_display = if let Some(result) = &item.result {
+                    // Completed - show duration from result
+                    format_duration(result.duration_ms)
+                } else if let Some(started) = item.started_at {
+                    // Running - show elapsed time
+                    let elapsed = started.elapsed().as_millis() as u64;
+                    format_duration(elapsed)
+                } else {
+                    // Not started
+                    "-".to_string()
+                };
 
                 // Actions buttons
                 let actions = match item.status {
@@ -98,9 +111,10 @@ impl TableTreeItem for QueueTreeNode {
 
                 vec![
                     item.priority.to_string(),
-                    status_symbol.to_string(),
+                    status_word.to_string(),
                     format!("{} ({})", item.metadata.description, op_entity),
                     "BATCH".to_string(),
+                    time_display,
                     actions,
                 ]
             }
@@ -113,7 +127,8 @@ impl TableTreeItem for QueueTreeNode {
                     "".to_string(),           // No status for children
                     format!("└─ {}", entity), // Indented entity name
                     op_type.to_string(),
-                    "".to_string(), // No actions for children
+                    "".to_string(),           // No time for children
+                    "".to_string(),           // No actions for children
                 ]
             }
         }
@@ -122,9 +137,10 @@ impl TableTreeItem for QueueTreeNode {
     fn column_widths() -> Vec<Constraint> {
         vec![
             Constraint::Length(4),  // Priority
-            Constraint::Length(3),  // Status symbol
+            Constraint::Length(8),  // Status word
             Constraint::Fill(1),    // Operation description (expandable)
             Constraint::Length(10), // Type
+            Constraint::Length(10), // Time/Duration
             Constraint::Length(15), // Actions
         ]
     }
@@ -132,10 +148,28 @@ impl TableTreeItem for QueueTreeNode {
     fn column_headers() -> Vec<String> {
         vec![
             "Pri".to_string(),
-            "St".to_string(),
+            "Status".to_string(),
             "Operation".to_string(),
             "Type".to_string(),
+            "Time".to_string(),
             "Actions".to_string(),
         ]
+    }
+}
+
+/// Format duration in milliseconds to human-readable format
+fn format_duration(ms: u64) -> String {
+    if ms < 1000 {
+        format!("{}ms", ms)
+    } else if ms < 60_000 {
+        format!("{:.1}s", ms as f64 / 1000.0)
+    } else if ms < 3_600_000 {
+        let minutes = ms / 60_000;
+        let seconds = (ms % 60_000) / 1000;
+        format!("{}m{}s", minutes, seconds)
+    } else {
+        let hours = ms / 3_600_000;
+        let minutes = (ms % 3_600_000) / 60_000;
+        format!("{}h{}m", hours, minutes)
     }
 }

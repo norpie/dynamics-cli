@@ -2,6 +2,7 @@
 
 use crate::api::operations::{Operations, OperationResult};
 use serde::{Serialize, Deserialize};
+use std::time::Instant;
 
 /// Item in the operation queue
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -18,6 +19,9 @@ pub struct QueueItem {
     pub priority: u8,
     /// Result after execution (if completed)
     pub result: Option<QueueResult>,
+    /// When execution started (None if not started yet)
+    #[serde(skip)]
+    pub started_at: Option<Instant>,
 }
 
 impl QueueItem {
@@ -30,6 +34,7 @@ impl QueueItem {
             status: OperationStatus::Pending,
             priority,
             result: None,
+            started_at: None,
         }
     }
 }
@@ -73,6 +78,17 @@ impl OperationStatus {
             Self::Paused => "⏸",
             Self::Done => "✓",
             Self::Failed => "⚠",
+        }
+    }
+
+    /// Get the display word for this status
+    pub fn word(&self) -> &'static str {
+        match self {
+            Self::Pending => "Pending",
+            Self::Running => "Running",
+            Self::Paused => "Paused",
+            Self::Done => "Done",
+            Self::Failed => "Failed",
         }
     }
 }
