@@ -71,8 +71,12 @@ pub struct State {
     transformed_records: Vec<TransformedDeadline>,
     list_state: ListState,
     selected_record_idx: usize,
-    /// Track queue items created from this inspection session (queue_item_id -> TransformedDeadline)
-    queued_items: HashMap<String, TransformedDeadline>,
+    /// Track queue items created from this inspection session (queue_item_id -> Vec<TransformedDeadline>)
+    queued_items: HashMap<String, Vec<TransformedDeadline>>,
+    /// Total number of deadlines queued in current batch
+    total_deadlines_queued: usize,
+    /// Accumulated associations from completed deadline creations (deadline_guid -> operations)
+    pending_associations: HashMap<String, Vec<crate::api::operations::Operation>>,
 }
 
 impl State {
@@ -90,6 +94,8 @@ impl State {
             list_state,
             selected_record_idx: 0,
             queued_items: HashMap::new(),
+            total_deadlines_queued: 0,
+            pending_associations: HashMap::new(),
         }
     }
 }
@@ -164,57 +170,27 @@ impl App for DeadlinesInspectionApp {
                 },
             ),
             Msg::AddToQueueAndView => {
-                // Convert all transformed records (without warnings) to queue items
-                let mut queue_items = Vec::new();
+                // Collect all valid records
+                let mut valid_records: Vec<&TransformedDeadline> = state.transformed_records.iter()
+                    .filter(|record| !record.has_warnings())
+                    .collect();
 
-                // ============================================================================
-                // TEMPORARY TESTING LIMIT: Only process 1 deadline for testing associations
-                // TODO: Remove this limit once associations are verified working
-                // ============================================================================
-                let mut processed_count = 0;
-                const MAX_DEADLINES_FOR_TESTING: usize = 1;
-
-                for record in &state.transformed_records {
-                    // Skip records with warnings
-                    if record.has_warnings() {
-                        continue;
-                    }
-
-                    // TEMPORARY: Stop after first valid record
-                    if processed_count >= MAX_DEADLINES_FOR_TESTING {
-                        log::warn!("TESTING MODE: Limiting to {} deadline(s)", MAX_DEADLINES_FOR_TESTING);
-                        break;
-                    }
-
-                    // Get name for description
-                    let name_field = if state.entity_type == "cgk_deadline" { "cgk_deadlinename" } else { "nrq_name" };
-                    let name = record.direct_fields.get(name_field)
-                        .map(|s| s.as_str())
-                        .unwrap_or("<No Name>");
-
-                    // Convert to operations (without N:N relationships for now)
-                    let operations_vec = record.to_operations(&state.entity_type);
-                    let operations = Operations::from_operations(operations_vec);
-
-                    // Create metadata
-                    let metadata = QueueMetadata {
-                        source: "Deadlines Excel".to_string(),
-                        entity_type: state.entity_type.clone(),
-                        description: format!("Row {}: {}", record.source_row, name),
-                        row_number: Some(record.source_row),
-                        environment_name: state.environment_name.clone(),
-                    };
-
-                    // Create queue item (priority based on row number - earlier rows = higher priority)
-                    let priority = (record.source_row.min(255)) as u8;
-                    let queue_item = QueueItem::new(operations, metadata, priority);
-
-                    // Track this queue item for later association creation
-                    state.queued_items.insert(queue_item.id.clone(), record.clone());
-
-                    queue_items.push(queue_item);
-                    processed_count += 1;
+                if valid_records.is_empty() {
+                    log::warn!("No valid records to queue");
+                    return Command::None;
                 }
+
+                // Track total for association batching later
+                state.total_deadlines_queued = valid_records.len();
+
+                // Batch deadline creates into groups of 200
+                let queue_items = batch_deadline_creates(
+                    &valid_records,
+                    &state.entity_type,
+                    &state.environment_name,
+                    &mut state.queued_items,
+                    200
+                );
 
                 // Serialize queue items to JSON for pub/sub
                 let queue_items_json = match serde_json::to_value(&queue_items) {
@@ -236,63 +212,90 @@ impl App for DeadlinesInspectionApp {
             }
 
             Msg::QueueItemCompleted(item_id, result, metadata) => {
-                // Check if this was a deadline create from our session
-                if let Some(record) = state.queued_items.get(&item_id) {
+                // Check if this was a deadline create batch from our session
+                if let Some(records) = state.queued_items.get(&item_id) {
                     // Only process successful creates
                     if !result.success || result.operation_results.is_empty() {
                         return Command::None;
                     }
 
-                    // Extract created entity GUID from first operation result
-                    let created_guid = match extract_entity_guid_from_result(&result.operation_results[0]) {
-                        Some(guid) => guid,
-                        None => {
-                            log::error!("Failed to extract entity GUID from queue item {}", item_id);
-                            log::error!("Available headers: {:?}", result.operation_results[0].headers);
-                            return Command::None;
-                        }
-                    };
+                    // Match each operation result to its corresponding record
+                    let num_results = result.operation_results.len();
+                    let num_records = records.len();
 
-                    log::info!("Deadline created with GUID: {}, generating associations", created_guid);
-
-                    // Generate AssociateRef operations for N:N relationships
-                    let association_ops = build_association_operations(
-                        &created_guid,
-                        &state.entity_type,
-                        &record.checkbox_relationships
-                    );
-
-                    if association_ops.is_empty() {
-                        log::info!("No associations to create for deadline {}", created_guid);
+                    if num_results != num_records {
+                        log::error!("Mismatch: {} operation results but {} records in batch", num_results, num_records);
                         return Command::None;
                     }
 
-                    // Create queue item for associations
-                    let operations = Operations::from_operations(association_ops);
-                    let assoc_metadata = QueueMetadata {
-                        source: "Deadlines Excel (Associations)".to_string(),
-                        entity_type: state.entity_type.clone(),
-                        description: format!("{} (associations)", metadata.description),
-                        row_number: metadata.row_number,
-                        environment_name: metadata.environment_name,
-                    };
+                    log::info!("Processing {} deadline creates from batch", num_results);
 
-                    let priority = 128; // Medium priority for associations
-                    let queue_item = QueueItem::new(operations, assoc_metadata, priority);
+                    // Extract GUIDs and build associations for each deadline in the batch
+                    for (idx, op_result) in result.operation_results.iter().enumerate() {
+                        let record = &records[idx];
 
-                    // Serialize and queue
-                    let queue_items_json = match serde_json::to_value(&vec![queue_item]) {
-                        Ok(json) => json,
-                        Err(e) => {
-                            log::error!("Failed to serialize association queue item: {}", e);
+                        let created_guid = match extract_entity_guid_from_result(op_result) {
+                            Some(guid) => guid,
+                            None => {
+                                log::error!("Failed to extract entity GUID from operation result {}", idx);
+                                continue;
+                            }
+                        };
+
+                        log::debug!("Deadline #{} created with GUID: {}", idx + 1, created_guid);
+
+                        // Generate AssociateRef operations for N:N relationships
+                        let association_ops = build_association_operations(
+                            &created_guid,
+                            &state.entity_type,
+                            &record.checkbox_relationships
+                        );
+
+                        if !association_ops.is_empty() {
+                            // Accumulate associations for later batching
+                            state.pending_associations.insert(created_guid.clone(), association_ops);
+                        }
+                    }
+
+                    // Check if all deadlines have been processed
+                    if state.pending_associations.len() >= state.total_deadlines_queued {
+                        log::info!("All {} deadlines created, batching associations", state.total_deadlines_queued);
+
+                        // Batch associations in groups of 200 max, never splitting a deadline's associations
+                        let batched_queue_items = batch_associations(
+                            &state.pending_associations,
+                            &state.entity_type,
+                            &metadata.environment_name,
+                            200
+                        );
+
+                        if batched_queue_items.is_empty() {
+                            log::info!("No associations to create");
+                            state.pending_associations.clear();
                             return Command::None;
                         }
-                    };
 
-                    Command::Publish {
-                        topic: "queue:add_items".to_string(),
-                        data: queue_items_json,
+                        log::info!("Created {} association queue items", batched_queue_items.len());
+
+                        // Serialize and queue all batches
+                        let queue_items_json = match serde_json::to_value(&batched_queue_items) {
+                            Ok(json) => json,
+                            Err(e) => {
+                                log::error!("Failed to serialize association queue items: {}", e);
+                                return Command::None;
+                            }
+                        };
+
+                        // Clear pending associations
+                        state.pending_associations.clear();
+
+                        return Command::Publish {
+                            topic: "queue:add_items".to_string(),
+                            data: queue_items_json,
+                        };
                     }
+
+                    Command::None
                 } else {
                     Command::None
                 }
@@ -587,6 +590,74 @@ fn extract_entity_guid_from_result(result: &crate::api::operations::OperationRes
     None
 }
 
+/// Batch deadline creates into queue items with max_per_batch operations each
+fn batch_deadline_creates(
+    records: &[&TransformedDeadline],
+    entity_type: &str,
+    environment_name: &str,
+    queued_items: &mut HashMap<String, Vec<TransformedDeadline>>,
+    max_per_batch: usize,
+) -> Vec<QueueItem> {
+    use crate::api::operations::Operations;
+
+    let mut queue_items = Vec::new();
+    let mut current_batch_ops = Vec::new();
+    let mut current_batch_records = Vec::new();
+    let mut batch_num = 1;
+
+    for record in records {
+        // Add to current batch
+        let operations_vec = record.to_operations(entity_type);
+        current_batch_ops.push(operations_vec[0].clone()); // Each deadline is 1 Create operation
+        current_batch_records.push((*record).clone());
+
+        // If we hit the batch limit, create a queue item
+        if current_batch_ops.len() >= max_per_batch {
+            let operations = Operations::from_operations(current_batch_ops.clone());
+            let metadata = QueueMetadata {
+                source: "Deadlines Excel".to_string(),
+                entity_type: entity_type.to_string(),
+                description: format!("Deadline batch {} ({} deadlines)", batch_num, current_batch_ops.len()),
+                row_number: None,
+                environment_name: environment_name.to_string(),
+            };
+            let priority = 64; // High priority for deadline creates
+            let queue_item = QueueItem::new(operations, metadata, priority);
+
+            // Track all records in this batch for association creation later
+            queued_items.insert(queue_item.id.clone(), current_batch_records.clone());
+
+            queue_items.push(queue_item);
+
+            // Start new batch
+            current_batch_ops.clear();
+            current_batch_records.clear();
+            batch_num += 1;
+        }
+    }
+
+    // Create queue item for remaining deadlines
+    if !current_batch_ops.is_empty() {
+        let operations = Operations::from_operations(current_batch_ops.clone());
+        let metadata = QueueMetadata {
+            source: "Deadlines Excel".to_string(),
+            entity_type: entity_type.to_string(),
+            description: format!("Deadline batch {} ({} deadlines)", batch_num, current_batch_ops.len()),
+            row_number: None,
+            environment_name: environment_name.to_string(),
+        };
+        let priority = 64; // High priority for deadline creates
+        let queue_item = QueueItem::new(operations, metadata, priority);
+
+        // Track all records in this batch for association creation later
+        queued_items.insert(queue_item.id.clone(), current_batch_records.clone());
+
+        queue_items.push(queue_item);
+    }
+
+    queue_items
+}
+
 /// Build AssociateRef operations for N:N relationships
 fn build_association_operations(
     entity_guid: &str,
@@ -623,4 +694,64 @@ fn build_association_operations(
     }
 
     operations
+}
+
+/// Batch associations into queue items with max_per_batch operations each
+/// Never splits a single deadline's associations across multiple batches
+fn batch_associations(
+    pending_associations: &HashMap<String, Vec<crate::api::operations::Operation>>,
+    entity_type: &str,
+    environment_name: &str,
+    max_per_batch: usize,
+) -> Vec<QueueItem> {
+    use crate::api::operations::Operations;
+
+    let mut queue_items = Vec::new();
+    let mut current_batch = Vec::new();
+    let mut current_batch_count = 0;
+    let mut batch_num = 1;
+
+    for (deadline_guid, ops) in pending_associations {
+        let ops_count = ops.len();
+
+        // If this deadline's associations would exceed the batch limit and we have operations already,
+        // create a queue item for the current batch
+        if !current_batch.is_empty() && current_batch_count + ops_count > max_per_batch {
+            let operations = Operations::from_operations(current_batch.clone());
+            let metadata = QueueMetadata {
+                source: "Deadlines Excel (Associations)".to_string(),
+                entity_type: entity_type.to_string(),
+                description: format!("Association batch {} ({} operations)", batch_num, current_batch_count),
+                row_number: None,
+                environment_name: environment_name.to_string(),
+            };
+            let priority = 128; // Medium priority for associations
+            queue_items.push(QueueItem::new(operations, metadata, priority));
+
+            // Start new batch
+            current_batch.clear();
+            current_batch_count = 0;
+            batch_num += 1;
+        }
+
+        // Add this deadline's associations to the current batch
+        current_batch.extend(ops.clone());
+        current_batch_count += ops_count;
+    }
+
+    // Create queue item for remaining operations
+    if !current_batch.is_empty() {
+        let operations = Operations::from_operations(current_batch);
+        let metadata = QueueMetadata {
+            source: "Deadlines Excel (Associations)".to_string(),
+            entity_type: entity_type.to_string(),
+            description: format!("Association batch {} ({} operations)", batch_num, current_batch_count),
+            row_number: None,
+            environment_name: environment_name.to_string(),
+        };
+        let priority = 128; // Medium priority for associations
+        queue_items.push(QueueItem::new(operations, metadata, priority));
+    }
+
+    queue_items
 }
