@@ -87,6 +87,13 @@ impl TableTreeItem for QueueTreeNode {
                 let first_op = item.operations.operations().first();
                 let op_entity = first_op.map(|op| op.entity()).unwrap_or("unknown");
 
+                // Determine type: single operation or batch
+                let op_type = if item.operations.len() == 1 {
+                    first_op.map(|op| op.operation_type().to_string()).unwrap_or_else(|| "Unknown".to_string())
+                } else {
+                    "BATCH".to_string()
+                };
+
                 // Calculate duration/time
                 let time_display = if let Some(result) = &item.result {
                     // Completed - show duration from result
@@ -113,7 +120,7 @@ impl TableTreeItem for QueueTreeNode {
                     item.priority.to_string(),
                     status_word.to_string(),
                     format!("{} ({})", item.metadata.description, op_entity),
-                    "BATCH".to_string(),
+                    op_type,
                     time_display,
                     actions,
                 ]
