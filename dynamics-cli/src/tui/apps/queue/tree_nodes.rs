@@ -107,22 +107,12 @@ impl TableTreeItem for QueueTreeNode {
                     "-".to_string()
                 };
 
-                // Actions buttons
-                let actions = match item.status {
-                    super::models::OperationStatus::Running => "[⏸]".to_string(),
-                    super::models::OperationStatus::Paused => "[▶]".to_string(),
-                    super::models::OperationStatus::Done => "".to_string(),
-                    super::models::OperationStatus::Failed => "[Retry]".to_string(),
-                    super::models::OperationStatus::Pending => "[⏸][↑][↓]".to_string(),
-                };
-
                 vec![
                     item.priority.to_string(),
                     status_word.to_string(),
                     format!("{} ({})", item.metadata.description, op_entity),
                     op_type,
                     time_display,
-                    actions,
                 ]
             }
             Self::Child { operation, .. } => {
@@ -135,7 +125,6 @@ impl TableTreeItem for QueueTreeNode {
                     format!("└─ {}", entity), // Indented entity name
                     op_type.to_string(),
                     "".to_string(),           // No time for children
-                    "".to_string(),           // No actions for children
                 ]
             }
         }
@@ -148,7 +137,6 @@ impl TableTreeItem for QueueTreeNode {
             Constraint::Fill(1),    // Operation description (expandable)
             Constraint::Length(10), // Type
             Constraint::Length(10), // Time/Duration
-            Constraint::Length(15), // Actions
         ]
     }
 
@@ -159,7 +147,6 @@ impl TableTreeItem for QueueTreeNode {
             "Operation".to_string(),
             "Type".to_string(),
             "Time".to_string(),
-            "Actions".to_string(),
         ]
     }
 }
