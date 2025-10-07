@@ -113,13 +113,25 @@ impl App for OperationQueueApp {
     fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         match msg {
             Msg::TreeEvent(event) => {
+                let old_selected = state.selected_item_id.clone();
                 state.tree_state.handle_event(event);
                 // Update selected item when navigating (not just on Enter)
-                state.selected_item_id = state.tree_state.selected().map(|s| s.to_string());
+                let new_selected = state.tree_state.selected().map(|s| s.to_string());
+
+                // Reset scroll state when selection changes
+                if old_selected != new_selected {
+                    state.details_scroll_state = ScrollableState::new();
+                }
+
+                state.selected_item_id = new_selected;
                 Command::None
             }
 
             Msg::NodeSelected(id) => {
+                // Reset scroll state when selecting a new item
+                if state.selected_item_id.as_ref() != Some(&id) {
+                    state.details_scroll_state = ScrollableState::new();
+                }
                 state.selected_item_id = Some(id);
                 Command::None
             }
