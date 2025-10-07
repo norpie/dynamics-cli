@@ -173,6 +173,21 @@ impl SelectField {
         self.selected_option = value;
     }
 
+    /// Set selected value and update state index to match (requires options list)
+    pub fn set_value_with_options(&mut self, value: Option<String>, options: &[String]) {
+        self.selected_option = value.clone();
+
+        // Update option count first (needed for select() to work)
+        self.state.update_option_count(options.len());
+
+        // Update state index to match
+        if let Some(val) = value {
+            if let Some(idx) = options.iter().position(|opt| opt == &val) {
+                self.state.select(idx);
+            }
+        }
+    }
+
     /// Check if dropdown is open
     pub fn is_open(&self) -> bool {
         self.state.is_open()

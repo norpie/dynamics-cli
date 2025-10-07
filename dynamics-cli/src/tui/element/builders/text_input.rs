@@ -10,6 +10,7 @@ pub struct TextInputBuilder<Msg> {
     pub(crate) scroll_offset: usize,
     pub(crate) placeholder: Option<String>,
     pub(crate) max_length: Option<usize>,
+    pub(crate) masked: bool,
     pub(crate) on_change: Option<fn(crossterm::event::KeyCode) -> Msg>,
     pub(crate) on_submit: Option<Msg>,
     pub(crate) on_event: Option<fn(TextInputEvent) -> Msg>,
@@ -25,6 +26,12 @@ impl<Msg> TextInputBuilder<Msg> {
 
     pub fn max_length(mut self, max: usize) -> Self {
         self.max_length = Some(max);
+        self
+    }
+
+    /// Enable masked mode (for passwords) - displays bullets instead of actual characters
+    pub fn masked(mut self, masked: bool) -> Self {
+        self.masked = masked;
         self
     }
 
@@ -63,6 +70,7 @@ impl<Msg> TextInputBuilder<Msg> {
             scroll_offset: self.scroll_offset,
             placeholder: self.placeholder,
             max_length: self.max_length,
+            masked: self.masked,
             on_change: self.on_change,
             on_submit: self.on_submit,
             on_event: self.on_event,

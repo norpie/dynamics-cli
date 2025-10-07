@@ -58,6 +58,7 @@ pub fn render_text_input<Msg: Clone + Send + 'static>(
     scroll_offset: usize,
     placeholder: &Option<String>,
     max_length: &Option<usize>,
+    masked: bool,
     on_change: &Option<fn(KeyCode) -> Msg>,
     on_submit: &Option<Msg>,
     on_event: &Option<fn(TextInputEvent) -> Msg>,
@@ -89,11 +90,16 @@ pub fn render_text_input<Msg: Clone + Send + 'static>(
     // Calculate visible width (area width - 2 for minimal padding)
     let visible_width = area.width.saturating_sub(2) as usize;
 
-    // Get visible portion of text
+    // Get visible portion of text (masked if password)
     let chars: Vec<char> = value.chars().collect();
     let start_idx = scroll_offset;
     let end_idx = (start_idx + visible_width).min(chars.len());
-    let visible_text: String = chars[start_idx..end_idx].iter().collect();
+    let visible_text: String = if masked {
+        // Replace all characters with bullets for password masking
+        chars[start_idx..end_idx].iter().map(|_| '•').collect()
+    } else {
+        chars[start_idx..end_idx].iter().collect()
+    };
 
     // Calculate cursor position in visible area
     let cursor_in_visible = cursor_pos.saturating_sub(start_idx);

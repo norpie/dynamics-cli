@@ -158,6 +158,7 @@ pub enum Element<Msg> {
         scroll_offset: usize,
         placeholder: Option<String>,
         max_length: Option<usize>,
+        masked: bool,
         on_change: Option<fn(crossterm::event::KeyCode) -> Msg>,
         on_submit: Option<Msg>,
         on_event: Option<fn(crate::tui::widgets::TextInputEvent) -> Msg>,  // Unified event handler
@@ -460,6 +461,7 @@ impl<Msg> Element<Msg> {
             scroll_offset: state.scroll_offset(),
             placeholder: None,
             max_length: None,
+            masked: false,
             on_change: None,
             on_submit: None,
             on_event: None,
