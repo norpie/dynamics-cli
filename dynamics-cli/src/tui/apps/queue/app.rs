@@ -463,6 +463,10 @@ impl App for OperationQueueApp {
             .on_press(Msg::StepOne)
             .build();
 
+        let clear_button = Element::button("clear-btn", "[C] Clear")
+            .on_press(Msg::ClearQueue)
+            .build();
+
         let count_by_status = |status: OperationStatus| {
             state
                 .queue_items
@@ -494,6 +498,8 @@ impl App for OperationQueueApp {
             play_button => Length(14),
             Element::None => Length(1),
             step_button => Length(11),
+            Element::None => Length(1),
+            clear_button => Length(11),
         ];
 
         let stats_and_estimates = col![
@@ -503,7 +509,7 @@ impl App for OperationQueueApp {
         ];
 
         let header = row![
-            buttons => Length(26),
+            buttons => Length(38),
             Element::None => Length(2),
             stats_and_estimates => Fill(1),
         ];
@@ -543,6 +549,7 @@ impl App for OperationQueueApp {
             Subscription::keyboard(KeyBinding::new(KeyCode::Char('P')), "Toggle play/pause (queue)", Msg::TogglePlay),
             Subscription::keyboard(KeyBinding::new(KeyCode::Char('p')), "Toggle pause (selected)", Msg::TogglePauseSelected),
             Subscription::keyboard(KeyBinding::new(KeyCode::Char('s')), "Step one operation", Msg::StepOne),
+            Subscription::keyboard(KeyBinding::new(KeyCode::Char('C')), "Clear queue", Msg::ClearQueue),
             Subscription::keyboard(KeyBinding::new(KeyCode::Esc), "Back to launcher", Msg::Back),
             Subscription::keyboard(KeyBinding::new(KeyCode::Char('=')), "Increase priority (selected)", Msg::IncreasePrioritySelected),
             Subscription::keyboard(KeyBinding::new(KeyCode::Char('+')), "Increase priority (selected)", Msg::IncreasePrioritySelected),
