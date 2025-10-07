@@ -7,11 +7,12 @@ use ratatui::text::{Line, Span};
 use ratatui::style::{Style, Stylize};
 use crate::{col, row, spacer, use_constraints};
 
-pub struct DeadlinesEnvironmentSelectApp;
+pub struct EnvironmentSelectorApp;
 
 #[derive(Clone)]
 pub struct Environment {
     name: String,
+    is_current: bool,
 }
 
 impl ListItem for Environment {
@@ -24,8 +25,13 @@ impl ListItem for Environment {
             (theme.text, None)
         };
 
+        let indicator = if self.is_current { "● " } else { "  " };
+
         let mut builder = Element::styled_text(Line::from(vec![
-            Span::styled(format!("  {}", self.name), Style::default().fg(fg_color)),
+            Span::styled(
+                format!("{}{}", indicator, self.name),
+                Style::default().fg(fg_color)
+            ),
         ]));
 
         if let Some(bg) = bg_style {
@@ -40,6 +46,7 @@ impl ListItem for Environment {
 pub struct State {
     environments: Vec<Environment>,
     list_state: ListState,
+    current_environment: Option<String>,
 }
 
 impl State {
@@ -47,6 +54,7 @@ impl State {
         Self {
             environments: Vec::new(),
             list_state: ListState::default(),
+            current_environment: None,
         }
     }
 }
@@ -59,14 +67,15 @@ impl Default for State {
 
 #[derive(Clone)]
 pub enum Msg {
-    EnvironmentsLoaded(Result<Vec<String>, String>),
+    DataLoaded(Result<(Vec<String>, Option<String>), String>),
     SelectEnvironment(usize),
+    EnvironmentChanged(Result<(), String>),
     ListNavigate(KeyCode),
 }
 
 impl crate::tui::AppState for State {}
 
-impl App for DeadlinesEnvironmentSelectApp {
+impl App for EnvironmentSelectorApp {
     type State = State;
     type Msg = Msg;
     type InitParams = ();
@@ -77,10 +86,16 @@ impl App for DeadlinesEnvironmentSelectApp {
             Command::perform(
                 async {
                     let config = crate::global_config();
-                    config.list_environments().await
-                        .map_err(|e| e.to_string())
+                    let manager = crate::client_manager();
+
+                    let envs = config.list_environments().await
+                        .map_err(|e| e.to_string())?;
+                    let current = manager.get_current_environment_name().await
+                        .map_err(|e| e.to_string())?;
+
+                    Ok((envs, current))
                 },
-                Msg::EnvironmentsLoaded
+                Msg::DataLoaded
             ),
             Command::set_focus(FocusId::new("environment-list")),
         ]);
@@ -89,31 +104,65 @@ impl App for DeadlinesEnvironmentSelectApp {
 
     fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         match msg {
-            Msg::EnvironmentsLoaded(Ok(envs)) => {
-                state.environments = envs.into_iter().map(|name| Environment { name }).collect();
+            Msg::DataLoaded(Ok((envs, current))) => {
+                state.current_environment = current.clone();
+                state.environments = envs.into_iter().map(|name| Environment {
+                    is_current: Some(&name) == current.as_ref(),
+                    name,
+                }).collect();
                 Command::None
             }
-            Msg::EnvironmentsLoaded(Err(err)) => {
+            Msg::DataLoaded(Err(err)) => {
                 log::error!("Failed to load environments: {}", err);
                 Command::start_app(
                     AppId::ErrorScreen,
                     ErrorScreenParams {
                         message: format!("Failed to load environments: {}", err),
-                        target: Some(AppId::DeadlinesEnvironmentSelect),
+                        target: Some(AppId::EnvironmentSelector),
                     }
                 )
             }
             Msg::SelectEnvironment(idx) => {
                 if let Some(env) = state.environments.get(idx) {
-                    Command::start_app(
-                        AppId::DeadlinesFileSelect,
-                        super::models::FileSelectParams {
-                            environment_name: env.name.clone(),
-                        }
+                    let env_name = env.name.clone();
+                    Command::perform(
+                        async move {
+                            let manager = crate::client_manager();
+                            manager.set_current_environment_in_config(env_name).await
+                                .map_err(|e| e.to_string())
+                        },
+                        Msg::EnvironmentChanged
                     )
                 } else {
                     Command::None
                 }
+            }
+            Msg::EnvironmentChanged(Ok(())) => {
+                // Reload data to refresh the current indicator
+                Command::perform(
+                    async {
+                        let config = crate::global_config();
+                        let manager = crate::client_manager();
+
+                        let envs = config.list_environments().await
+                            .map_err(|e| e.to_string())?;
+                        let current = manager.get_current_environment_name().await
+                            .map_err(|e| e.to_string())?;
+
+                        Ok((envs, current))
+                    },
+                    Msg::DataLoaded
+                )
+            }
+            Msg::EnvironmentChanged(Err(err)) => {
+                log::error!("Failed to change environment: {}", err);
+                Command::start_app(
+                    AppId::ErrorScreen,
+                    ErrorScreenParams {
+                        message: format!("Failed to change environment: {}", err),
+                        target: Some(AppId::EnvironmentSelector),
+                    }
+                )
             }
             Msg::ListNavigate(key) => {
                 let visible_height = 20;
@@ -131,7 +180,7 @@ impl App for DeadlinesEnvironmentSelectApp {
             .build();
 
         let main_ui = Element::panel(list)
-            .title("Select Environment for Deadlines")
+            .title("Select Environment")
             .build();
 
         LayeredView::new(main_ui)
@@ -142,6 +191,15 @@ impl App for DeadlinesEnvironmentSelectApp {
     }
 
     fn title() -> &'static str {
-        "Deadlines - Select Environment"
+        "Environment Selector"
+    }
+
+    fn status(state: &State, theme: &Theme) -> Option<Line<'static>> {
+        state.current_environment.as_ref().map(|env| {
+            Line::from(vec![
+                Span::styled("Current: ", Style::default().fg(theme.subtext0)),
+                Span::styled(env.clone(), Style::default().fg(theme.green)),
+            ])
+        })
     }
 }

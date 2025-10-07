@@ -187,14 +187,18 @@ fn resolve_checkboxes(
 
 /// Fetch entity data from cache or API
 async fn fetch_entity_data(
-    environment_name: &str,
     entity_name: &str,
 ) -> Result<Vec<serde_json::Value>, String> {
     let config = crate::global_config();
     let manager = crate::client_manager();
 
+    // Get current environment
+    let environment_name = manager.get_current_environment_name().await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "No environment selected".to_string())?;
+
     // Try cache first (24 hours) - but force refresh if cache has 0 records
-    match config.get_entity_data_cache(environment_name, entity_name, 24).await {
+    match config.get_entity_data_cache(&environment_name, entity_name, 24).await {
         Ok(Some(cached)) if !cached.is_empty() => {
             log::debug!("Using cached data for {} ({} records)", entity_name, cached.len());
             return Ok(cached);
@@ -212,7 +216,7 @@ async fn fetch_entity_data(
 
     // Fetch from API
     let client = manager
-        .get_client(environment_name)
+        .get_current_client()
         .await
         .map_err(|e| e.to_string())?;
 
@@ -242,7 +246,7 @@ async fn fetch_entity_data(
     }
 
     // Cache for future use
-    let _ = config.set_entity_data_cache(environment_name, entity_name, &records).await;
+    let _ = config.set_entity_data_cache(&environment_name, entity_name, &records).await;
 
     Ok(records)
 }
@@ -754,18 +758,15 @@ fn start_entity_data_loading(state: &mut State, entity_type: &str) -> Command<Ms
     state.entity_data_loaded_count = 0;
     state.entity_data_total_count = cache_entities.len();
 
-    let environment_name = state.environment_name.clone();
-
     let mut builder = Command::perform_parallel();
 
     for (index, entity_name) in cache_entities.iter().enumerate() {
         let entity_name_clone = entity_name.clone();
-        let env_name_clone = environment_name.clone();
 
         builder = builder.add_task(
             format!("Loading {} records", entity_name),
             async move {
-                fetch_entity_data(&env_name_clone, &entity_name_clone).await
+                fetch_entity_data(&entity_name_clone).await
             }
         );
     }
@@ -813,7 +814,7 @@ impl crate::tui::widgets::ListItem for Warning {
 
 #[derive(Clone)]
 pub struct State {
-    environment_name: String,
+    current_environment: Option<String>,
     file_path: PathBuf,
     sheet_name: String,
     entities: Resource<Vec<String>>,
@@ -834,9 +835,9 @@ pub struct State {
 }
 
 impl State {
-    fn new(environment_name: String, file_path: PathBuf, sheet_name: String) -> Self {
+    fn new(file_path: PathBuf, sheet_name: String) -> Self {
         Self {
-            environment_name,
+            current_environment: None,
             file_path,
             sheet_name,
             entities: Resource::NotAsked,
@@ -860,12 +861,13 @@ impl State {
 
 impl Default for State {
     fn default() -> Self {
-        Self::new(String::new(), PathBuf::new(), String::new())
+        Self::new(PathBuf::new(), String::new())
     }
 }
 
 #[derive(Clone)]
 pub enum Msg {
+    EnvironmentLoaded(Option<String>),
     EntitiesLoaded(Result<Vec<String>, String>),
     EntitySelectorEvent(SelectEvent),
     StartDataLoading,
@@ -883,15 +885,23 @@ impl App for DeadlinesMappingApp {
 
     fn init(params: Self::InitParams) -> (State, Command<Msg>) {
         let mut state = State::new(
-            params.environment_name.clone(),
             params.file_path,
             params.sheet_name,
         );
         state.entities = Resource::Loading;
 
-        // Load entities from cache or API with loading screen
-        let environment_name = params.environment_name.clone();
-        let cmd = Command::perform_parallel()
+        // Load entities and current environment
+        let cmd = Command::batch(vec![
+            Command::perform(
+                async {
+                    let manager = crate::client_manager();
+                    manager.get_current_environment_name().await
+                        .ok()
+                        .flatten()
+                },
+                Msg::EnvironmentLoaded
+            ),
+            Command::perform_parallel()
             .add_task(
                 "Loading entities".to_string(),
                 async move {
@@ -899,13 +909,18 @@ impl App for DeadlinesMappingApp {
                     let config = crate::global_config();
                     let manager = crate::client_manager();
 
+                    // Get current environment
+                    let environment_name = manager.get_current_environment_name().await
+                        .map_err(|e| e.to_string())?
+                        .ok_or_else(|| "No environment selected".to_string())?;
+
                     // Try cache first (24 hours)
                     match config.get_entity_cache(&environment_name, 24).await {
                         Ok(Some(cached)) => Ok::<Vec<String>, String>(cached),
                         _ => {
                             // Fetch from API
                             let client = manager
-                                .get_client(&environment_name)
+                                .get_current_client()
                                 .await
                                 .map_err(|e| e.to_string())?;
                             let metadata_xml = client.fetch_metadata().await.map_err(|e| e.to_string())?;
@@ -927,13 +942,18 @@ impl App for DeadlinesMappingApp {
                     .map(|boxed| *boxed)
                     .unwrap_or_else(|_| Err("Type mismatch in task result".to_string()));
                 Msg::EntitiesLoaded(typed_result)
-            });
+            })
+        ]);
 
         (state, cmd)
     }
 
     fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         match msg {
+            Msg::EnvironmentLoaded(env) => {
+                state.current_environment = env;
+                Command::None
+            }
             Msg::EntitiesLoaded(result) => {
                 state.entities = Resource::from_result(result);
 
@@ -1022,17 +1042,11 @@ impl App for DeadlinesMappingApp {
 
                 Command::None
             }
-            Msg::Back => Command::start_app(
-                AppId::DeadlinesFileSelect,
-                super::models::FileSelectParams {
-                    environment_name: state.environment_name.clone(),
-                },
-            ),
+            Msg::Back => Command::navigate_to(AppId::DeadlinesFileSelect),
             Msg::Continue => {
                 Command::start_app(
                     AppId::DeadlinesInspection,
                     super::models::InspectionParams {
-                        environment_name: state.environment_name.clone(),
                         entity_type: state.detected_entity.clone()
                             .or_else(|| state.manual_override.clone())
                             .unwrap_or_default(),
@@ -1080,14 +1094,16 @@ impl App for DeadlinesMappingApp {
                 let mut builder = ColumnBuilder::new();
 
                 // Top section: info lines
-                builder = builder.add(Element::styled_text(Line::from(vec![
-                    Span::styled("Environment: ", Style::default().fg(theme.subtext0)),
-                    Span::styled(
-                        state.environment_name.clone(),
-                        Style::default().fg(theme.lavender)
-                    ),
-                ]))
-                .build(), Length(1));
+                if let Some(ref env) = state.current_environment {
+                    builder = builder.add(Element::styled_text(Line::from(vec![
+                        Span::styled("Environment: ", Style::default().fg(theme.subtext0)),
+                        Span::styled(
+                            env.clone(),
+                            Style::default().fg(theme.lavender)
+                        ),
+                    ]))
+                    .build(), Length(1));
+                }
 
                 builder = builder.add(Element::styled_text(Line::from(vec![
                     Span::styled("File: ", Style::default().fg(theme.subtext0)),
@@ -1264,12 +1280,14 @@ impl App for DeadlinesMappingApp {
     }
 
     fn status(state: &State, theme: &Theme) -> Option<Line<'static>> {
-        Some(Line::from(vec![
-            Span::styled("Environment: ", Style::default().fg(theme.subtext0)),
-            Span::styled(
-                state.environment_name.clone(),
-                Style::default().fg(theme.lavender),
-            ),
-        ]))
+        state.current_environment.as_ref().map(|env| {
+            Line::from(vec![
+                Span::styled("Environment: ", Style::default().fg(theme.subtext0)),
+                Span::styled(
+                    env.clone(),
+                    Style::default().fg(theme.lavender),
+                ),
+            ])
+        })
     }
 }

@@ -9,7 +9,7 @@ pub struct DeadlinesFileSelectApp;
 
 #[derive(Clone)]
 pub struct State {
-    environment_name: String,
+    current_environment: Option<String>,
     file_browser_state: FileBrowserState,
     selected_file: Option<PathBuf>,
     available_sheets: Resource<Vec<String>>,
@@ -17,7 +17,7 @@ pub struct State {
 }
 
 impl State {
-    fn new(environment_name: String) -> Self {
+    fn new(current_environment: Option<String>) -> Self {
         let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
         let mut browser_state = FileBrowserState::new(current_dir);
 
@@ -28,7 +28,7 @@ impl State {
         browser_state.select_first_matching(is_excel_file);
 
         Self {
-            environment_name,
+            current_environment,
             file_browser_state: browser_state,
             selected_file: None,
             available_sheets: Resource::NotAsked,
@@ -39,12 +39,13 @@ impl State {
 
 impl Default for State {
     fn default() -> Self {
-        Self::new(String::new())
+        Self::new(None)
     }
 }
 
 #[derive(Clone)]
 pub enum Msg {
+    EnvironmentLoaded(Option<String>),
     FileSelected(PathBuf),
     SheetsLoaded(Result<Vec<String>, String>),
     DirectoryEntered(PathBuf),
@@ -60,15 +61,31 @@ impl crate::tui::AppState for State {}
 impl App for DeadlinesFileSelectApp {
     type State = State;
     type Msg = Msg;
-    type InitParams = super::models::FileSelectParams;
+    type InitParams = ();
 
-    fn init(params: Self::InitParams) -> (State, Command<Msg>) {
-        let state = State::new(params.environment_name);
-        (state, Command::set_focus(FocusId::new("file-browser")))
+    fn init(_params: Self::InitParams) -> (State, Command<Msg>) {
+        let state = State::new(None);
+        let cmd = Command::batch(vec![
+            Command::perform(
+                async {
+                    let manager = crate::client_manager();
+                    manager.get_current_environment_name().await
+                        .ok()
+                        .flatten()
+                },
+                Msg::EnvironmentLoaded
+            ),
+            Command::set_focus(FocusId::new("file-browser")),
+        ]);
+        (state, cmd)
     }
 
     fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         match msg {
+            Msg::EnvironmentLoaded(env) => {
+                state.current_environment = env;
+                Command::None
+            }
             Msg::FileSelected(path) => {
                 state.selected_file = Some(path.clone());
                 state.available_sheets = Resource::Loading;
@@ -153,7 +170,6 @@ impl App for DeadlinesFileSelectApp {
                         return Command::start_app(
                             AppId::DeadlinesMapping,
                             super::models::MappingParams {
-                                environment_name: state.environment_name.clone(),
                                 file_path: file_path.clone(),
                                 sheet_name: sheet_name.to_string(),
                             }
@@ -163,7 +179,7 @@ impl App for DeadlinesFileSelectApp {
                 Command::None
             }
             Msg::Back => {
-                Command::navigate_to(AppId::DeadlinesEnvironmentSelect)
+                Command::navigate_to(AppId::AppLauncher)
             }
             Msg::SetViewportHeight(height) => {
                 let item_count = state.file_browser_state.entries().len();
@@ -268,10 +284,12 @@ impl App for DeadlinesFileSelectApp {
     }
 
     fn status(state: &State, theme: &Theme) -> Option<Line<'static>> {
-        Some(Line::from(vec![
-            Span::styled("Environment: ", Style::default().fg(theme.subtext0)),
-            Span::styled(state.environment_name.clone(), Style::default().fg(theme.lavender)),
-        ]))
+        state.current_environment.as_ref().map(|env| {
+            Line::from(vec![
+                Span::styled("Environment: ", Style::default().fg(theme.subtext0)),
+                Span::styled(env.clone(), Style::default().fg(theme.lavender)),
+            ])
+        })
     }
 }
 

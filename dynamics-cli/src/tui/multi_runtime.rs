@@ -6,7 +6,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use anyhow::Result;
 use std::collections::HashMap;
 
-use crate::tui::{AppId, Runtime, AppRuntime, apps::{AppLauncher, LoadingScreen, ErrorScreen, SettingsApp, migration::{MigrationEnvironmentApp, MigrationComparisonSelectApp, EntityComparisonApp}, DeadlinesEnvironmentSelectApp, DeadlinesFileSelectApp, DeadlinesMappingApp, DeadlinesInspectionApp, OperationQueueApp}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App, ModalState, KeyBinding, AppLifecycle};
+use crate::tui::{AppId, Runtime, AppRuntime, apps::{AppLauncher, LoadingScreen, ErrorScreen, SettingsApp, EnvironmentSelectorApp, migration::{MigrationEnvironmentApp, MigrationComparisonSelectApp, EntityComparisonApp}, DeadlinesFileSelectApp, DeadlinesMappingApp, DeadlinesInspectionApp, OperationQueueApp}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App, ModalState, KeyBinding, AppLifecycle};
 use crate::tui::runtime::AppFactory;
 use crate::tui::element::{ColumnBuilder, RowBuilder, FocusId};
 use crate::tui::widgets::ScrollableState;
@@ -82,10 +82,10 @@ impl MultiAppRuntime {
         factories.insert(AppId::LoadingScreen, Box::new(std::marker::PhantomData::<LoadingScreen>));
         factories.insert(AppId::ErrorScreen, Box::new(std::marker::PhantomData::<ErrorScreen>));
         factories.insert(AppId::Settings, Box::new(std::marker::PhantomData::<SettingsApp>));
+        factories.insert(AppId::EnvironmentSelector, Box::new(std::marker::PhantomData::<EnvironmentSelectorApp>));
         factories.insert(AppId::MigrationEnvironment, Box::new(std::marker::PhantomData::<MigrationEnvironmentApp>));
         factories.insert(AppId::MigrationComparisonSelect, Box::new(std::marker::PhantomData::<MigrationComparisonSelectApp>));
         factories.insert(AppId::EntityComparison, Box::new(std::marker::PhantomData::<EntityComparisonApp>));
-        factories.insert(AppId::DeadlinesEnvironmentSelect, Box::new(std::marker::PhantomData::<DeadlinesEnvironmentSelectApp>));
         factories.insert(AppId::DeadlinesFileSelect, Box::new(std::marker::PhantomData::<DeadlinesFileSelectApp>));
         factories.insert(AppId::DeadlinesMapping, Box::new(std::marker::PhantomData::<DeadlinesMappingApp>));
         factories.insert(AppId::DeadlinesInspection, Box::new(std::marker::PhantomData::<DeadlinesInspectionApp>));

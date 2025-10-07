@@ -24,12 +24,17 @@ impl Default for State {
         Self {
             apps: vec![
                 AppInfo {
+                    id: AppId::EnvironmentSelector,
+                    name: "Environment Selector".to_string(),
+                    description: "Select and manage Dynamics 365 environments".to_string(),
+                },
+                AppInfo {
                     id: AppId::MigrationEnvironment,
                     name: "Migration Environments".to_string(),
                     description: "Manage Dynamics 365 migrations".to_string(),
                 },
                 AppInfo {
-                    id: AppId::DeadlinesEnvironmentSelect,
+                    id: AppId::DeadlinesFileSelect,
                     name: "Deadlines".to_string(),
                     description: "Process Excel deadlines for migration".to_string(),
                 },

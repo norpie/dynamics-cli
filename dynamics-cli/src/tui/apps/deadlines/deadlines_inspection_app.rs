@@ -66,7 +66,6 @@ impl ListItem for RecordListItem {
 
 #[derive(Clone)]
 pub struct State {
-    environment_name: String,
     entity_type: String,
     transformed_records: Vec<TransformedDeadline>,
     list_state: ListState,
@@ -80,7 +79,7 @@ pub struct State {
 }
 
 impl State {
-    fn new(environment_name: String, entity_type: String, transformed_records: Vec<TransformedDeadline>) -> Self {
+    fn new(entity_type: String, transformed_records: Vec<TransformedDeadline>) -> Self {
         let mut list_state = ListState::default();
         // Auto-select first record if any exist
         if !transformed_records.is_empty() {
@@ -88,7 +87,6 @@ impl State {
         }
 
         Self {
-            environment_name,
             entity_type,
             transformed_records,
             list_state,
@@ -102,7 +100,7 @@ impl State {
 
 impl Default for State {
     fn default() -> Self {
-        Self::new(String::new(), String::new(), Vec::new())
+        Self::new(String::new(), Vec::new())
     }
 }
 
@@ -113,6 +111,7 @@ pub enum Msg {
     SetViewportHeight(usize),
     Back,
     AddToQueueAndView,
+    EnvironmentLoaded(Result<String, String>),
     QueueItemCompleted(String, crate::tui::apps::queue::models::QueueResult, crate::tui::apps::queue::models::QueueMetadata),
 }
 
@@ -125,7 +124,6 @@ impl App for DeadlinesInspectionApp {
 
     fn init(params: Self::InitParams) -> (State, Command<Msg>) {
         let state = State::new(
-            params.environment_name,
             params.entity_type,
             params.transformed_records,
         );
@@ -161,15 +159,20 @@ impl App for DeadlinesInspectionApp {
                 state.list_state.update_scroll(height, item_count);
                 Command::None
             }
-            Msg::Back => Command::start_app(
-                AppId::DeadlinesMapping,
-                super::models::MappingParams {
-                    environment_name: state.environment_name.clone(),
-                    file_path: std::path::PathBuf::new(), // TODO: preserve original path
-                    sheet_name: String::new(), // TODO: preserve original sheet
-                },
-            ),
+            Msg::Back => Command::navigate_to(AppId::DeadlinesMapping),
             Msg::AddToQueueAndView => {
+                // Get current environment first
+                Command::perform(
+                    async {
+                        let manager = crate::client_manager();
+                        manager.get_current_environment_name().await
+                            .map_err(|e| e.to_string())?
+                            .ok_or_else(|| "No environment selected".to_string())
+                    },
+                    Msg::EnvironmentLoaded
+                )
+            }
+            Msg::EnvironmentLoaded(Ok(environment_name)) => {
                 // Collect all valid records
                 let mut valid_records: Vec<&TransformedDeadline> = state.transformed_records.iter()
                     .filter(|record| !record.has_warnings())
@@ -187,7 +190,7 @@ impl App for DeadlinesInspectionApp {
                 let queue_items = batch_deadline_creates(
                     &valid_records,
                     &state.entity_type,
-                    &state.environment_name,
+                    &environment_name,
                     &mut state.queued_items,
                     50
                 );
@@ -209,6 +212,10 @@ impl App for DeadlinesInspectionApp {
                     },
                     Command::navigate_to(AppId::OperationQueue),
                 ])
+            }
+            Msg::EnvironmentLoaded(Err(err)) => {
+                log::error!("Failed to load environment: {}", err);
+                Command::None
             }
 
             Msg::QueueItemCompleted(item_id, result, metadata) => {
