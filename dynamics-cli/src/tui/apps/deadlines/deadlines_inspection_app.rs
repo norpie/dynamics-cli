@@ -128,7 +128,7 @@ impl App for DeadlinesInspectionApp {
             params.transformed_records,
         );
 
-        (state, Command::set_focus(FocusId::new("record-list")))
+        (state, Command::set_focus(FocusId::new("queue-button")))
     }
 
     fn update(state: &mut State, msg: Msg) -> Command<Msg> {

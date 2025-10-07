@@ -1,7 +1,7 @@
 use crossterm::event::KeyCode;
 use std::path::PathBuf;
 use std::collections::HashMap;
-use crate::tui::{App, AppId, Command, Element, Subscription, Theme, LayeredView, Resource};
+use crate::tui::{App, AppId, Command, Element, Subscription, Theme, LayeredView, Resource, FocusId};
 use crate::tui::element::LayoutConstraint::*;
 use crate::tui::widgets::{SelectField, SelectEvent, ListState};
 use crate::{col, spacer};
@@ -541,7 +541,7 @@ fn process_excel_file(state: &mut State) -> Command<Msg> {
     log::debug!("Transformation complete. {} rows, {} with warnings",
         state.total_rows, state.rows_with_warnings);
 
-    Command::None
+    Command::set_focus(FocusId::new("continue-button"))
 }
 
 /// Process a single data row - now returns a TransformedDeadline
@@ -969,8 +969,11 @@ impl App for DeadlinesMappingApp {
                         state.entity_selector.set_value(Some(options[0].clone()));
                         state.manual_override = Some(options[0].clone());
 
-                        return Command::set_focus(crate::tui::FocusId::new("entity-selector"));
+                        return Command::set_focus(FocusId::new("entity-selector"));
                     }
+
+                    // Entity detected - focus the load data button
+                    return Command::set_focus(FocusId::new("load-data-button"));
                 }
 
                 Command::None
@@ -1121,7 +1124,6 @@ impl App for DeadlinesMappingApp {
                 .build(), Length(1));
 
                 builder = builder.add(spacer!(), Length(1));
-                builder = builder.add(spacer!(), Length(1));
 
                 // Mapping info based on detected entity or manual override
                 let selected_entity = state.detected_entity.as_ref()
@@ -1159,7 +1161,6 @@ impl App for DeadlinesMappingApp {
                             .build(), Length(1));
                         }
 
-                        builder = builder.add(spacer!(), Length(1));
                         builder = builder.add(Element::styled_text(Line::from(vec![
                             Span::styled(
                                 format!("Will use {} static field mappings", mapping_count),
@@ -1167,7 +1168,6 @@ impl App for DeadlinesMappingApp {
                             ),
                         ]))
                         .build(), Length(1));
-                        builder = builder.add(spacer!(), Length(1));
                         builder = builder.add(Element::styled_text(Line::from(vec![
                             Span::styled(
                                 "Checkbox columns will be detected dynamically from entity metadata",
@@ -1198,20 +1198,12 @@ impl App for DeadlinesMappingApp {
                             .build();
 
                         builder = builder.add(selector_panel, Length(5));
-                        builder = builder.add(spacer!(), Length(1));
-                        builder = builder.add(Element::styled_text(Line::from(vec![Span::styled(
-                            format!(
-                                "Available entities ({}): {}",
-                                entities.len(),
-                                entities.join(", ")
-                            ),
-                            Style::default().fg(theme.subtext0)
-                        )]))
-                        .build(), Length(1));
                     }
                 }
 
-                // Show button to load data, or warnings list if data is already loaded
+                builder = builder.add(spacer!(), Length(1));
+
+                // Show warnings list if data is loaded and processed, or instruction text
                 if state.excel_processed {
                     // Show warnings list after processing
                     let warnings_list = Element::list("warnings-list", &state.warnings, &state.warnings_list_state, theme)
@@ -1222,42 +1214,43 @@ impl App for DeadlinesMappingApp {
                         .build();
 
                     builder = builder.add(warnings_panel, Fill(1));
-                } else if !state.entity_data_loading {
-                    // Show button to start loading
-                    builder = builder.add(spacer!(), Fill(1));
-                    builder = builder.add(Element::styled_text(Line::from(vec![Span::styled(
-                        "Click 'Load Data' to fetch entity records for validation",
-                        Style::default().fg(theme.subtext0).italic()
-                    )]))
-                    .build(), Length(1));
-                    builder = builder.add(spacer!(), Length(1));
-                    builder = builder.add(Element::button("load-data-button", "Load Data")
-                        .on_press(Msg::StartDataLoading)
-                        .build(), Length(3));
-                    builder = builder.add(spacer!(), Fill(1));
-                } else {
+                } else if state.entity_data_loading {
                     // Show loading status
-                    builder = builder.add(spacer!(), Fill(1));
                     builder = builder.add(Element::styled_text(Line::from(vec![Span::styled(
                         format!("Loading entity data... ({}/{})", state.entity_data_loaded_count, state.entity_data_total_count),
                         Style::default().fg(theme.yellow)
                     )]))
                     .build(), Length(1));
                     builder = builder.add(spacer!(), Fill(1));
+                } else {
+                    // Show instruction to load data
+                    builder = builder.add(Element::styled_text(Line::from(vec![Span::styled(
+                        "Click 'Load Data' to fetch entity records for validation",
+                        Style::default().fg(theme.subtext0).italic()
+                    )]))
+                    .build(), Length(1));
+                    builder = builder.add(spacer!(), Fill(1));
                 }
 
                 // Bottom section: buttons
+                let right_button = if state.excel_processed {
+                    // Show Continue button after data is processed
+                    Element::button("continue-button", "Continue")
+                        .on_press(Msg::Continue)
+                        .build()
+                } else {
+                    // Show Load Data button before data is loaded
+                    Element::button("load-data-button", "Load Data")
+                        .on_press(Msg::StartDataLoading)
+                        .build()
+                };
+
                 builder = builder.add(crate::row![
                     Element::button("back-button", "Back")
                         .on_press(Msg::Back)
                         .build(),
                     spacer!(),
-                    Element::button(
-                        "continue-button",
-                        "Continue"
-                    )
-                    .on_press(Msg::Continue)
-                    .build(),
+                    right_button,
                 ], Length(3));
 
                 builder.build()
