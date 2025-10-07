@@ -509,10 +509,14 @@ impl App for OperationQueueApp {
         ];
 
         // Table tree
-        let tree = Element::table_tree("queue-tree", &tree_nodes, &mut state.tree_state)
+        let tree_widget = Element::table_tree("queue-tree", &tree_nodes, &mut state.tree_state)
             .on_event(Msg::TreeEvent)
             .on_select(Msg::NodeSelected)
             .on_render(Msg::ViewportHeight)
+            .build();
+
+        let tree = Element::panel(tree_widget)
+            .title("Queue")
             .build();
 
         // Build details panel for selected item

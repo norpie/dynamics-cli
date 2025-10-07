@@ -58,8 +58,8 @@ pub fn render_table_tree<Msg: Clone + Send + 'static>(
     inside_panel: bool,
 ) {
     // Call on_render with actual viewport height from renderer
-    // Subtract 2 for header row + border
-    let content_height = area.height.saturating_sub(3) as usize;
+    // Subtract 1 for header row
+    let content_height = area.height.saturating_sub(1) as usize;
     if let Some(render_fn) = on_render {
         registry.add_render_message(render_fn(content_height));
     }
@@ -80,8 +80,8 @@ pub fn render_table_tree<Msg: Clone + Send + 'static>(
     // Check if this tree is focused
     let is_focused = focused_id == Some(id);
 
-    // Calculate visible height (subtract header + borders)
-    let visible_height = area.height.saturating_sub(3) as usize;
+    // Calculate visible height (subtract header only, no borders)
+    let visible_height = area.height.saturating_sub(1) as usize;
 
     // Virtual scrolling: only render visible rows
     let start_idx = scroll_offset;
@@ -135,26 +135,16 @@ pub fn render_table_tree<Msg: Clone + Send + 'static>(
         .style(Style::default().fg(theme.lavender).bold())
         .height(1);
 
-    // Create table widget
-    let mut table = Table::new(rows, column_widths)
-        .header(header)
-        .block(Block::default().borders(Borders::ALL));
-
-    // Apply focus border if focused and not inside panel
-    if is_focused && !inside_panel {
-        table = table.block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.lavender))
-        );
-    }
+    // Create table widget without borders (parent panel handles that)
+    let table = Table::new(rows, column_widths)
+        .header(header);
 
     frame.render_widget(table, area);
 
     // Register click handlers for rows
     if let Some(on_select_fn) = on_select {
-        // Calculate row height (1 per row + header + borders)
-        let row_area_start_y = area.y + 2; // Skip top border + header
+        // Calculate row height (1 per row + header)
+        let row_area_start_y = area.y + 1; // Skip header
         for (idx, _node) in flattened_nodes[start_idx..end_idx].iter().enumerate() {
             let node_idx = start_idx + idx;
             if node_idx < node_ids.len() {
@@ -174,9 +164,9 @@ pub fn render_table_tree<Msg: Clone + Send + 'static>(
     if flattened_nodes.len() > visible_height {
         let scrollbar_area = Rect {
             x: area.x + area.width - 1,
-            y: area.y + 2, // Skip top border + header
+            y: area.y + 1, // Skip header
             width: 1,
-            height: area.height.saturating_sub(3),
+            height: area.height.saturating_sub(1),
         };
 
         let total_content = flattened_nodes.len();
