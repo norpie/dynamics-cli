@@ -23,7 +23,8 @@ struct RecordListItem {
 impl ListItem for RecordListItem {
     type Msg = Msg;
 
-    fn to_element(&self, theme: &Theme, is_selected: bool, _is_hovered: bool) -> Element<Msg> {
+    fn to_element(&self, is_selected: bool, _is_hovered: bool) -> Element<Msg> {
+        let theme = &crate::global_runtime_config().theme;
         let (fg_color, bg_style) = if is_selected {
             (theme.lavender, Some(Style::default().bg(theme.surface0)))
         } else {
@@ -350,7 +351,7 @@ impl App for DeadlinesInspectionApp {
 
         // Right panel: details for selected record
         let detail_content = if let Some(record) = state.transformed_records.get(state.selected_record_idx) {
-            build_detail_panel(record, &state.entity_type, theme)
+            build_detail_panel(record, &state.entity_type)
         } else {
             col![
                 Element::styled_text(Line::from(vec![
@@ -436,7 +437,8 @@ impl App for DeadlinesInspectionApp {
 }
 
 /// Build the detail panel for a selected record
-fn build_detail_panel(record: &TransformedDeadline, entity_type: &str, theme: &Theme) -> Element<Msg> {
+fn build_detail_panel(record: &TransformedDeadline, entity_type: &str) -> Element<Msg> {
+    let theme = &crate::global_runtime_config().theme;
     use crate::tui::element::ColumnBuilder;
 
     let mut builder = ColumnBuilder::new();

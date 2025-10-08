@@ -20,7 +20,8 @@ pub struct ExamplePairItem<Msg> {
 impl<Msg: Clone> ListItem for ExamplePairItem<Msg> {
     type Msg = Msg;
 
-    fn to_element(&self, theme: &Theme, is_selected: bool, _is_hovered: bool) -> Element<Self::Msg> {
+    fn to_element(&self, is_selected: bool, _is_hovered: bool) -> Element<Self::Msg> {
+        let theme = &crate::global_runtime_config().theme;
         let display = if let Some(label) = &self.label {
             format!("{} ({}... → {}...)",
                 label,

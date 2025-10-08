@@ -225,24 +225,23 @@ impl App for EntityComparisonApp {
     }
 
     fn view(state: &mut Self::State) -> LayeredView<Self::Msg> {
-        let theme = &crate::global_runtime_config().theme;
-        let main_ui = render_main_layout(state, theme);
+        let main_ui = render_main_layout(state);
         let mut view = LayeredView::new(main_ui);
 
         if state.show_back_confirmation {
-            view = view.with_app_modal(render_back_confirmation_modal(theme), LayerAlignment::Center);
+            view = view.with_app_modal(render_back_confirmation_modal(), LayerAlignment::Center);
         }
 
         if state.show_examples_modal {
-            view = view.with_app_modal(render_examples_modal(state, theme), LayerAlignment::Center);
+            view = view.with_app_modal(render_examples_modal(state), LayerAlignment::Center);
         }
 
         if state.show_prefix_mappings_modal {
-            view = view.with_app_modal(super::view::render_prefix_mappings_modal(state, theme), LayerAlignment::Center);
+            view = view.with_app_modal(super::view::render_prefix_mappings_modal(state), LayerAlignment::Center);
         }
 
         if state.show_manual_mappings_modal {
-            view = view.with_app_modal(super::view::render_manual_mappings_modal(state, theme), LayerAlignment::Center);
+            view = view.with_app_modal(super::view::render_manual_mappings_modal(state), LayerAlignment::Center);
         }
 
         view

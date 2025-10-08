@@ -917,7 +917,7 @@ impl App for OperationQueueApp {
             .build();
 
         // Build details panel for selected item
-        let details_panel = build_details_panel(state, theme, &state.details_scroll_state);
+        let details_panel = build_details_panel(state, &state.details_scroll_state);
 
         // Split into tree (left) and details (right) - 2/1 ratio
         let main_content = row![
@@ -932,19 +932,19 @@ impl App for OperationQueueApp {
 
         // Add clear confirmation modal if open
         if state.clear_confirm_modal.is_open() {
-            let modal = build_clear_confirm_modal(theme);
+            let modal = build_clear_confirm_modal();
             view = view.with_app_modal(modal, Alignment::Center);
         }
 
         // Add delete confirmation modal if open
         if state.delete_confirm_modal.is_open() {
-            let modal = build_delete_confirm_modal(theme);
+            let modal = build_delete_confirm_modal();
             view = view.with_app_modal(modal, Alignment::Center);
         }
 
         // Add interruption warning modal if open
         if state.interruption_warning_modal.is_open() {
-            let modal = build_interruption_warning_modal(state, theme);
+            let modal = build_interruption_warning_modal(state);
             view = view.with_app_modal(modal, Alignment::Center);
         }
 
@@ -1185,7 +1185,8 @@ fn format_duration_estimate(ms: u64) -> String {
     }
 }
 
-fn build_details_panel(state: &State, theme: &Theme, scroll_state: &ScrollableState) -> Element<Msg> {
+fn build_details_panel(state: &State, scroll_state: &ScrollableState) -> Element<Msg> {
+    let theme = &crate::global_runtime_config().theme;
     use ratatui::style::Style;
     use ratatui::text::{Line as RataLine, Span};
     use ratatui::prelude::Stylize;
@@ -1631,7 +1632,8 @@ fn build_details_panel(state: &State, theme: &Theme, scroll_state: &ScrollableSt
         .build()
 }
 
-fn build_clear_confirm_modal(theme: &Theme) -> Element<Msg> {
+fn build_clear_confirm_modal() -> Element<Msg> {
+    let theme = &crate::global_runtime_config().theme;
     use crate::tui::modals::ConfirmationModal;
 
     ConfirmationModal::new("Clear Queue")
@@ -1644,7 +1646,8 @@ fn build_clear_confirm_modal(theme: &Theme) -> Element<Msg> {
         .build()
 }
 
-fn build_delete_confirm_modal(theme: &Theme) -> Element<Msg> {
+fn build_delete_confirm_modal() -> Element<Msg> {
+    let theme = &crate::global_runtime_config().theme;
     use crate::tui::modals::ConfirmationModal;
 
     ConfirmationModal::new("Delete Item")
@@ -1657,7 +1660,8 @@ fn build_delete_confirm_modal(theme: &Theme) -> Element<Msg> {
         .build()
 }
 
-fn build_interruption_warning_modal(state: &State, theme: &Theme) -> Element<Msg> {
+fn build_interruption_warning_modal(state: &State) -> Element<Msg> {
+    let theme = &crate::global_runtime_config().theme;
     use crate::tui::modals::WarningModal;
 
     let interrupted_items = if let Some(items) = state.interruption_warning_modal.data() {

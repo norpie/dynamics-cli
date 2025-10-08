@@ -417,7 +417,7 @@ impl MultiAppRuntime {
             .expect("Active app not found in runtimes");
         let app_title = active_runtime.get_title();
         let app_status = active_runtime.get_status();
-        self.render_header(frame, header_area, app_title, app_status, &theme);
+        self.render_header(frame, header_area, app_title, app_status);
 
         // Render active app content
         self.runtimes.get_mut(&self.active_app)
@@ -426,16 +426,17 @@ impl MultiAppRuntime {
 
         // If help menu is open, overlay it on top
         if self.help_modal.is_open() {
-            self.render_help_menu(frame, full_area, &theme);
+            self.render_help_menu(frame, full_area);
         }
 
         // If quit confirmation is open, overlay it on top (highest priority)
         if self.quit_modal.is_open() {
-            self.render_quit_confirm(frame, full_area, &theme);
+            self.render_quit_confirm(frame, full_area);
         }
     }
 
-    fn render_header(&self, frame: &mut Frame, area: ratatui::layout::Rect, title: &str, status: Option<Line<'static>>, theme: &Theme) {
+    fn render_header(&self, frame: &mut Frame, area: ratatui::layout::Rect, title: &str, status: Option<Line<'static>>) {
+        let theme = &crate::global_runtime_config().theme;
         // Build title line with optional status
         let title_line = if let Some(status_line) = status {
             // Combine title and status with separator
@@ -472,7 +473,8 @@ impl MultiAppRuntime {
         Renderer::render(frame, &mut registry, &mut focus_registry, &mut dropdown_registry, None, &header, area);
     }
 
-    fn render_help_menu(&mut self, frame: &mut Frame, area: ratatui::layout::Rect, theme: &Theme) {
+    fn render_help_menu(&mut self, frame: &mut Frame, area: ratatui::layout::Rect) {
+        let theme = &crate::global_runtime_config().theme;
         // First, render a dim overlay over the entire area
         use ratatui::widgets::Paragraph;
         use ratatui::style::Style;
@@ -671,7 +673,8 @@ impl MultiAppRuntime {
     }
 
     /// Render quit confirmation modal
-    fn render_quit_confirm(&mut self, frame: &mut Frame, area: ratatui::layout::Rect, theme: &Theme) {
+    fn render_quit_confirm(&mut self, frame: &mut Frame, area: ratatui::layout::Rect) {
+        let theme = &crate::global_runtime_config().theme;
         use ratatui::widgets::Paragraph;
         use ratatui::style::Style;
 

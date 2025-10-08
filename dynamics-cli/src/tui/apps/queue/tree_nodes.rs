@@ -62,7 +62,6 @@ impl TreeItem for QueueTreeNode {
 
     fn to_element(
         &self,
-        _theme: &Theme,
         _depth: usize,
         _is_selected: bool,
         _is_expanded: bool,

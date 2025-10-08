@@ -18,7 +18,8 @@ pub struct FileBrowserEntry {
 
 impl FileBrowserEntry {
     /// Render this entry as an Element with proper styling
-    pub fn to_element<Msg>(&self, theme: &Theme, is_selected: bool) -> Element<Msg> {
+    pub fn to_element<Msg>(&self, is_selected: bool) -> Element<Msg> {
+        let theme = &crate::global_runtime_config().theme;
         let (fg_color, bg_style) = if is_selected {
             (theme.lavender, Some(Style::default().bg(theme.surface0)))
         } else {

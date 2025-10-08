@@ -22,7 +22,6 @@ pub trait TreeItem: Clone {
     /// is_expanded: whether this node is currently expanded
     fn to_element(
         &self,
-        theme: &Theme,
         depth: usize,
         is_selected: bool,
         is_expanded: bool,
@@ -390,7 +389,6 @@ pub struct FlatTableNode {
 pub(crate) fn flatten_tree<T: TreeItem>(
     root_items: &[T],
     state: &mut TreeState,
-    theme: &Theme,
 ) -> Vec<FlatNode<T::Msg>> {
     // Rebuild metadata cache if invalid
     if !state.cache_valid {
@@ -399,7 +397,7 @@ pub(crate) fn flatten_tree<T: TreeItem>(
 
     let mut result = vec![];
     for item in root_items {
-        flatten_recursive(item, state, theme, 0, &mut result);
+        flatten_recursive(item, state, 0, &mut result);
     }
     result
 }
@@ -407,7 +405,6 @@ pub(crate) fn flatten_tree<T: TreeItem>(
 fn flatten_recursive<T: TreeItem>(
     item: &T,
     state: &TreeState,
-    theme: &Theme,
     depth: usize,
     result: &mut Vec<FlatNode<T::Msg>>,
 ) {
@@ -417,7 +414,7 @@ fn flatten_recursive<T: TreeItem>(
     let has_children = item.has_children();
 
     // Render node (delegates to TreeItem::to_element)
-    let element = item.to_element(theme, depth, is_selected, is_expanded);
+    let element = item.to_element(depth, is_selected, is_expanded);
 
     result.push(FlatNode {
         id: id.clone(),
@@ -428,7 +425,7 @@ fn flatten_recursive<T: TreeItem>(
     // Recursively flatten children if expanded
     if is_expanded && has_children {
         for child in item.children() {
-            flatten_recursive(&child, state, theme, depth + 1, result);
+            flatten_recursive(&child, state, depth + 1, result);
         }
     }
 }

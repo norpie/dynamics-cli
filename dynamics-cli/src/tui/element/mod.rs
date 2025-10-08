@@ -485,7 +485,7 @@ impl<Msg> Element<Msg> {
             .enumerate()
             .map(|(i, item)| {
                 let is_selected = state.selected() == Some(i);
-                item.to_element(theme, is_selected, false)
+                item.to_element(is_selected, false)
             })
             .collect();
 
@@ -517,7 +517,7 @@ impl<Msg> Element<Msg> {
         state.invalidate_cache();
 
         // Flatten tree based on expansion state
-        let flattened = crate::tui::widgets::tree::flatten_tree(root_items, state, theme);
+        let flattened = crate::tui::widgets::tree::flatten_tree(root_items, state);
 
         // Extract elements and node IDs (parallel arrays) by consuming the vec
         let (elements, node_ids): (Vec<Element<Msg>>, Vec<String>) = flattened
@@ -636,7 +636,7 @@ impl<Msg> Element<Msg> {
             .enumerate()
             .map(|(idx, entry)| {
                 let is_selected = state.selected_index() == Some(idx);
-                entry.to_element(theme, is_selected)
+                entry.to_element(is_selected)
             })
             .collect();
 

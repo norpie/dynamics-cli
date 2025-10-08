@@ -929,10 +929,10 @@ impl App for EnvironmentSelectorApp {
             .collect();
 
         // Build environment panel
-        let env_panel = build_environment_panel(state, theme, &env_names);
+        let env_panel = build_environment_panel(state, &env_names);
 
         // Build credential panel
-        let cred_panel = build_credential_panel(state, theme);
+        let cred_panel = build_credential_panel(state);
 
         // Two-column layout (50/50 split using equal Fill weights)
         let main_content = row![
@@ -968,12 +968,12 @@ impl App for EnvironmentSelectorApp {
 
 fn build_environment_panel<Msg: Clone + Send + 'static>(
     state: &mut State,
-    theme: &Theme,
     env_names: &[String],
 ) -> Element<Msg>
 where
     Msg: From<crate::tui::apps::environment_selector_app::Msg>,
 {
+    let theme = &crate::global_runtime_config().theme;
     use crate::tui::apps::environment_selector_app::Msg as AppMsg;
 
     // Form fields (wrapped in panels for labels)
@@ -1088,11 +1088,11 @@ where
 
 fn build_credential_panel<Msg: Clone + Send + 'static>(
     state: &mut State,
-    theme: &Theme,
 ) -> Element<Msg>
 where
     Msg: From<crate::tui::apps::environment_selector_app::Msg>,
 {
+    let theme = &crate::global_runtime_config().theme;
     use crate::tui::apps::environment_selector_app::Msg as AppMsg;
     use crate::tui::element::ColumnBuilder;
 

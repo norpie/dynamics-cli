@@ -6,7 +6,7 @@ pub trait ListItem {
     type Msg: Clone;
 
     /// Render this item as an Element
-    fn to_element(&self, theme: &Theme, is_selected: bool, is_hovered: bool) -> Element<Self::Msg>;
+    fn to_element(&self, is_selected: bool, is_hovered: bool) -> Element<Self::Msg>;
 
     /// Optional: height in lines (default 1)
     fn height(&self) -> u16 {

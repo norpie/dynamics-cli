@@ -23,10 +23,11 @@ pub struct MigrationEnvironment {
 impl ListItem for MigrationEnvironment {
     type Msg = Msg;
 
-    fn to_element(&self, theme: &Theme, is_selected: bool, _is_hovered: bool) -> Element<Msg> {
+    fn to_element(&self, is_selected: bool, _is_hovered: bool) -> Element<Msg> {
         use ratatui::text::{Line, Span};
         use ratatui::style::Style;
 
+        let theme = &crate::global_runtime_config().theme;
         let (fg_color, bg_style) = if is_selected {
             (theme.lavender, Some(Style::default().bg(theme.surface0)))
         } else {

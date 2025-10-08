@@ -16,7 +16,8 @@ use std::collections::HashMap;
 use super::models::MatchInfo;
 
 /// Render the main side-by-side layout with source and target trees
-pub fn render_main_layout(state: &mut State, theme: &Theme) -> Element<Msg> {
+pub fn render_main_layout(state: &mut State) -> Element<Msg> {
+    let theme = &crate::global_runtime_config().theme;
     use_constraints!();
 
     // Build tree items for the active tab from metadata
@@ -148,7 +149,8 @@ pub fn render_main_layout(state: &mut State, theme: &Theme) -> Element<Msg> {
 }
 
 /// Render the back confirmation modal
-pub fn render_back_confirmation_modal(theme: &Theme) -> Element<Msg> {
+pub fn render_back_confirmation_modal() -> Element<Msg> {
+    let theme = &crate::global_runtime_config().theme;
     ConfirmationModal::new("Go Back?")
         .message("Are you sure you want to go back to the comparison list?")
         .confirm_text("Yes")
@@ -160,7 +162,8 @@ pub fn render_back_confirmation_modal(theme: &Theme) -> Element<Msg> {
         .build()
 }
 
-pub fn render_examples_modal(state: &State, theme: &Theme) -> Element<Msg> {
+pub fn render_examples_modal(state: &State) -> Element<Msg> {
+    let theme = &crate::global_runtime_config().theme;
     use crate::tui::modals::{ExamplesModal, ExamplePairItem};
 
     // Convert example pairs to list items
@@ -191,7 +194,8 @@ pub fn render_examples_modal(state: &State, theme: &Theme) -> Element<Msg> {
         .build()
 }
 
-pub fn render_prefix_mappings_modal(state: &State, theme: &Theme) -> Element<Msg> {
+pub fn render_prefix_mappings_modal(state: &State) -> Element<Msg> {
+    let theme = &crate::global_runtime_config().theme;
     use crate::tui::modals::{PrefixMappingsModal, PrefixMappingItem};
 
     // Convert prefix mappings to list items
@@ -339,7 +343,8 @@ fn get_item_match_target(item: &ComparisonTreeItem) -> Option<&str> {
     }
 }
 
-pub fn render_manual_mappings_modal(state: &State, theme: &Theme) -> Element<Msg> {
+pub fn render_manual_mappings_modal(state: &State) -> Element<Msg> {
+    let theme = &crate::global_runtime_config().theme;
     use crate::tui::modals::{ManualMappingsModal, ManualMappingItem};
 
     // Convert manual field mappings to list items

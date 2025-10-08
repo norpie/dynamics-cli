@@ -99,7 +99,8 @@ impl crate::tui::AppState for State {}
 impl ListItem for String {
     type Msg = Msg;
 
-    fn to_element(&self, theme: &Theme, is_selected: bool, _is_hovered: bool) -> Element<Msg> {
+    fn to_element(&self, is_selected: bool, _is_hovered: bool) -> Element<Msg> {
+        let theme = &crate::global_runtime_config().theme;
         let (fg_color, bg_style) = if is_selected {
             (theme.lavender, Some(Style::default().bg(theme.surface0)))
         } else {
@@ -129,7 +130,8 @@ struct OptionWithValue {
 impl ListItem for OptionWithValue {
     type Msg = Msg;
 
-    fn to_element(&self, theme: &Theme, is_selected: bool, _is_hovered: bool) -> Element<Msg> {
+    fn to_element(&self, is_selected: bool, _is_hovered: bool) -> Element<Msg> {
+        let theme = &crate::global_runtime_config().theme;
         let (name_color, value_color, bg_style) = if is_selected {
             (theme.lavender, theme.mauve, Some(Style::default().bg(theme.surface0)))
         } else {
@@ -769,7 +771,7 @@ impl App for SettingsApp {
 
         if state.editing.is_some() {
             if let Some(opt) = state.current_options.get(state.selected_option).cloned() {
-                let modal = Self::render_edit_modal(state, &opt, theme);
+                let modal = Self::render_edit_modal(state, &opt);
                 view = view.with_app_modal(modal, crate::tui::Alignment::Center);
             }
         }
@@ -818,8 +820,8 @@ impl SettingsApp {
     fn render_edit_modal(
         state: &mut State,
         opt: &OptionDefinition,
-        theme: &Theme,
     ) -> Element<Msg> {
+        let theme = &crate::global_runtime_config().theme;
         use_constraints!();
 
         // Build the edit widget with proper panel wrapping (matching other modals)

@@ -54,11 +54,11 @@ impl TreeItem for ComparisonTreeItem {
 
     fn to_element(
         &self,
-        theme: &Theme,
         depth: usize,
         is_selected: bool,
         is_expanded: bool,
     ) -> Element<Self::Msg> {
+        let theme = &crate::global_runtime_config().theme;
         match self {
             Self::Container(node) => {
                 let indent = "  ".repeat(depth);
@@ -112,11 +112,11 @@ impl TreeItem for ComparisonTreeItem {
 
                 builder.build()
             }
-            Self::Field(node) => node.to_element(theme, depth, is_selected, is_expanded),
-            Self::Relationship(node) => node.to_element(theme, depth, is_selected, is_expanded),
-            Self::View(node) => node.to_element(theme, depth, is_selected, is_expanded),
-            Self::Form(node) => node.to_element(theme, depth, is_selected, is_expanded),
-            Self::Entity(node) => node.to_element(theme, depth, is_selected, is_expanded),
+            Self::Field(node) => node.to_element(depth, is_selected, is_expanded),
+            Self::Relationship(node) => node.to_element(depth, is_selected, is_expanded),
+            Self::View(node) => node.to_element(depth, is_selected, is_expanded),
+            Self::Form(node) => node.to_element(depth, is_selected, is_expanded),
+            Self::Entity(node) => node.to_element(depth, is_selected, is_expanded),
         }
     }
 }
@@ -174,11 +174,11 @@ impl TreeItem for FieldNode {
 
     fn to_element(
         &self,
-        theme: &Theme,
         depth: usize,
         is_selected: bool,
         _is_expanded: bool,
     ) -> Element<Self::Msg> {
+        let theme = &crate::global_runtime_config().theme;
         let indent = "  ".repeat(depth);
         let mut spans = Vec::new();
 
@@ -287,11 +287,11 @@ impl TreeItem for RelationshipNode {
 
     fn to_element(
         &self,
-        theme: &Theme,
         depth: usize,
         is_selected: bool,
         _is_expanded: bool,
     ) -> Element<Self::Msg> {
+        let theme = &crate::global_runtime_config().theme;
         let indent = "  ".repeat(depth);
         let mut spans = Vec::new();
 
@@ -387,11 +387,11 @@ impl TreeItem for ViewNode {
 
     fn to_element(
         &self,
-        theme: &Theme,
         depth: usize,
         is_selected: bool,
         _is_expanded: bool,
     ) -> Element<Self::Msg> {
+        let theme = &crate::global_runtime_config().theme;
         // TODO: Implement view rendering
 
         let indent = "  ".repeat(depth);
@@ -437,11 +437,11 @@ impl TreeItem for FormNode {
 
     fn to_element(
         &self,
-        theme: &Theme,
         depth: usize,
         is_selected: bool,
         _is_expanded: bool,
     ) -> Element<Self::Msg> {
+        let theme = &crate::global_runtime_config().theme;
         // TODO: Implement form rendering
 
         let indent = "  ".repeat(depth);
@@ -489,11 +489,11 @@ impl TreeItem for EntityNode {
 
     fn to_element(
         &self,
-        theme: &Theme,
         depth: usize,
         is_selected: bool,
         _is_expanded: bool,
     ) -> Element<Self::Msg> {
+        let theme = &crate::global_runtime_config().theme;
         let indent = "  ".repeat(depth);
         let mut spans = Vec::new();
 
