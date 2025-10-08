@@ -48,6 +48,11 @@ impl Default for State {
                     name: "Settings".to_string(),
                     description: "Configure application options".to_string(),
                 },
+                AppInfo {
+                    id: AppId::UpdateApp,
+                    name: "Updates".to_string(),
+                    description: "Check for and install software updates".to_string(),
+                },
             ],
             list_state: ListState::with_selection(),
         }

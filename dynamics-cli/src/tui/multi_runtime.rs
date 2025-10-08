@@ -7,7 +7,7 @@ use anyhow::Result;
 use std::collections::HashMap;
 use std::time::Instant;
 
-use crate::tui::{AppId, Runtime, AppRuntime, apps::{AppLauncher, LoadingScreen, ErrorScreen, SettingsApp, EnvironmentSelectorApp, migration::{MigrationEnvironmentApp, MigrationComparisonSelectApp, EntityComparisonApp}, DeadlinesFileSelectApp, DeadlinesMappingApp, DeadlinesInspectionApp, OperationQueueApp}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App, ModalState, KeyBinding, AppLifecycle};
+use crate::tui::{AppId, Runtime, AppRuntime, apps::{AppLauncher, LoadingScreen, ErrorScreen, SettingsApp, UpdateApp, EnvironmentSelectorApp, migration::{MigrationEnvironmentApp, MigrationComparisonSelectApp, EntityComparisonApp}, DeadlinesFileSelectApp, DeadlinesMappingApp, DeadlinesInspectionApp, OperationQueueApp}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App, ModalState, KeyBinding, AppLifecycle};
 use crate::tui::runtime::AppFactory;
 use crate::tui::element::{ColumnBuilder, RowBuilder, FocusId};
 use crate::tui::widgets::ScrollableState;
@@ -91,6 +91,7 @@ impl MultiAppRuntime {
         factories.insert(AppId::LoadingScreen, Box::new(std::marker::PhantomData::<LoadingScreen>));
         factories.insert(AppId::ErrorScreen, Box::new(std::marker::PhantomData::<ErrorScreen>));
         factories.insert(AppId::Settings, Box::new(std::marker::PhantomData::<SettingsApp>));
+        factories.insert(AppId::UpdateApp, Box::new(std::marker::PhantomData::<UpdateApp>));
         factories.insert(AppId::EnvironmentSelector, Box::new(std::marker::PhantomData::<EnvironmentSelectorApp>));
         factories.insert(AppId::MigrationEnvironment, Box::new(std::marker::PhantomData::<MigrationEnvironmentApp>));
         factories.insert(AppId::MigrationComparisonSelect, Box::new(std::marker::PhantomData::<MigrationComparisonSelectApp>));

@@ -65,6 +65,7 @@ impl<Msg: Clone> AppOverviewModal<Msg> {
             AppId::LoadingScreen => "Loading Screen",
             AppId::ErrorScreen => "Error Screen",
             AppId::Settings => "Settings",
+            AppId::UpdateApp => "Updates",
             AppId::EnvironmentSelector => "Environment Selector",
             AppId::MigrationEnvironment => "Migration Environment",
             AppId::MigrationComparisonSelect => "Migration Comparison Select",

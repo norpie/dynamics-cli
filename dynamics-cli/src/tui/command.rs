@@ -105,6 +105,7 @@ pub enum AppId {
     LoadingScreen,
     ErrorScreen,
     Settings,
+    UpdateApp,
     EnvironmentSelector,
     MigrationEnvironment,
     MigrationComparisonSelect,
