@@ -116,14 +116,27 @@ fn build_views_tree(
         // Build path for this view type
         let viewtype_path = format!("viewtype/{}", view_type);
 
+        // Track name occurrences to deduplicate
+        let mut name_counts: HashMap<String, usize> = HashMap::new();
+
         for view in type_views {
-            // Build path for this view
-            let view_path = format!("{}/view/{}", viewtype_path, view.name);
+            // Build matching path using name (for cross-environment matching)
+            let matching_path = format!("{}/view/{}", viewtype_path, view.name);
+
+            // Build unique node ID (append counter if duplicate name)
+            let count = name_counts.entry(view.name.clone()).or_insert(0);
+            let view_path = if *count == 0 {
+                matching_path.clone()
+            } else {
+                format!("{}#{}", matching_path, count)
+            };
+            *count += 1;
 
             // Create field nodes for each column
             let column_fields: Vec<ComparisonTreeItem> = view.columns.iter()
                 .map(|col| {
-                    // Build full path for this column
+                    // Build paths: matching uses name-based path for cross-environment matching
+                    let matching_column_path = format!("{}/{}", matching_path, col.name);
                     let column_path = format!("{}/{}", view_path, col.name);
 
                     // Look up actual field metadata from entity's fields
@@ -163,15 +176,15 @@ fn build_views_tree(
 
                     ComparisonTreeItem::Field(FieldNode {
                         metadata: field_metadata,
-                        match_info: field_matches.get(&column_path).cloned(),
-                        example_value: examples.get_field_value(&column_path, is_source, entity_name),
+                        match_info: field_matches.get(&matching_column_path).cloned(),
+                        example_value: examples.get_field_value(&matching_column_path, is_source, entity_name),
                         display_name,
                     })
                 })
                 .collect();
 
-            // Create container for this view
-            let (container_match_type, match_info) = compute_container_match_type(&view_path, &column_fields, field_matches);
+            // Create container for this view (use matching_path for lookup, view_path for node ID)
+            let (container_match_type, match_info) = compute_container_match_type(&matching_path, &column_fields, field_matches);
             view_containers.push(ComparisonTreeItem::Container(ContainerNode {
                 id: view_path.clone(),
                 label: format!("{} ({} columns)", view.name, view.columns.len()),
@@ -228,9 +241,21 @@ fn build_forms_tree(
         // Build path for this form type
         let formtype_path = format!("formtype/{}", form_type);
 
+        // Track name occurrences to deduplicate
+        let mut name_counts: HashMap<String, usize> = HashMap::new();
+
         for form in type_forms {
-            // Build path for this form
-            let form_path = format!("{}/form/{}", formtype_path, form.name);
+            // Build matching path using name (for cross-environment matching)
+            let matching_form_path = format!("{}/form/{}", formtype_path, form.name);
+
+            // Build unique node ID (append counter if duplicate name)
+            let count = name_counts.entry(form.name.clone()).or_insert(0);
+            let form_path = if *count == 0 {
+                matching_form_path.clone()
+            } else {
+                format!("{}#{}", matching_form_path, count)
+            };
+            *count += 1;
 
             // If form has structure, build nested hierarchy
             let form_children = if let Some(structure) = &form.form_structure {
@@ -241,8 +266,9 @@ fn build_forms_tree(
                 tabs.sort_by_key(|t| t.order);
 
                 for tab in &tabs {
-                    // Build path for this tab using label (not ID)
-                    let tab_path = format!("{}/tab/{}", form_path, tab.label);
+                    // Build paths: matching uses name, node ID uses unique form_path
+                    let matching_tab_path = format!("{}/tab/{}", matching_form_path, tab.name);
+                    let tab_path = format!("{}/tab/{}", form_path, tab.name);
                     let mut section_containers = Vec::new();
 
                     // Sort sections by order
@@ -250,8 +276,9 @@ fn build_forms_tree(
                     sections.sort_by_key(|s| s.order);
 
                     for section in &sections {
-                        // Build path for this section using label (not ID)
-                        let section_path = format!("{}/section/{}", tab_path, section.label);
+                        // Build paths: matching uses name, node ID uses unique tab_path
+                        let matching_section_path = format!("{}/section/{}", matching_tab_path, section.name);
+                        let section_path = format!("{}/section/{}", tab_path, section.name);
 
                         // Sort fields by row order
                         let mut fields = section.fields.clone();
@@ -259,7 +286,8 @@ fn build_forms_tree(
 
                         let field_nodes: Vec<ComparisonTreeItem> = fields.iter()
                             .map(|field| {
-                                // Build full path for this field
+                                // Build paths: matching uses name-based path, node ID uses unique section_path
+                                let matching_field_path = format!("{}/{}", matching_section_path, field.logical_name);
                                 let field_path = format!("{}/{}", section_path, field.logical_name);
 
                                 // Look up actual field metadata from entity's fields
@@ -299,15 +327,15 @@ fn build_forms_tree(
 
                                 ComparisonTreeItem::Field(FieldNode {
                                     metadata: field_metadata,
-                                    match_info: field_matches.get(&field_path).cloned(),
-                                    example_value: examples.get_field_value(&field_path, is_source, entity_name),
+                                    match_info: field_matches.get(&matching_field_path).cloned(),
+                                    example_value: examples.get_field_value(&matching_field_path, is_source, entity_name),
                                     display_name,
                                 })
                             })
                             .collect();
 
-                        // Create container for section
-                        let (container_match_type, match_info) = compute_container_match_type(&section_path, &field_nodes, field_matches);
+                        // Create container for section (use matching path for lookup)
+                        let (container_match_type, match_info) = compute_container_match_type(&matching_section_path, &field_nodes, field_matches);
                         section_containers.push(ComparisonTreeItem::Container(ContainerNode {
                             id: section_path.clone(),
                             label: format!("{} ({} fields)", section.label, section.fields.len()),
@@ -317,8 +345,8 @@ fn build_forms_tree(
                         }));
                     }
 
-                    // Create container for tab
-                    let (container_match_type, match_info) = compute_container_match_type(&tab_path, &section_containers, field_matches);
+                    // Create container for tab (use matching path for lookup)
+                    let (container_match_type, match_info) = compute_container_match_type(&matching_tab_path, &section_containers, field_matches);
                     tab_containers.push(ComparisonTreeItem::Container(ContainerNode {
                         id: tab_path.clone(),
                         label: format!("{} ({} sections)", tab.label, tab.sections.len()),
@@ -334,8 +362,8 @@ fn build_forms_tree(
                 vec![]
             };
 
-            // Create container for this form
-            let (container_match_type, match_info) = compute_container_match_type(&form_path, &form_children, field_matches);
+            // Create container for this form (use matching path for lookup)
+            let (container_match_type, match_info) = compute_container_match_type(&matching_form_path, &form_children, field_matches);
             form_containers.push(ComparisonTreeItem::Container(ContainerNode {
                 id: form_path.clone(),
                 label: if form_children.is_empty() {

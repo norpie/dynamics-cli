@@ -549,7 +549,7 @@ fn build_metadata_paths(metadata: &crate::api::EntityMetadata, tab_type: &str) -
 
                 if let Some(structure) = &form.form_structure {
                     for tab in &structure.tabs {
-                        let tab_path = format!("{}/tab/{}", form_path, tab.label);
+                        let tab_path = format!("{}/tab/{}", form_path, tab.name);
                         // Add tab container
                         paths.push(PathInfo {
                             path: tab_path.clone(),
@@ -558,7 +558,7 @@ fn build_metadata_paths(metadata: &crate::api::EntityMetadata, tab_type: &str) -
                         });
 
                         for section in &tab.sections {
-                            let section_path = format!("{}/section/{}", tab_path, section.label);
+                            let section_path = format!("{}/section/{}", tab_path, section.name);
                             // Add section container
                             paths.push(PathInfo {
                                 path: section_path.clone(),
