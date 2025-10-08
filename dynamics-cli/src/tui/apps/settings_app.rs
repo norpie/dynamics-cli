@@ -44,6 +44,9 @@ pub struct State {
     theme_select_state: crate::tui::widgets::SelectState,
     selected_theme_idx: usize,
     active_theme_name: String,
+    creating_theme: bool,
+    create_theme_input: String,
+    create_theme_input_state: crate::tui::widgets::TextInputState,
     editing_color: Option<EditingColor>,
     color_picker_state: crate::tui::widgets::ColorPickerState,
 }
@@ -105,9 +108,18 @@ pub enum Msg {
     ActivateTheme(String),
     ThemeActivated(Result<String, String>),
     CreateTheme,
+    CreateThemeInput(crate::tui::widgets::TextInputEvent),
+    SubmitCreateTheme,
+    CancelCreateTheme,
+    CreateThemeCompleted(Result<String, String>),
     DeleteSelectedTheme,
+    ConfirmDeleteTheme,
+    CancelDeleteTheme,
+    DeleteThemeCompleted(Result<String, String>),
     EditThemeColor(String, String),  // theme_name, color_name
+    StartEditingColor(String, String, ratatui::style::Color),  // theme_name, color_name, color
     ColorPickerEvent(crate::tui::widgets::ColorPickerEvent),
+    CancelEditColor,
     SaveColor,
     ColorSaved(Result<(), String>),
 }
@@ -134,6 +146,9 @@ impl Default for State {
             theme_select_state: crate::tui::widgets::SelectState::new(),
             selected_theme_idx: 0,
             active_theme_name: "mocha".to_string(),
+            creating_theme: false,
+            create_theme_input: String::new(),
+            create_theme_input_state: crate::tui::widgets::TextInputState::new(),
             editing_color: None,
             color_picker_state: crate::tui::widgets::ColorPickerState::from_color(
                 Color::Rgb(180, 190, 254),
@@ -883,27 +898,162 @@ impl App for SettingsApp {
             }
 
             Msg::CreateTheme => {
-                // TODO: Implement create theme flow
-                // This will open a modal to input theme name, then copy from an existing theme
-                log::info!("Create theme requested - not yet implemented");
+                state.creating_theme = true;
+                state.create_theme_input.clear();
+                state.create_theme_input_state = crate::tui::widgets::TextInputState::new();
+                Command::set_focus(FocusId::new("create-theme-input"))
+            }
+
+            Msg::CreateThemeInput(event) => {
+                use crate::tui::widgets::TextInputEvent;
+                match event {
+                    TextInputEvent::Changed(key_code) => {
+                        // Use TextInputState's handle_key to process the key and get new value
+                        if let Some(new_value) = state.create_theme_input_state.handle_key(
+                            key_code,
+                            &state.create_theme_input,
+                            None
+                        ) {
+                            state.create_theme_input = new_value;
+                        }
+                        Command::None
+                    }
+                    TextInputEvent::Submit => {
+                        Self::update(state, Msg::SubmitCreateTheme)
+                    }
+                }
+            }
+
+            Msg::CancelCreateTheme => {
+                state.creating_theme = false;
+                Command::None
+            }
+
+            Msg::SubmitCreateTheme => {
+                let new_theme_name = state.create_theme_input.trim().to_string();
+
+                // Validate theme name
+                if new_theme_name.is_empty() {
+                    state.error = Some("Theme name cannot be empty".to_string());
+                    return Command::None;
+                }
+
+                if state.theme_names.contains(&new_theme_name) {
+                    state.error = Some(format!("Theme '{}' already exists", new_theme_name));
+                    return Command::None;
+                }
+
+                // Copy colors from active theme
+                let source_theme = state.active_theme_name.clone();
+                state.creating_theme = false;
+
+                Command::perform(
+                    async move {
+                        use crate::tui::state::theme::COLOR_NAMES;
+                        let config = crate::global_config();
+
+                        // Copy all 21 colors from source theme to new theme
+                        for color_name in COLOR_NAMES {
+                            let source_key = format!("theme.{}.{}", source_theme, color_name);
+                            let dest_key = format!("theme.{}.{}", new_theme_name, color_name);
+
+                            let value = config.options.get_string(&source_key).await
+                                .map_err(|e| format!("Failed to read {}: {}", source_key, e))?;
+
+                            config.options.set_string(&dest_key, value).await
+                                .map_err(|e| format!("Failed to write {}: {}", dest_key, e))?;
+                        }
+
+                        Ok(new_theme_name)
+                    },
+                    Msg::CreateThemeCompleted
+                )
+            }
+
+            Msg::CreateThemeCompleted(Ok(theme_name)) => {
+                // Reload theme list
+                Command::perform(
+                    async {
+                        use crate::config::options::registrations::themes;
+                        let registry = crate::options_registry();
+                        themes::list_themes(&registry)
+                    },
+                    Msg::ThemeNamesLoaded
+                )
+            }
+
+            Msg::CreateThemeCompleted(Err(e)) => {
+                state.error = Some(format!("Failed to create theme: {}", e));
                 Command::None
             }
 
             Msg::DeleteSelectedTheme => {
-                // TODO: Implement delete theme flow
-                // This should show a confirmation modal before deleting
                 if let Some(theme_name) = state.theme_names.get(state.selected_theme_idx) {
+                    // Validate
                     if theme_name == &state.active_theme_name {
                         state.error = Some("Cannot delete the active theme".to_string());
                         return Command::None;
                     }
-                    log::info!("Delete theme requested: {} - not yet implemented", theme_name);
+
+                    if state.theme_names.len() <= 1 {
+                        state.error = Some("Cannot delete the last theme".to_string());
+                        return Command::None;
+                    }
+
+                    // Show confirmation - just proceed to confirm immediately for now
+                    // (in a more complete implementation, you'd show a modal)
+                    return Self::update(state, Msg::ConfirmDeleteTheme);
                 }
                 Command::None
             }
 
+            Msg::ConfirmDeleteTheme => {
+                if let Some(theme_name) = state.theme_names.get(state.selected_theme_idx).cloned() {
+                    Command::perform(
+                        async move {
+                            use crate::tui::state::theme::COLOR_NAMES;
+                            let config = crate::global_config();
+
+                            // Delete all 21 color options for this theme
+                            for color_name in COLOR_NAMES {
+                                let key = format!("theme.{}.{}", theme_name, color_name);
+                                config.options.delete(&key).await
+                                    .map_err(|e| format!("Failed to delete {}: {}", key, e))?;
+                            }
+
+                            Ok(theme_name)
+                        },
+                        Msg::DeleteThemeCompleted
+                    )
+                } else {
+                    Command::None
+                }
+            }
+
+            Msg::CancelDeleteTheme => {
+                // For now, this is unused since we don't have a confirmation modal yet
+                Command::None
+            }
+
+            Msg::DeleteThemeCompleted(Ok(_theme_name)) => {
+                // Reload theme list
+                Command::perform(
+                    async {
+                        use crate::config::options::registrations::themes;
+                        let registry = crate::options_registry();
+                        themes::list_themes(&registry)
+                    },
+                    Msg::ThemeNamesLoaded
+                )
+            }
+
+            Msg::DeleteThemeCompleted(Err(e)) => {
+                state.error = Some(format!("Failed to delete theme: {}", e));
+                Command::None
+            }
+
             Msg::EditThemeColor(theme_name, color_name) => {
-                // Load current color value
+                // Load current color value and open color picker
                 Command::perform(
                     async move {
                         use crate::tui::color::hex_to_color;
@@ -916,17 +1066,29 @@ impl App for SettingsApp {
                         Ok((theme_name, color_name, color))
                     },
                     |result: Result<(String, String, ratatui::style::Color), String>| match result {
-                        Ok((theme, color, value)) => {
-                            // TODO: Open color picker modal with this color
-                            log::info!("Would edit color {}.{} = {:?}", theme, color, value);
-                            Msg::CancelEdit  // Placeholder - will implement in Phase 5
+                        Ok((theme, color_key, color_value)) => {
+                            // Set up editing state
+                            Msg::StartEditingColor(theme, color_key, color_value)
                         }
                         Err(e) => {
                             log::error!("Failed to load color: {}", e);
-                            Msg::CancelEdit  // Placeholder
+                            Msg::CancelEdit
                         }
                     }
                 )
+            }
+
+            Msg::StartEditingColor(theme_name, color_name, color) => {
+                use crate::tui::widgets::ColorPickerMode;
+                state.editing_color = Some(EditingColor {
+                    theme_name,
+                    color_name,
+                });
+                state.color_picker_state = crate::tui::widgets::ColorPickerState::from_color(
+                    color,
+                    ColorPickerMode::HSL
+                );
+                Command::set_focus(FocusId::new("color-picker"))
             }
 
             Msg::ColorPickerEvent(event) => {
@@ -942,6 +1104,11 @@ impl App for SettingsApp {
                         Self::update(state, Msg::SaveColor)
                     }
                 }
+            }
+
+            Msg::CancelEditColor => {
+                state.editing_color = None;
+                Command::None
             }
 
             Msg::SaveColor => {
@@ -1099,6 +1266,18 @@ impl App for SettingsApp {
             }
         }
 
+        // Create theme modal
+        if state.creating_theme {
+            let modal = Self::render_create_theme_modal(state);
+            view = view.with_app_modal(modal, crate::tui::Alignment::Center);
+        }
+
+        // Color picker modal
+        if state.editing_color.is_some() {
+            let modal = Self::render_color_picker_modal(state);
+            view = view.with_app_modal(modal, crate::tui::Alignment::Center);
+        }
+
         view
     }
 
@@ -1122,6 +1301,24 @@ impl App for SettingsApp {
                 KeyCode::Esc,
                 "Cancel editing",
                 Msg::CancelEdit,
+            ));
+        }
+
+        // If creating theme, allow Escape to cancel
+        if state.creating_theme {
+            subs.push(Subscription::keyboard(
+                KeyCode::Esc,
+                "Cancel create theme",
+                Msg::CancelCreateTheme,
+            ));
+        }
+
+        // If editing color, allow Escape to cancel
+        if state.editing_color.is_some() {
+            subs.push(Subscription::keyboard(
+                KeyCode::Esc,
+                "Cancel edit color",
+                Msg::CancelEditColor,
             ));
         }
 
@@ -1195,9 +1392,7 @@ impl SettingsApp {
         // Combine selector, preview, and buttons
         let content = col![
             theme_select => Length(3),  // Same size as button (borders + content)
-            Element::text("") => Length(1),
-            preview_panel => Length(14),  // 12 color rows + borders
-            Element::text("") => Length(1),
+            preview_panel => Fill(1),  // 12 color buttons (3 lines each) + panel borders
             buttons => Length(3),  // Buttons with padding
         ];
 
@@ -1222,63 +1417,163 @@ impl SettingsApp {
 
         let theme_name = selected_theme.unwrap();
 
-        // Show current runtime theme colors as preview
+        // Show current runtime theme colors as clickable buttons in 3 columns
         // TODO: Load actual selected theme from DB instead of showing runtime theme
         let colored_box = "████";
+        let colors = theme.colors();
 
-        let preview_col = col![
+        // Split colors into three columns (21 colors = 7, 7, 7)
+        let per_col = (colors.len() + 2) / 3;
+        let col1_colors = &colors[0..per_col.min(colors.len())];
+        let col2_colors = &colors[per_col..( per_col * 2).min(colors.len())];
+        let col3_colors = &colors[(per_col * 2).min(colors.len())..];
+
+        // Helper to format color name
+        let format_display_name = |color_name: &str| -> String {
+            color_name.replace('_', " ")
+                .split_whitespace()
+                .map(|word| {
+                    let mut chars = word.chars();
+                    match chars.next() {
+                        None => String::new(),
+                        Some(first) => first.to_uppercase().chain(chars).collect(),
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+
+        // Build column 1
+        let mut col1_items = Vec::new();
+        for (idx, (color_name, color)) in col1_colors.iter().enumerate() {
+            // Leak the string to get 'static lifetime for FocusId
+            let id = Box::leak(format!("edit-color-{}", idx).into_boxed_str());
+            let btn = Element::button(
+                FocusId::new(id),
+                format!("{}  {}", colored_box, format_display_name(color_name))
+            )
+            .style(Style::default().fg(*color))
+            .on_press(Msg::EditThemeColor(theme_name.clone(), color_name.to_string()))
+            .build();
+            col1_items.push((Length(3), btn));
+        }
+
+        // Build column 2
+        let mut col2_items = Vec::new();
+        for (idx, (color_name, color)) in col2_colors.iter().enumerate() {
+            let id = Box::leak(format!("edit-color-{}", idx + per_col).into_boxed_str());
+            let btn = Element::button(
+                FocusId::new(id),
+                format!("{}  {}", colored_box, format_display_name(color_name))
+            )
+            .style(Style::default().fg(*color))
+            .on_press(Msg::EditThemeColor(theme_name.clone(), color_name.to_string()))
+            .build();
+            col2_items.push((Length(3), btn));
+        }
+
+        // Build column 3
+        let mut col3_items = Vec::new();
+        for (idx, (color_name, color)) in col3_colors.iter().enumerate() {
+            let id = Box::leak(format!("edit-color-{}", idx + per_col * 2).into_boxed_str());
+            let btn = Element::button(
+                FocusId::new(id),
+                format!("{}  {}", colored_box, format_display_name(color_name))
+            )
+            .style(Style::default().fg(*color))
+            .on_press(Msg::EditThemeColor(theme_name.clone(), color_name.to_string()))
+            .build();
+            col3_items.push((Length(3), btn));
+        }
+
+        let col1 = Element::Column { items: col1_items, spacing: 0 };
+        let col2 = Element::Column { items: col2_items, spacing: 0 };
+        let col3 = Element::Column { items: col3_items, spacing: 0 };
+
+        let preview_row = row![
+            col1 => Fill(1),
+            col2 => Fill(1),
+            col3 => Fill(1),
+        ];
+
+        Element::panel(preview_row)
+            .title(&format!("Preview: {}", theme_name))
+            .build()
+    }
+
+    fn render_color_picker_modal(state: &mut State) -> Element<Msg> {
+        let theme = &crate::global_runtime_config().theme;
+        use_constraints!();
+
+        if let Some(editing) = &state.editing_color {
+            let picker = Element::color_picker(
+                FocusId::new("color-picker"),
+                &state.color_picker_state
+            )
+            .on_event(Msg::ColorPickerEvent)
+            .build();
+
+            let title = format!("Edit {} - {}", editing.theme_name, editing.color_name);
+
+            let content = col![
+                picker => Length(12),
+                Element::text("") => Length(1),
+                Element::styled_text(Line::from(vec![
+                    Span::raw("Press "),
+                    Span::styled("Enter", Style::default().fg(theme.accent_primary).bold()),
+                    Span::raw(" to save, "),
+                    Span::styled("Esc", Style::default().fg(theme.accent_primary).bold()),
+                    Span::raw(" to cancel"),
+                ])).build() => Length(1),
+            ];
+
+            Element::panel(content)
+                .title(&title)
+                .build()
+        } else {
+            Element::text("Error: No color being edited")
+        }
+    }
+
+    fn render_create_theme_modal(state: &mut State) -> Element<Msg> {
+        let theme = &crate::global_runtime_config().theme;
+        use_constraints!();
+
+        let input_widget = Element::text_input(
+            FocusId::new("create-theme-input"),
+            &state.create_theme_input,
+            &state.create_theme_input_state
+        )
+        .on_event(Msg::CreateThemeInput)
+        .build();
+
+        let input_panel = Element::panel(input_widget)
+            .title("Theme Name")
+            .build();
+
+        let hint_text = format!(
+            "Enter a name for the new theme. It will be copied from '{}'.",
+            state.active_theme_name
+        );
+
+        let content = col![
+            input_panel => Length(5),
+            Element::text("") => Length(1),
             Element::styled_text(Line::from(vec![
-                Span::styled(colored_box, Style::default().fg(theme.accent_primary)),
-                Span::raw(" Accent Primary"),
+                Span::styled(hint_text, Style::default().fg(theme.text_tertiary))
             ])).build() => Length(1),
+            Element::text("") => Length(1),
             Element::styled_text(Line::from(vec![
-                Span::styled(colored_box, Style::default().fg(theme.accent_secondary)),
-                Span::raw(" Accent Secondary"),
-            ])).build() => Length(1),
-            Element::styled_text(Line::from(vec![
-                Span::styled(colored_box, Style::default().fg(theme.accent_tertiary)),
-                Span::raw(" Accent Tertiary"),
-            ])).build() => Length(1),
-            Element::styled_text(Line::from(vec![
-                Span::styled(colored_box, Style::default().fg(theme.accent_error)),
-                Span::raw(" Accent Error"),
-            ])).build() => Length(1),
-            Element::styled_text(Line::from(vec![
-                Span::styled(colored_box, Style::default().fg(theme.accent_warning)),
-                Span::raw(" Accent Warning"),
-            ])).build() => Length(1),
-            Element::styled_text(Line::from(vec![
-                Span::styled(colored_box, Style::default().fg(theme.accent_success)),
-                Span::raw(" Accent Success"),
-            ])).build() => Length(1),
-            Element::styled_text(Line::from(vec![
-                Span::styled(colored_box, Style::default().fg(theme.accent_info)),
-                Span::raw(" Accent Info"),
-            ])).build() => Length(1),
-            Element::styled_text(Line::from(vec![
-                Span::styled(colored_box, Style::default().fg(theme.accent_muted)),
-                Span::raw(" Accent Muted"),
-            ])).build() => Length(1),
-            Element::styled_text(Line::from(vec![
-                Span::styled(colored_box, Style::default().fg(theme.text_primary)),
-                Span::raw(" Text Primary"),
-            ])).build() => Length(1),
-            Element::styled_text(Line::from(vec![
-                Span::styled(colored_box, Style::default().fg(theme.text_secondary)),
-                Span::raw(" Text Secondary"),
-            ])).build() => Length(1),
-            Element::styled_text(Line::from(vec![
-                Span::styled(colored_box, Style::default().fg(theme.text_tertiary)),
-                Span::raw(" Text Tertiary"),
-            ])).build() => Length(1),
-            Element::styled_text(Line::from(vec![
-                Span::styled(colored_box, Style::default().fg(theme.border_primary)),
-                Span::raw(" Border Primary"),
+                Span::raw("Press "),
+                Span::styled("Enter", Style::default().fg(theme.accent_primary).bold()),
+                Span::raw(" to create, "),
+                Span::styled("Esc", Style::default().fg(theme.accent_primary).bold()),
+                Span::raw(" to cancel"),
             ])).build() => Length(1),
         ];
 
-        Element::panel(preview_col)
-            .title(&format!("Preview: {}", theme_name))
+        Element::panel(content)
+            .title("Create New Theme")
             .build()
     }
 

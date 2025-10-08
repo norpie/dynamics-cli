@@ -102,6 +102,16 @@ impl Options {
         self.set(key, OptionValue::String(value)).await
     }
 
+    /// Delete an option by key
+    pub async fn delete(&self, key: &str) -> Result<()> {
+        sqlx::query("DELETE FROM options WHERE key = ?")
+            .bind(key)
+            .execute(&self.pool)
+            .await
+            .context("Failed to delete option")?;
+        Ok(())
+    }
+
     /// Parse raw string value based on expected type
     fn parse_value(&self, raw: &str, ty: &OptionType) -> Result<OptionValue> {
         match ty {
