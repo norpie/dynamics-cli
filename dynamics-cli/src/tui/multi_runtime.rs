@@ -319,18 +319,35 @@ impl MultiAppRuntime {
 
         // Priority 5: Ctrl+A navigates to app launcher
         if KeyBinding::ctrl(KeyCode::Char('a')).matches(&key_event) {
-            // Clear any stale navigation from app launcher before switching to it
-            self.runtimes.get_mut(&AppId::AppLauncher)
-                .expect("AppLauncher not found in runtimes")
-                .take_navigation();
+            log::info!("🚀 Ctrl+A pressed - navigating to AppLauncher from {:?}", self.active_app);
+
+            // Clear any pending navigation that would go BACK to the current app (zombie navigations)
+            // But preserve legitimate background operations going to other apps
+            let current_app = self.active_app;
+            for (app_id, runtime) in self.runtimes.iter_mut() {
+                if *app_id != current_app && *app_id != AppId::AppLauncher {
+                    // Peek at navigation target without taking it
+                    if let Some(nav_target) = runtime.peek_navigation() {
+                        if nav_target == current_app {
+                            // This is a zombie navigation back to where we already are - clear it
+                            runtime.take_navigation();
+                            log::info!("  🧹 Cleared zombie navigation from {:?} back to current app {:?}", app_id, current_app);
+                        }
+                    }
+                }
+            }
+            log::debug!("  Cleared zombie navigations");
 
             // Properly handle lifecycle transitions
             let current_app = self.active_app;
             if current_app != AppId::AppLauncher {
+                log::debug!("  Switching from {:?} to AppLauncher", current_app);
                 // Handle current app based on quit and suspend policies
                 let quit_policy = self.factories.get(&current_app)
                     .map(|f| f.quit_policy())
                     .unwrap_or(crate::tui::QuitPolicy::Sleep);
+
+                log::debug!("  Current app quit_policy: {:?}", quit_policy);
 
                 match quit_policy {
                     crate::tui::QuitPolicy::Sleep | crate::tui::QuitPolicy::QuitOnIdle(_) => {
@@ -339,9 +356,12 @@ impl MultiAppRuntime {
                             .map(|f| f.suspend_policy())
                             .unwrap_or(crate::tui::SuspendPolicy::Suspend);
 
+                        log::debug!("  Current app suspend_policy: {:?}", suspend_policy);
+
                         match suspend_policy {
                             crate::tui::SuspendPolicy::Suspend => {
                                 // Keep app in background and call on_suspend
+                                log::info!("  🛑 Suspending {:?} (calling on_suspend)", current_app);
                                 self.lifecycles.insert(current_app, AppLifecycle::Background);
                                 if let Some(runtime) = self.runtimes.get_mut(&current_app) {
                                     runtime.on_suspend().ok();
@@ -349,10 +369,12 @@ impl MultiAppRuntime {
                             }
                             crate::tui::SuspendPolicy::AlwaysActive => {
                                 // Keep app in background but don't call on_suspend
+                                log::info!("  📍 Backgrounding {:?} (AlwaysActive - no on_suspend)", current_app);
                                 self.lifecycles.insert(current_app, AppLifecycle::Background);
                             }
                             crate::tui::SuspendPolicy::QuitOnSuspend => {
                                 // Destroy app instead of suspending
+                                log::info!("  💀 Destroying {:?} (QuitOnSuspend)", current_app);
                                 if let Some(mut runtime) = self.runtimes.remove(&current_app) {
                                     runtime.on_destroy().ok();
                                 }
@@ -361,6 +383,7 @@ impl MultiAppRuntime {
                         }
                     }
                     crate::tui::QuitPolicy::QuitOnExit => {
+                        log::info!("  💀 Destroying {:?} (QuitOnExit)", current_app);
                         if let Some(mut runtime) = self.runtimes.remove(&current_app) {
                             runtime.on_destroy().ok();
                         }
@@ -370,6 +393,7 @@ impl MultiAppRuntime {
 
                 // Resume app launcher if it was backgrounded
                 if matches!(self.lifecycles.get(&AppId::AppLauncher), Some(AppLifecycle::Background)) {
+                    log::info!("  ▶️  Resuming AppLauncher from Background");
                     if let Some(runtime) = self.runtimes.get_mut(&AppId::AppLauncher) {
                         runtime.on_resume().ok();
                     }
@@ -379,6 +403,7 @@ impl MultiAppRuntime {
 
             self.active_app = AppId::AppLauncher;
             self.last_active_time.insert(AppId::AppLauncher, Instant::now());
+            log::info!("✅ AppLauncher is now active");
             return Ok(true);
         }
 
@@ -430,6 +455,7 @@ impl MultiAppRuntime {
             .expect("Active app not found in runtimes")
             .handle_key(key_event)?;
 
+        log::debug!("🔄 After delegating key to {:?}, checking for side effects", self.active_app);
         self.broadcast_events()?;
         let _ = self.check_navigation()?;
         Ok(result)
@@ -1002,22 +1028,34 @@ impl MultiAppRuntime {
         let mut nav_target = None;
         let mut nav_source_app = self.active_app;
 
+        log::debug!("🔍 check_navigation - scanning for navigation requests");
+        log::debug!("  Active app: {:?}", self.active_app);
+
         // Check active app first (priority)
         if let Some(runtime) = self.runtimes.get_mut(&self.active_app) {
             start_app_request = runtime.take_start_app();
             nav_target = runtime.take_navigation();
+            if start_app_request.is_some() {
+                log::info!("  ✓ Active app {:?} has start_app request", self.active_app);
+            }
+            if nav_target.is_some() {
+                log::info!("  ✓ Active app {:?} has navigation request to {:?}", self.active_app, nav_target);
+            }
         }
 
         // If active app didn't request navigation, check all background apps
         if start_app_request.is_none() && nav_target.is_none() {
+            log::debug!("  No navigation from active app, scanning background apps...");
             for (app_id, runtime) in self.runtimes.iter_mut() {
                 if *app_id != self.active_app {
                     if let Some(start) = runtime.take_start_app() {
+                        log::info!("  🎯 Background app {:?} has start_app request", app_id);
                         start_app_request = Some(start);
                         nav_source_app = *app_id;
                         break;
                     }
                     if let Some(target) = runtime.take_navigation() {
+                        log::info!("  🎯 Background app {:?} has navigation request to {:?}", app_id, target);
                         nav_target = Some(target);
                         nav_source_app = *app_id;
                         break;
@@ -1028,6 +1066,7 @@ impl MultiAppRuntime {
 
         // Handle start_app first (it includes params)
         if let Some((target, params)) = start_app_request {
+            log::info!("⚡ Processing start_app navigation: {:?} -> {:?} (from {:?})", self.active_app, target, nav_source_app);
             // Handle current app based on quit and suspend policies
             if let Some(current_runtime) = self.runtimes.get(&self.active_app) {
                 let quit_policy = self.factories.get(&self.active_app)
@@ -1087,6 +1126,7 @@ impl MultiAppRuntime {
         }
 
         if let Some(target) = nav_target {
+            log::info!("⚡ Processing navigation: {:?} -> {:?} (from {:?})", self.active_app, target, nav_source_app);
             // Handle current app based on quit and suspend policies
             if let Some(current_runtime) = self.runtimes.get(&self.active_app) {
                 let quit_policy = self.factories.get(&self.active_app)
@@ -1144,8 +1184,10 @@ impl MultiAppRuntime {
 
             self.active_app = target;
             self.last_active_time.insert(target, Instant::now());
+            log::info!("✅ Navigation complete - now active: {:?}", target);
             Ok(true) // Navigation happened
         } else {
+            log::debug!("  No navigation requests found");
             Ok(false) // No navigation
         }
     }

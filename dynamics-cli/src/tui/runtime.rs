@@ -38,6 +38,7 @@ pub trait AppRuntime {
     fn poll_timers(&mut self) -> Result<()>;
     fn poll_async(&mut self) -> Pin<Box<dyn Future<Output = Result<()>> + '_>>;
     fn take_navigation(&mut self) -> Option<AppId>;
+    fn peek_navigation(&self) -> Option<AppId>;
     fn take_start_app(&mut self) -> Option<(AppId, Box<dyn Any + Send>)>;
     fn take_publishes(&mut self) -> Vec<(String, Value)>;
     fn handle_publish(&mut self, topic: &str, data: Value) -> Result<()>;
@@ -153,6 +154,11 @@ impl<A: App> Runtime<A> {
     /// Take the pending navigation target (if any)
     pub fn take_navigation(&mut self) -> Option<AppId> {
         self.navigation_target.take()
+    }
+
+    /// Peek at the pending navigation target without taking it
+    pub fn peek_navigation(&self) -> Option<AppId> {
+        self.navigation_target
     }
 
     /// Take pending start app request (if any)
@@ -993,6 +999,10 @@ where
 
     fn take_navigation(&mut self) -> Option<AppId> {
         Runtime::take_navigation(self)
+    }
+
+    fn peek_navigation(&self) -> Option<AppId> {
+        Runtime::peek_navigation(self)
     }
 
     fn take_start_app(&mut self) -> Option<(AppId, Box<dyn Any + Send>)> {

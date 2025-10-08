@@ -55,6 +55,7 @@ pub struct State {
     cancellable: bool,
     spinner_state: usize,
     countdown_ticks: Option<usize>, // Number of ticks remaining before navigation (80ms per tick)
+    navigation_sent: bool, // Prevent sending navigation multiple times
 }
 
 const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -134,19 +135,25 @@ impl App for LoadingScreen {
 
                 if let Some(remaining) = state.countdown_ticks {
                     if remaining <= 1 {
-                        // Only navigate if we have tasks (prevents stale countdown from navigating)
-                        if !state.tasks.is_empty() {
-                            if let Some(target) = state.target_app {
-                                log::info!("✓ LoadingScreen - countdown complete, navigating to {:?}", target);
-                                return Command::batch(vec![
-                                    Command::navigate_to(target),
-                                    Command::quit_self(), // Clean up after navigation
-                                ]);
+                        // Only navigate if we haven't already sent navigation
+                        if !state.navigation_sent {
+                            // Only navigate if we have tasks (prevents stale countdown from navigating)
+                            if !state.tasks.is_empty() {
+                                if let Some(target) = state.target_app {
+                                    log::info!("✓ LoadingScreen - countdown complete, navigating to {:?}", target);
+                                    state.navigation_sent = true; // Mark navigation as sent
+                                    return Command::batch(vec![
+                                        Command::navigate_to(target),
+                                        Command::quit_self(), // Clean up after navigation
+                                    ]);
+                                } else {
+                                    log::warn!("✗ LoadingScreen - countdown complete but target_app is None!");
+                                }
                             } else {
-                                log::warn!("✗ LoadingScreen - countdown complete but target_app is None!");
+                                log::warn!("✗ LoadingScreen - countdown complete but tasks is empty!");
                             }
                         } else {
-                            log::warn!("✗ LoadingScreen - countdown complete but tasks is empty!");
+                            log::debug!("⏸️  LoadingScreen - countdown complete but navigation already sent, skipping");
                         }
                     } else {
                         state.countdown_ticks = Some(remaining - 1);
@@ -259,5 +266,28 @@ impl App for LoadingScreen {
 
     fn suspend_policy() -> crate::tui::SuspendPolicy {
         crate::tui::SuspendPolicy::AlwaysActive
+    }
+
+    fn on_suspend(state: &mut State) -> Command<Msg> {
+        log::info!("🛑 LoadingScreen::on_suspend - clearing countdown and navigation state");
+        log::debug!("  Previous state: countdown_ticks={:?}, target_app={:?}, navigation_sent={}",
+                    state.countdown_ticks, state.target_app, state.navigation_sent);
+
+        // Clear countdown to prevent navigation while suspended
+        state.countdown_ticks = None;
+
+        // Clear target to prevent stale navigation
+        state.target_app = None;
+
+        // Reset navigation sent flag
+        state.navigation_sent = false;
+
+        Command::None
+    }
+
+    fn on_resume(state: &mut State) -> Command<Msg> {
+        log::info!("▶️  LoadingScreen::on_resume - resuming loading screen");
+        log::debug!("  Current state: {} tasks, countdown_ticks={:?}", state.tasks.len(), state.countdown_ticks);
+        Command::None
     }
 }
