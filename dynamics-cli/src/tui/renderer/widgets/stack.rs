@@ -12,7 +12,7 @@ pub fn render_dim_overlay(frame: &mut Frame, area: Rect) {
     // Paragraph properly fills the entire area with the background color,
     // unlike Block which doesn't reliably fill without borders
     let dim_overlay = Paragraph::new("")
-        .style(Style::default().bg(theme.surface0));
+        .style(Style::default().bg(theme.bg_surface));
     frame.render_widget(dim_overlay, area);
 }
 

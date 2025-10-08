@@ -80,9 +80,9 @@ pub fn render_panel<Msg: Clone + Send + 'static>(
     // 2. No descendant Panel contains a focused widget (this is the innermost panel)
     // Note: Buttons do NOT trigger panel focus styling
     let border_color = if child_has_focused_widget && !has_nested_focused_panel {
-        theme.lavender
+        theme.accent_primary
     } else {
-        theme.overlay0
+        theme.border_secondary
     };
 
     // Render border block with background
@@ -90,13 +90,13 @@ pub fn render_panel<Msg: Clone + Send + 'static>(
         Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(border_color))
-            .style(Style::default().bg(theme.base))
+            .style(Style::default().bg(theme.bg_base))
             .title(title_text.as_str())
     } else {
         Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(border_color))
-            .style(Style::default().bg(theme.base))
+            .style(Style::default().bg(theme.bg_base))
     };
 
     let inner_area = block.inner(area);

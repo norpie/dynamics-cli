@@ -76,8 +76,8 @@ impl<Msg: Clone> WarningModal<Msg> {
         // Warning icon + title
         let theme = &crate::global_runtime_config().theme;
         let title_element = Element::styled_text(Line::from(vec![
-            Span::styled("⚠ ", Style::default().fg(theme.yellow).bold()),
-            Span::styled(self.title, Style::default().fg(theme.yellow).bold())
+            Span::styled("⚠ ", Style::default().fg(theme.accent_warning).bold()),
+            Span::styled(self.title, Style::default().fg(theme.accent_warning).bold())
         ])).build();
 
         let mut content_elements: Vec<(LayoutConstraint, Element<Msg>)> = vec![
@@ -93,7 +93,7 @@ impl<Msg: Clone> WarningModal<Msg> {
                 content_elements.push((
                     LayoutConstraint::Length(1),
                     Element::styled_text(Line::from(vec![
-                        Span::styled(line.to_string(), Style::default().fg(theme.text))
+                        Span::styled(line.to_string(), Style::default().fg(theme.text_primary))
                     ])).build()
                 ));
             }
@@ -107,8 +107,8 @@ impl<Msg: Clone> WarningModal<Msg> {
                 content_elements.push((
                     LayoutConstraint::Length(1),
                     Element::styled_text(Line::from(vec![
-                        Span::styled("  • ", Style::default().fg(theme.yellow)),
-                        Span::styled(item.clone(), Style::default().fg(theme.text))
+                        Span::styled("  • ", Style::default().fg(theme.accent_warning)),
+                        Span::styled(item.clone(), Style::default().fg(theme.text_primary))
                     ])).build()
                 ));
             }

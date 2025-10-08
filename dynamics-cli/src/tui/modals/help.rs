@@ -131,7 +131,7 @@ impl<'a> HelpModal<'a> {
         let theme = &crate::global_runtime_config().theme;
         let mut help_items = vec![
             Element::styled_text(Line::from(vec![
-                Span::styled("Keyboard Shortcuts", Style::default().fg(theme.lavender).bold())
+                Span::styled("Keyboard Shortcuts", Style::default().fg(theme.accent_primary).bold())
             ])).build(),
             Element::text(""),
         ];
@@ -139,15 +139,15 @@ impl<'a> HelpModal<'a> {
         // Section 1: Global Keys (highest priority)
         if !self.global_bindings.is_empty() {
             help_items.push(Element::styled_text(Line::from(vec![
-                Span::styled("▼ Global", Style::default().fg(theme.peach).bold())
+                Span::styled("▼ Global", Style::default().fg(theme.accent_muted).bold())
             ])).build());
 
             let formatted_global = group_and_format_bindings(&self.global_bindings);
             for (key_str, description) in &formatted_global {
                 let line = Line::from(vec![
-                    Span::styled(format!("  {:13}", key_str), Style::default().fg(theme.mauve)),
+                    Span::styled(format!("  {:13}", key_str), Style::default().fg(theme.accent_tertiary)),
                     Span::raw("  "),
-                    Span::styled(description.clone(), Style::default().fg(theme.text)),
+                    Span::styled(description.clone(), Style::default().fg(theme.text_primary)),
                 ]);
                 help_items.push(Element::styled_text(line).build());
             }
@@ -158,15 +158,15 @@ impl<'a> HelpModal<'a> {
         // Section 2: Current App Keys
         if let Some(title) = self.current_app_title {
             help_items.push(Element::styled_text(Line::from(vec![
-                Span::styled(format!("▼ {}", title), Style::default().fg(theme.blue).bold())
+                Span::styled(format!("▼ {}", title), Style::default().fg(theme.accent_secondary).bold())
             ])).build());
 
             let formatted_current = group_and_format_bindings(&self.current_app_bindings);
             for (key_str, description) in &formatted_current {
                 let line = Line::from(vec![
-                    Span::styled(format!("  {:13}", key_str), Style::default().fg(theme.green)),
+                    Span::styled(format!("  {:13}", key_str), Style::default().fg(theme.accent_success)),
                     Span::raw("  "),
-                    Span::styled(description.clone(), Style::default().fg(theme.text)),
+                    Span::styled(description.clone(), Style::default().fg(theme.text_primary)),
                 ]);
                 help_items.push(Element::styled_text(line).build());
             }
@@ -177,15 +177,15 @@ impl<'a> HelpModal<'a> {
         // Section 3: Other Apps
         for (app_title, app_bindings) in &self.other_apps {
             help_items.push(Element::styled_text(Line::from(vec![
-                Span::styled(format!("▼ {}", app_title), Style::default().fg(theme.overlay1).bold())
+                Span::styled(format!("▼ {}", app_title), Style::default().fg(theme.border_primary).bold())
             ])).build());
 
             let formatted_other = group_and_format_bindings(app_bindings);
             for (key_str, description) in &formatted_other {
                 let line = Line::from(vec![
-                    Span::styled(format!("  {:13}", key_str), Style::default().fg(theme.overlay2)),
+                    Span::styled(format!("  {:13}", key_str), Style::default().fg(theme.border_tertiary)),
                     Span::raw("  "),
-                    Span::styled(description.clone(), Style::default().fg(theme.subtext0)),
+                    Span::styled(description.clone(), Style::default().fg(theme.text_tertiary)),
                 ]);
                 help_items.push(Element::styled_text(line).build());
             }
@@ -195,7 +195,7 @@ impl<'a> HelpModal<'a> {
 
         help_items.push(Element::text(""));
         help_items.push(Element::styled_text(Line::from(vec![
-            Span::styled("[ESC to close | ↑↓/PgUp/PgDn/Home/End to scroll]", Style::default().fg(theme.overlay1))
+            Span::styled("[ESC to close | ↑↓/PgUp/PgDn/Home/End to scroll]", Style::default().fg(theme.border_primary))
         ])).build());
 
         // Create scrollable column with all items (spacing=0 for dense packing)

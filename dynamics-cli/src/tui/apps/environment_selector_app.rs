@@ -955,8 +955,8 @@ impl App for EnvironmentSelectorApp {
         state.current_environment.as_ref().map(|env| {
         let theme = &crate::global_runtime_config().theme;
             Line::from(vec![
-                Span::styled("Current: ", Style::default().fg(theme.subtext0)),
-                Span::styled(env.clone(), Style::default().fg(theme.green)),
+                Span::styled("Current: ", Style::default().fg(theme.text_tertiary)),
+                Span::styled(env.clone(), Style::default().fg(theme.accent_success)),
             ])
         })
     }

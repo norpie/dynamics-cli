@@ -795,13 +795,13 @@ impl crate::tui::widgets::ListItem for Warning {
     fn to_element(&self, is_selected: bool, _is_hovered: bool) -> Element<Msg> {
         let theme = &crate::global_runtime_config().theme;
         let (fg_color, bg_style) = if is_selected {
-            (theme.lavender, Some(Style::default().bg(theme.surface0)))
+            (theme.accent_primary, Some(Style::default().bg(theme.bg_surface)))
         } else {
-            (theme.text, None)
+            (theme.text_primary, None)
         };
 
         let mut builder = Element::styled_text(Line::from(vec![
-            Span::styled("⚠ ", Style::default().fg(theme.yellow)),
+            Span::styled("⚠ ", Style::default().fg(theme.accent_warning)),
             Span::styled(self.0.clone(), Style::default().fg(fg_color)),
         ]));
 
@@ -1067,7 +1067,7 @@ impl App for DeadlinesMappingApp {
             Resource::NotAsked => {
                 col![Element::styled_text(Line::from(vec![Span::styled(
                     "Waiting...",
-                    Style::default().fg(theme.subtext0)
+                    Style::default().fg(theme.text_tertiary)
                 )]))
                 .build()]
             }
@@ -1079,13 +1079,13 @@ impl App for DeadlinesMappingApp {
                 col![
                     Element::styled_text(Line::from(vec![Span::styled(
                         "Error loading entities:",
-                        Style::default().fg(theme.red).bold()
+                        Style::default().fg(theme.accent_error).bold()
                     )]))
                     .build(),
                     spacer!(),
                     Element::styled_text(Line::from(vec![Span::styled(
                         err.clone(),
-                        Style::default().fg(theme.red)
+                        Style::default().fg(theme.accent_error)
                     )]))
                     .build(),
                     spacer!(),
@@ -1101,27 +1101,27 @@ impl App for DeadlinesMappingApp {
                 // Top section: info lines
                 if let Some(ref env) = state.current_environment {
                     builder = builder.add(Element::styled_text(Line::from(vec![
-                        Span::styled("Environment: ", Style::default().fg(theme.subtext0)),
+                        Span::styled("Environment: ", Style::default().fg(theme.text_tertiary)),
                         Span::styled(
                             env.clone(),
-                            Style::default().fg(theme.lavender)
+                            Style::default().fg(theme.accent_primary)
                         ),
                     ]))
                     .build(), Length(1));
                 }
 
                 builder = builder.add(Element::styled_text(Line::from(vec![
-                    Span::styled("File: ", Style::default().fg(theme.subtext0)),
+                    Span::styled("File: ", Style::default().fg(theme.text_tertiary)),
                     Span::styled(
                         state.file_path.file_name().unwrap().to_string_lossy().to_string(),
-                        Style::default().fg(theme.text)
+                        Style::default().fg(theme.text_primary)
                     ),
                 ]))
                 .build(), Length(1));
 
                 builder = builder.add(Element::styled_text(Line::from(vec![
-                    Span::styled("Sheet: ", Style::default().fg(theme.subtext0)),
-                    Span::styled(state.sheet_name.clone(), Style::default().fg(theme.text)),
+                    Span::styled("Sheet: ", Style::default().fg(theme.text_tertiary)),
+                    Span::styled(state.sheet_name.clone(), Style::default().fg(theme.text_primary)),
                 ]))
                 .build(), Length(1));
 
@@ -1137,27 +1137,27 @@ impl App for DeadlinesMappingApp {
 
                         if state.detected_entity.is_some() {
                             builder = builder.add(Element::styled_text(Line::from(vec![
-                                Span::styled("✓ ", Style::default().fg(theme.green)),
+                                Span::styled("✓ ", Style::default().fg(theme.accent_success)),
                                 Span::styled(
                                     format!("Detected entity: "),
-                                    Style::default().fg(theme.subtext0)
+                                    Style::default().fg(theme.text_tertiary)
                                 ),
                                 Span::styled(
                                     entity_type.clone(),
-                                    Style::default().fg(theme.lavender).bold()
+                                    Style::default().fg(theme.accent_primary).bold()
                                 ),
                             ]))
                             .build(), Length(1));
                         } else {
                             builder = builder.add(Element::styled_text(Line::from(vec![
-                                Span::styled("⚠ ", Style::default().fg(theme.yellow)),
+                                Span::styled("⚠ ", Style::default().fg(theme.accent_warning)),
                                 Span::styled(
                                     "Could not auto-detect entity. Using manual selection: ",
-                                    Style::default().fg(theme.yellow)
+                                    Style::default().fg(theme.accent_warning)
                                 ),
                                 Span::styled(
                                     entity_type.clone(),
-                                    Style::default().fg(theme.lavender).bold()
+                                    Style::default().fg(theme.accent_primary).bold()
                                 ),
                             ]))
                             .build(), Length(1));
@@ -1166,24 +1166,24 @@ impl App for DeadlinesMappingApp {
                         builder = builder.add(Element::styled_text(Line::from(vec![
                             Span::styled(
                                 format!("Will use {} static field mappings", mapping_count),
-                                Style::default().fg(theme.text)
+                                Style::default().fg(theme.text_primary)
                             ),
                         ]))
                         .build(), Length(1));
                         builder = builder.add(Element::styled_text(Line::from(vec![
                             Span::styled(
                                 "Checkbox columns will be detected dynamically from entity metadata",
-                                Style::default().fg(theme.subtext0).italic()
+                                Style::default().fg(theme.text_tertiary).italic()
                             ),
                         ]))
                         .build(), Length(1));
                     }
                     None => {
                         builder = builder.add(Element::styled_text(Line::from(vec![
-                            Span::styled("⚠ ", Style::default().fg(theme.yellow)),
+                            Span::styled("⚠ ", Style::default().fg(theme.accent_warning)),
                             Span::styled(
                                 "Could not detect cgk_deadline or nrq_deadline entity",
-                                Style::default().fg(theme.yellow)
+                                Style::default().fg(theme.accent_warning)
                             ),
                         ]))
                         .build(), Length(1));
@@ -1220,7 +1220,7 @@ impl App for DeadlinesMappingApp {
                     // Show loading status
                     builder = builder.add(Element::styled_text(Line::from(vec![Span::styled(
                         format!("Loading entity data... ({}/{})", state.entity_data_loaded_count, state.entity_data_total_count),
-                        Style::default().fg(theme.yellow)
+                        Style::default().fg(theme.accent_warning)
                     )]))
                     .build(), Length(1));
                     builder = builder.add(spacer!(), Fill(1));
@@ -1228,7 +1228,7 @@ impl App for DeadlinesMappingApp {
                     // Show instruction to load data
                     builder = builder.add(Element::styled_text(Line::from(vec![Span::styled(
                         "Click 'Load Data' to fetch entity records for validation",
-                        Style::default().fg(theme.subtext0).italic()
+                        Style::default().fg(theme.text_tertiary).italic()
                     )]))
                     .build(), Length(1));
                     builder = builder.add(spacer!(), Fill(1));
@@ -1278,10 +1278,10 @@ impl App for DeadlinesMappingApp {
         state.current_environment.as_ref().map(|env| {
         let theme = &crate::global_runtime_config().theme;
             Line::from(vec![
-                Span::styled("Environment: ", Style::default().fg(theme.subtext0)),
+                Span::styled("Environment: ", Style::default().fg(theme.text_tertiary)),
                 Span::styled(
                     env.clone(),
-                    Style::default().fg(theme.lavender),
+                    Style::default().fg(theme.accent_primary),
                 ),
             ])
         })

@@ -159,13 +159,13 @@ macro_rules! button_row {
 /// ```
 #[macro_export]
 macro_rules! modal {
-    ($base:expr, $overlay:expr) => {
+    ($bg_base:expr, $overlay:expr) => {
         $crate::tui::Element::stack(vec![
             $crate::tui::Layer::new($base),
             $crate::tui::Layer::new($overlay).center().dim(true),
         ])
     };
-    ($base:expr, $overlay:expr, $align:expr) => {
+    ($bg_base:expr, $overlay:expr, $align:expr) => {
         $crate::tui::Element::stack(vec![
             $crate::tui::Layer::new($base),
             $crate::tui::Layer::new($overlay).align($align).dim(true),
@@ -187,7 +187,7 @@ macro_rules! error_display {
                 $crate::tui::Element::styled_text(ratatui::text::Line::from(vec![
                     ratatui::text::Span::styled(
                         format!("⚠ {}", err),
-                        ratatui::style::Style::default().fg($theme.red)
+                        ratatui::style::Style::default().fg($theme.accent_error)
                     )
                 ]))
                 .build() => $crate::tui::LayoutConstraint::Length(1),

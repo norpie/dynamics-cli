@@ -69,13 +69,13 @@ impl App for ErrorScreen {
         let theme = &crate::global_runtime_config().theme;
         let content = vec![
             Element::styled_text(Line::from(vec![
-                Span::styled("❌ Error", Style::default().fg(theme.red).bold()),
+                Span::styled("❌ Error", Style::default().fg(theme.accent_error).bold()),
             ])).build(),
             Element::text(""),
             Element::text(&state.error_message),
             Element::text(""),
             Element::styled_text(Line::from(vec![
-                Span::styled("Press Enter to continue", Style::default().fg(theme.overlay1)),
+                Span::styled("Press Enter to continue", Style::default().fg(theme.border_primary)),
             ])).build(),
         ];
 
@@ -107,6 +107,6 @@ impl App for ErrorScreen {
 
     fn status(state: &State) -> Option<Line<'static>> {
         let theme = &crate::global_runtime_config().theme;
-        Some(Line::from(Span::styled("[Error]", Style::default().fg(theme.red))))
+        Some(Line::from(Span::styled("[Error]", Style::default().fg(theme.accent_error))))
     }
 }

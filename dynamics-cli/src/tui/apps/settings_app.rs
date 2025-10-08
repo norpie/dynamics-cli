@@ -102,9 +102,9 @@ impl ListItem for String {
     fn to_element(&self, is_selected: bool, _is_hovered: bool) -> Element<Msg> {
         let theme = &crate::global_runtime_config().theme;
         let (fg_color, bg_style) = if is_selected {
-            (theme.lavender, Some(Style::default().bg(theme.surface0)))
+            (theme.accent_primary, Some(Style::default().bg(theme.bg_surface)))
         } else {
-            (theme.text, None)
+            (theme.text_primary, None)
         };
 
         let mut builder = Element::styled_text(Line::from(vec![
@@ -133,9 +133,9 @@ impl ListItem for OptionWithValue {
     fn to_element(&self, is_selected: bool, _is_hovered: bool) -> Element<Msg> {
         let theme = &crate::global_runtime_config().theme;
         let (name_color, value_color, bg_style) = if is_selected {
-            (theme.lavender, theme.mauve, Some(Style::default().bg(theme.surface0)))
+            (theme.accent_primary, theme.accent_tertiary, Some(Style::default().bg(theme.bg_surface)))
         } else {
-            (theme.text, theme.subtext1, None)
+            (theme.text_primary, theme.text_secondary, None)
         };
 
         // Format the value based on type
@@ -700,7 +700,7 @@ impl App for SettingsApp {
         // Right panel: option list with values
         let option_list_content = if state.current_options.is_empty() {
             Element::styled_text(Line::from(vec![
-                Span::styled("No options in this category", Style::default().fg(theme.subtext0))
+                Span::styled("No options in this category", Style::default().fg(theme.text_tertiary))
             ])).build()
         } else {
             // Calculate max name width for alignment
@@ -745,7 +745,7 @@ impl App for SettingsApp {
             // With error display
             let error_section = Element::container(
                 Element::styled_text(Line::from(vec![
-                    Span::styled(format!("Error: {}", error), Style::default().fg(theme.red))
+                    Span::styled(format!("Error: {}", error), Style::default().fg(theme.accent_error))
                 ])).build()
             )
             .padding(1)
@@ -877,10 +877,10 @@ impl SettingsApp {
         let modal_body = col![
             // Option name and description
             Element::styled_text(Line::from(vec![
-                Span::styled(opt.display_name.clone(), Style::default().fg(theme.lavender).bold())
+                Span::styled(opt.display_name.clone(), Style::default().fg(theme.accent_primary).bold())
             ])).build() => Length(1),
             Element::styled_text(Line::from(vec![
-                Span::styled(opt.description.clone(), Style::default().fg(theme.subtext0))
+                Span::styled(opt.description.clone(), Style::default().fg(theme.text_tertiary))
             ])).build() => Length(1),
             spacer!() => Length(1),
             // Value panel (nested panel with input/select inside)
@@ -888,7 +888,7 @@ impl SettingsApp {
             spacer!() => Length(1),
             // Hint
             Element::styled_text(Line::from(vec![
-                Span::styled(hint.to_string(), Style::default().fg(theme.subtext0))
+                Span::styled(hint.to_string(), Style::default().fg(theme.text_tertiary))
             ])).build() => Length(1),
             // Extra space for dropdown overlay
             spacer!() => Length(12),

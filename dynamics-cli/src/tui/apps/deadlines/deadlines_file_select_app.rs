@@ -222,17 +222,17 @@ impl App for DeadlinesFileSelectApp {
         let sheet_content = match &state.available_sheets {
             Resource::NotAsked => {
                 Element::styled_text(Line::from(vec![
-                    Span::styled("Select an Excel file to view available sheets", Style::default().fg(theme.subtext0)),
+                    Span::styled("Select an Excel file to view available sheets", Style::default().fg(theme.text_tertiary)),
                 ])).build()
             }
             Resource::Loading => {
                 Element::styled_text(Line::from(vec![
-                    Span::styled("Loading sheets...", Style::default().fg(theme.blue)),
+                    Span::styled("Loading sheets...", Style::default().fg(theme.accent_secondary)),
                 ])).build()
             }
             Resource::Failure(err) => {
                 Element::styled_text(Line::from(vec![
-                    Span::styled(format!("Error: {}", err), Style::default().fg(theme.red)),
+                    Span::styled(format!("Error: {}", err), Style::default().fg(theme.accent_error)),
                 ])).build()
             }
             Resource::Success(sheets) => {
@@ -246,10 +246,10 @@ impl App for DeadlinesFileSelectApp {
 
                 col![
                     Element::styled_text(Line::from(vec![
-                        Span::styled("Selected file: ", Style::default().fg(theme.subtext0)),
+                        Span::styled("Selected file: ", Style::default().fg(theme.text_tertiary)),
                         Span::styled(
                             state.selected_file.as_ref().map(|p| p.file_name().unwrap().to_string_lossy().to_string()).unwrap_or_default(),
-                            Style::default().fg(theme.lavender)
+                            Style::default().fg(theme.accent_primary)
                         ),
                     ])).build() => Length(1),
                     spacer!() => Length(1),
@@ -298,8 +298,8 @@ impl App for DeadlinesFileSelectApp {
         state.current_environment.as_ref().map(|env| {
         let theme = &crate::global_runtime_config().theme;
             Line::from(vec![
-                Span::styled("Environment: ", Style::default().fg(theme.subtext0)),
-                Span::styled(env.clone(), Style::default().fg(theme.lavender)),
+                Span::styled("Environment: ", Style::default().fg(theme.text_tertiary)),
+                Span::styled(env.clone(), Style::default().fg(theme.accent_primary)),
             ])
         })
     }

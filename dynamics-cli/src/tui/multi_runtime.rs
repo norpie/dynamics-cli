@@ -441,19 +441,19 @@ impl MultiAppRuntime {
         let title_line = if let Some(status_line) = status {
             // Combine title and status with separator
             let mut spans = vec![
-                Span::styled(String::from(title), Style::default().fg(theme.blue).bold()),
-                Span::styled(" │ ", Style::default().fg(theme.overlay1)),
+                Span::styled(String::from(title), Style::default().fg(theme.accent_secondary).bold()),
+                Span::styled(" │ ", Style::default().fg(theme.border_primary)),
             ];
             spans.extend(status_line.spans);
             Line::from(spans)
         } else {
             // Just title
-            Line::from(Span::styled(String::from(title), Style::default().fg(theme.blue).bold()))
+            Line::from(Span::styled(String::from(title), Style::default().fg(theme.accent_secondary).bold()))
         };
 
         let header_left = Element::styled_text(title_line).build();
         let header_right = Element::styled_text(Line::from(vec![
-            Span::styled("[?] F1 Help", Style::default().fg(theme.overlay1))
+            Span::styled("[?] F1 Help", Style::default().fg(theme.border_primary))
         ])).build();
 
         let header = Element::panel(
@@ -479,7 +479,7 @@ impl MultiAppRuntime {
         use ratatui::widgets::Paragraph;
         use ratatui::style::Style;
         let dim_overlay = Paragraph::new("")
-            .style(Style::default().bg(theme.surface0));
+            .style(Style::default().bg(theme.bg_surface));
         frame.render_widget(dim_overlay, area);
 
         // Build help content directly as Element<GlobalMsg>
@@ -534,7 +534,7 @@ impl MultiAppRuntime {
         // Build help content
         let mut help_items: Vec<Element<GlobalMsg>> = vec![
             Element::styled_text(Line::from(vec![
-                Span::styled("Keyboard Shortcuts", Style::default().fg(theme.lavender).bold())
+                Span::styled("Keyboard Shortcuts", Style::default().fg(theme.accent_primary).bold())
             ])).build(),
             Element::text(""),
         ];
@@ -542,15 +542,15 @@ impl MultiAppRuntime {
         // Global section
         if !global_grouped.is_empty() {
             help_items.push(Element::styled_text(Line::from(vec![
-                Span::styled("▼ Global", Style::default().fg(theme.peach).bold())
+                Span::styled("▼ Global", Style::default().fg(theme.accent_muted).bold())
             ])).build());
 
             for (keys, desc) in global_grouped {
                 let padding = " ".repeat(max_key_width - keys.len());
                 let line = Line::from(vec![
-                    Span::styled(format!("  {}{}", keys, padding), Style::default().fg(theme.mauve)),
+                    Span::styled(format!("  {}{}", keys, padding), Style::default().fg(theme.accent_tertiary)),
                     Span::raw("  "),
-                    Span::styled(desc, Style::default().fg(theme.text)),
+                    Span::styled(desc, Style::default().fg(theme.text_primary)),
                 ]);
                 help_items.push(Element::styled_text(line).build());
             }
@@ -560,15 +560,15 @@ impl MultiAppRuntime {
         // Current app section (only show if it has bindings)
         if !current_grouped.is_empty() {
             help_items.push(Element::styled_text(Line::from(vec![
-                Span::styled(format!("▼ {}", current_app_data.1), Style::default().fg(theme.blue).bold())
+                Span::styled(format!("▼ {}", current_app_data.1), Style::default().fg(theme.accent_secondary).bold())
             ])).build());
 
             for (keys, desc) in current_grouped {
                 let padding = " ".repeat(max_key_width - keys.len());
                 let line = Line::from(vec![
-                    Span::styled(format!("  {}{}", keys, padding), Style::default().fg(theme.green)),
+                    Span::styled(format!("  {}{}", keys, padding), Style::default().fg(theme.accent_success)),
                     Span::raw("  "),
-                    Span::styled(desc, Style::default().fg(theme.text)),
+                    Span::styled(desc, Style::default().fg(theme.text_primary)),
                 ]);
                 help_items.push(Element::styled_text(line).build());
             }
@@ -578,15 +578,15 @@ impl MultiAppRuntime {
         // Other apps sections
         for (_, app_title, grouped) in other_apps_grouped {
             help_items.push(Element::styled_text(Line::from(vec![
-                Span::styled(format!("▼ {}", app_title), Style::default().fg(theme.overlay1).bold())
+                Span::styled(format!("▼ {}", app_title), Style::default().fg(theme.border_primary).bold())
             ])).build());
 
             for (keys, desc) in grouped {
                 let padding = " ".repeat(max_key_width - keys.len());
                 let line = Line::from(vec![
-                    Span::styled(format!("  {}{}", keys, padding), Style::default().fg(theme.overlay2)),
+                    Span::styled(format!("  {}{}", keys, padding), Style::default().fg(theme.border_tertiary)),
                     Span::raw("  "),
-                    Span::styled(desc, Style::default().fg(theme.subtext0)),
+                    Span::styled(desc, Style::default().fg(theme.text_tertiary)),
                 ]);
                 help_items.push(Element::styled_text(line).build());
             }
@@ -595,7 +595,7 @@ impl MultiAppRuntime {
 
         help_items.push(Element::text(""));
         help_items.push(Element::styled_text(Line::from(vec![
-            Span::styled("[ESC to close | ↑↓/PgUp/PgDn/Home/End to scroll]", Style::default().fg(theme.overlay1))
+            Span::styled("[ESC to close | ↑↓/PgUp/PgDn/Home/End to scroll]", Style::default().fg(theme.border_primary))
         ])).build());
 
         // Build column with all items
@@ -680,7 +680,7 @@ impl MultiAppRuntime {
 
         // Render dim overlay
         let dim_overlay = Paragraph::new("")
-            .style(Style::default().bg(theme.surface0));
+            .style(Style::default().bg(theme.bg_surface));
         frame.render_widget(dim_overlay, area);
 
         // Build quit confirmation modal using Element<GlobalMsg>

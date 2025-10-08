@@ -106,7 +106,7 @@ impl<Msg: Clone> ConfirmationModal<Msg> {
         // Title line
         let theme = &crate::global_runtime_config().theme;
         let title_element = Element::styled_text(Line::from(vec![
-            Span::styled(self.title, Style::default().fg(theme.mauve).bold())
+            Span::styled(self.title, Style::default().fg(theme.accent_tertiary).bold())
         ])).build();
 
         // Message element (if present)
@@ -141,7 +141,7 @@ impl<Msg: Clone> ConfirmationModal<Msg> {
             confirm_label,
         )
         .on_press(confirm_msg)
-        .style(Style::default().fg(theme.green))
+        .style(Style::default().fg(theme.accent_success))
         .build();
 
         // Button row - explicitly set Fill constraints for width distribution

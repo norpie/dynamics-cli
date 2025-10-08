@@ -193,19 +193,19 @@ impl App for LoadingScreen {
         };
 
         content.push(Element::styled_text(Line::from(vec![
-            Span::styled(SPINNER_FRAMES[state.spinner_state], Style::default().fg(theme.sky).bold()),
+            Span::styled(SPINNER_FRAMES[state.spinner_state], Style::default().fg(theme.palette_4).bold()),
             Span::raw(" "),
-            Span::styled(header_text.clone(), Style::default().fg(theme.sky)),
+            Span::styled(header_text.clone(), Style::default().fg(theme.palette_4)),
         ])).build());
         content.push(Element::text(""));
 
         // Tasks
         for task in &state.tasks {
             let (symbol, color) = match &task.status {
-                TaskStatus::Pending => ("◯", theme.overlay1),
-                TaskStatus::InProgress => (SPINNER_FRAMES[state.spinner_state], theme.sky),
-                TaskStatus::Completed => ("✓", theme.green),
-                TaskStatus::Failed(_) => ("❌", theme.red),
+                TaskStatus::Pending => ("◯", theme.border_primary),
+                TaskStatus::InProgress => (SPINNER_FRAMES[state.spinner_state], theme.palette_4),
+                TaskStatus::Completed => ("✓", theme.accent_success),
+                TaskStatus::Failed(_) => ("❌", theme.accent_error),
             };
 
             content.push(Element::styled_text(Line::from(vec![
@@ -226,7 +226,7 @@ impl App for LoadingScreen {
         };
 
         content.push(Element::styled_text(Line::from(
-            Span::styled(footer_text, Style::default().fg(theme.overlay1))
+            Span::styled(footer_text, Style::default().fg(theme.border_primary))
         )).build());
 
         // Wrap in panel

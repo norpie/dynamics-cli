@@ -21,9 +21,9 @@ impl FileBrowserEntry {
     pub fn to_element<Msg>(&self, is_selected: bool) -> Element<Msg> {
         let theme = &crate::global_runtime_config().theme;
         let (fg_color, bg_style) = if is_selected {
-            (theme.lavender, Some(Style::default().bg(theme.surface0)))
+            (theme.accent_primary, Some(Style::default().bg(theme.bg_surface)))
         } else {
-            (theme.text, None)
+            (theme.text_primary, None)
         };
 
         let display_name = if self.is_dir {
@@ -32,7 +32,7 @@ impl FileBrowserEntry {
             self.name.clone()
         };
 
-        let color = if self.is_dir { theme.blue } else { fg_color };
+        let color = if self.is_dir { theme.accent_secondary } else { fg_color };
 
         let mut builder = Element::styled_text(Line::from(vec![
             Span::styled(format!("  {}", display_name), Style::default().fg(color)),

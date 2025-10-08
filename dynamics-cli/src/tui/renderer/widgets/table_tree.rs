@@ -120,7 +120,7 @@ pub fn render_table_tree<Msg: Clone + Send + 'static>(
             // Apply selection highlighting
             let mut row = Row::new(cells);
             if node.is_selected {
-                row = row.style(Style::default().bg(theme.surface0));
+                row = row.style(Style::default().bg(theme.bg_surface));
             }
 
             row
@@ -133,7 +133,7 @@ pub fn render_table_tree<Msg: Clone + Send + 'static>(
         .map(|h| Cell::from(h.as_str()))
         .collect();
     let header = Row::new(header_cells)
-        .style(Style::default().fg(theme.lavender).bold())
+        .style(Style::default().fg(theme.accent_primary).bold())
         .height(1);
 
     // Create table widget without borders (parent panel handles that)
@@ -186,7 +186,7 @@ pub fn render_table_tree<Msg: Clone + Send + 'static>(
                 width: 1,
                 height: 1,
             };
-            let thumb = Block::default().style(Style::default().fg(theme.overlay1));
+            let thumb = Block::default().style(Style::default().fg(theme.border_primary));
             frame.render_widget(thumb, thumb_area);
         }
     }

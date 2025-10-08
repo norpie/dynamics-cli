@@ -994,10 +994,10 @@ impl App for OperationQueueApp {
 
         if interrupted_count > 0 {
             Some(Line::from(vec![
-                Span::styled("⚠ ", Style::default().fg(theme.red)),
+                Span::styled("⚠ ", Style::default().fg(theme.accent_error)),
                 Span::styled(
                     format!("{} interrupted operation(s) - verify before resuming", interrupted_count),
-                    Style::default().fg(theme.yellow)
+                    Style::default().fg(theme.accent_warning)
                 ),
             ]))
         } else {
@@ -1232,36 +1232,36 @@ fn build_details_panel(state: &State, scroll_state: &ScrollableState) -> Element
                     Element::styled_text(RataLine::from(vec![
                         Span::styled(
                             format!("Operation {} of {}", child_idx + 1, operations.len()),
-                            Style::default().fg(theme.text).bold()
+                            Style::default().fg(theme.text_primary).bold()
                         ),
                     ])).build(),
                     Element::text(""),
 
                     // Parent batch info
                     Element::styled_text(RataLine::from(vec![
-                        Span::styled("Batch: ", Style::default().fg(theme.overlay1)),
+                        Span::styled("Batch: ", Style::default().fg(theme.border_primary)),
                         Span::styled(
                             item.metadata.description.clone(),
-                            Style::default().fg(theme.text)
+                            Style::default().fg(theme.text_primary)
                         ),
                     ])).build(),
                     Element::text(""),
 
                     // Operation type
                     Element::styled_text(RataLine::from(vec![
-                        Span::styled("Type: ", Style::default().fg(theme.overlay1)),
+                        Span::styled("Type: ", Style::default().fg(theme.border_primary)),
                         Span::styled(
                             operation.operation_type().to_string(),
-                            Style::default().fg(theme.blue)
+                            Style::default().fg(theme.accent_secondary)
                         ),
                     ])).build(),
 
                     // Entity
                     Element::styled_text(RataLine::from(vec![
-                        Span::styled("Entity: ", Style::default().fg(theme.overlay1)),
+                        Span::styled("Entity: ", Style::default().fg(theme.border_primary)),
                         Span::styled(
                             operation.entity().to_string(),
-                            Style::default().fg(theme.text)
+                            Style::default().fg(theme.text_primary)
                         ),
                     ])).build(),
                 ];
@@ -1287,10 +1287,10 @@ fn build_details_panel(state: &State, scroll_state: &ScrollableState) -> Element
                 };
 
                 lines.push(Element::styled_text(RataLine::from(vec![
-                    Span::styled("Endpoint: ", Style::default().fg(theme.overlay1)),
+                    Span::styled("Endpoint: ", Style::default().fg(theme.border_primary)),
                     Span::styled(
                         endpoint,
-                        Style::default().fg(theme.blue)
+                        Style::default().fg(theme.accent_secondary)
                     ),
                 ])).build());
 
@@ -1300,19 +1300,19 @@ fn build_details_panel(state: &State, scroll_state: &ScrollableState) -> Element
                     | Operation::Update { data, .. } | Operation::Upsert { data, .. } => {
                         lines.push(Element::text(""));
                         lines.push(Element::styled_text(RataLine::from(vec![
-                            Span::styled("Data:", Style::default().fg(theme.peach).bold()),
+                            Span::styled("Data:", Style::default().fg(theme.accent_muted).bold()),
                         ])).build());
 
                         // Pretty print JSON data (limit to reasonable size)
                         if let Ok(json_str) = serde_json::to_string_pretty(data) {
                             for line in json_str.lines().take(20) {
                                 lines.push(Element::styled_text(RataLine::from(vec![
-                                    Span::styled(format!("  {}", line), Style::default().fg(theme.text)),
+                                    Span::styled(format!("  {}", line), Style::default().fg(theme.text_primary)),
                                 ])).build());
                             }
                             if json_str.lines().count() > 20 {
                                 lines.push(Element::styled_text(RataLine::from(vec![
-                                    Span::styled("  ... (truncated)", Style::default().fg(theme.overlay1).italic()),
+                                    Span::styled("  ... (truncated)", Style::default().fg(theme.border_primary).italic()),
                                 ])).build());
                             }
                         }
@@ -1320,23 +1320,23 @@ fn build_details_panel(state: &State, scroll_state: &ScrollableState) -> Element
                     Operation::Delete { id, .. } => {
                         lines.push(Element::text(""));
                         lines.push(Element::styled_text(RataLine::from(vec![
-                            Span::styled("Record ID: ", Style::default().fg(theme.overlay1)),
-                            Span::styled(id.clone(), Style::default().fg(theme.text)),
+                            Span::styled("Record ID: ", Style::default().fg(theme.border_primary)),
+                            Span::styled(id.clone(), Style::default().fg(theme.text_primary)),
                         ])).build());
                     }
                     Operation::AssociateRef { entity_ref, navigation_property, target_ref, .. } => {
                         lines.push(Element::text(""));
                         lines.push(Element::styled_text(RataLine::from(vec![
-                            Span::styled("Entity Ref: ", Style::default().fg(theme.overlay1)),
-                            Span::styled(entity_ref.clone(), Style::default().fg(theme.text)),
+                            Span::styled("Entity Ref: ", Style::default().fg(theme.border_primary)),
+                            Span::styled(entity_ref.clone(), Style::default().fg(theme.text_primary)),
                         ])).build());
                         lines.push(Element::styled_text(RataLine::from(vec![
-                            Span::styled("Navigation: ", Style::default().fg(theme.overlay1)),
-                            Span::styled(navigation_property.clone(), Style::default().fg(theme.text)),
+                            Span::styled("Navigation: ", Style::default().fg(theme.border_primary)),
+                            Span::styled(navigation_property.clone(), Style::default().fg(theme.text_primary)),
                         ])).build());
                         lines.push(Element::styled_text(RataLine::from(vec![
-                            Span::styled("Target: ", Style::default().fg(theme.overlay1)),
-                            Span::styled(target_ref.clone(), Style::default().fg(theme.text)),
+                            Span::styled("Target: ", Style::default().fg(theme.border_primary)),
+                            Span::styled(target_ref.clone(), Style::default().fg(theme.text_primary)),
                         ])).build());
                     }
                 }
@@ -1348,12 +1348,12 @@ fn build_details_panel(state: &State, scroll_state: &ScrollableState) -> Element
 
                         lines.push(Element::text(""));
                         lines.push(Element::styled_text(RataLine::from(vec![
-                            Span::styled("Result:", Style::default().fg(theme.peach).bold()),
+                            Span::styled("Result:", Style::default().fg(theme.accent_muted).bold()),
                         ])).build());
 
-                        let status_color = if op_result.success { theme.green } else { theme.red };
+                        let status_color = if op_result.success { theme.accent_success } else { theme.accent_error };
                         lines.push(Element::styled_text(RataLine::from(vec![
-                            Span::styled("  Status: ", Style::default().fg(theme.overlay1)),
+                            Span::styled("  Status: ", Style::default().fg(theme.border_primary)),
                             Span::styled(
                                 if op_result.success { "Success" } else { "Failed" },
                                 Style::default().fg(status_color)
@@ -1362,10 +1362,10 @@ fn build_details_panel(state: &State, scroll_state: &ScrollableState) -> Element
 
                         if let Some(status_code) = op_result.status_code {
                             lines.push(Element::styled_text(RataLine::from(vec![
-                                Span::styled("  Status Code: ", Style::default().fg(theme.overlay1)),
+                                Span::styled("  Status Code: ", Style::default().fg(theme.border_primary)),
                                 Span::styled(
                                     status_code.to_string(),
-                                    Style::default().fg(theme.text)
+                                    Style::default().fg(theme.text_primary)
                                 ),
                             ])).build());
                         }
@@ -1373,12 +1373,12 @@ fn build_details_panel(state: &State, scroll_state: &ScrollableState) -> Element
                         if let Some(error) = &op_result.error {
                             lines.push(Element::text(""));
                             lines.push(Element::styled_text(RataLine::from(vec![
-                                Span::styled("  Error:", Style::default().fg(theme.red).bold()),
+                                Span::styled("  Error:", Style::default().fg(theme.accent_error).bold()),
                             ])).build());
 
                             for error_line in error.lines() {
                                 lines.push(Element::styled_text(RataLine::from(vec![
-                                    Span::styled(format!("    {}", error_line), Style::default().fg(theme.red)),
+                                    Span::styled(format!("    {}", error_line), Style::default().fg(theme.accent_error)),
                                 ])).build());
                             }
                         }
@@ -1390,7 +1390,7 @@ fn build_details_panel(state: &State, scroll_state: &ScrollableState) -> Element
                 // Invalid child index
                 Element::column(vec![
                     Element::styled_text(RataLine::from(vec![
-                        Span::styled("Invalid operation index", Style::default().fg(theme.red)),
+                        Span::styled("Invalid operation index", Style::default().fg(theme.accent_error)),
                     ])).build(),
                 ]).spacing(0).build()
             }
@@ -1402,53 +1402,53 @@ fn build_details_panel(state: &State, scroll_state: &ScrollableState) -> Element
                 Span::styled(
                     format!("{} ", item.status.symbol()),
                     Style::default().fg(match item.status {
-                        OperationStatus::Pending => theme.yellow,
-                        OperationStatus::Running => theme.blue,
-                        OperationStatus::Paused => theme.overlay1,
-                        OperationStatus::Done => theme.green,
-                        OperationStatus::Failed => theme.red,
+                        OperationStatus::Pending => theme.accent_warning,
+                        OperationStatus::Running => theme.accent_secondary,
+                        OperationStatus::Paused => theme.border_primary,
+                        OperationStatus::Done => theme.accent_success,
+                        OperationStatus::Failed => theme.accent_error,
                     })
                 ),
                 Span::styled(
                     item.metadata.description.clone(),
-                    Style::default().fg(theme.text).bold()
+                    Style::default().fg(theme.text_primary).bold()
                 ),
             ])).build(),
             Element::text(""),
 
             // Priority
             Element::styled_text(RataLine::from(vec![
-                Span::styled("Priority: ", Style::default().fg(theme.overlay1)),
+                Span::styled("Priority: ", Style::default().fg(theme.border_primary)),
                 Span::styled(
                     item.priority.to_string(),
-                    Style::default().fg(theme.mauve)
+                    Style::default().fg(theme.accent_tertiary)
                 ),
             ])).build(),
 
             // Source
             Element::styled_text(RataLine::from(vec![
-                Span::styled("Source: ", Style::default().fg(theme.overlay1)),
+                Span::styled("Source: ", Style::default().fg(theme.border_primary)),
                 Span::styled(
                     item.metadata.source.clone(),
-                    Style::default().fg(theme.text)
+                    Style::default().fg(theme.text_primary)
                 ),
             ])).build(),
 
             // Entity type
             Element::styled_text(RataLine::from(vec![
-                Span::styled("Entity: ", Style::default().fg(theme.overlay1)),
+                Span::styled("Entity: ", Style::default().fg(theme.border_primary)),
                 Span::styled(
                     item.metadata.entity_type.clone(),
-                    Style::default().fg(theme.text)
+                    Style::default().fg(theme.text_primary)
                 ),
             ])).build(),
 
             // Environment
             Element::styled_text(RataLine::from(vec![
-                Span::styled("Environment: ", Style::default().fg(theme.overlay1)),
+                Span::styled("Environment: ", Style::default().fg(theme.border_primary)),
                 Span::styled(
                     item.metadata.environment_name.clone(),
-                    Style::default().fg(theme.text)
+                    Style::default().fg(theme.text_primary)
                 ),
             ])).build(),
         ];
@@ -1456,10 +1456,10 @@ fn build_details_panel(state: &State, scroll_state: &ScrollableState) -> Element
         // Row number if applicable
         if let Some(row) = item.metadata.row_number {
             lines.push(Element::styled_text(RataLine::from(vec![
-                Span::styled("Row: ", Style::default().fg(theme.overlay1)),
+                Span::styled("Row: ", Style::default().fg(theme.border_primary)),
                 Span::styled(
                     row.to_string(),
-                    Style::default().fg(theme.text)
+                    Style::default().fg(theme.text_primary)
                 ),
             ])).build());
         }
@@ -1468,19 +1468,19 @@ fn build_details_panel(state: &State, scroll_state: &ScrollableState) -> Element
         if item.was_interrupted {
             lines.push(Element::text(""));
             lines.push(Element::styled_text(RataLine::from(vec![
-                Span::styled("⚠ WARNING: ", Style::default().fg(theme.red).bold()),
+                Span::styled("⚠ WARNING: ", Style::default().fg(theme.accent_error).bold()),
                 Span::styled(
                     "Operation was interrupted and may have partially executed.",
-                    Style::default().fg(theme.yellow)
+                    Style::default().fg(theme.accent_warning)
                 ),
             ])).build());
 
             if let Some(interrupted_at) = item.interrupted_at {
                 lines.push(Element::styled_text(RataLine::from(vec![
-                    Span::styled("  Interrupted at: ", Style::default().fg(theme.overlay1)),
+                    Span::styled("  Interrupted at: ", Style::default().fg(theme.border_primary)),
                     Span::styled(
                         interrupted_at.format("%Y-%m-%d %H:%M:%S UTC").to_string(),
-                        Style::default().fg(theme.text)
+                        Style::default().fg(theme.text_primary)
                     ),
                 ])).build());
             }
@@ -1488,7 +1488,7 @@ fn build_details_panel(state: &State, scroll_state: &ScrollableState) -> Element
             lines.push(Element::styled_text(RataLine::from(vec![
                 Span::styled(
                     "  → Verify completion in Dynamics before retrying or deleting",
-                    Style::default().fg(theme.yellow).italic()
+                    Style::default().fg(theme.accent_warning).italic()
                 ),
             ])).build());
 
@@ -1510,7 +1510,7 @@ fn build_details_panel(state: &State, scroll_state: &ScrollableState) -> Element
         lines.push(Element::styled_text(RataLine::from(vec![
             Span::styled(
                 format!("Operations ({}):", item.operations.len()),
-                Style::default().fg(theme.peach).bold()
+                Style::default().fg(theme.accent_muted).bold()
             ),
         ])).build());
 
@@ -1519,10 +1519,10 @@ fn build_details_panel(state: &State, scroll_state: &ScrollableState) -> Element
             let entity = op.entity().to_string();
 
             lines.push(Element::styled_text(RataLine::from(vec![
-                Span::styled(format!("  {}. ", idx + 1), Style::default().fg(theme.overlay1)),
-                Span::styled(op_type, Style::default().fg(theme.blue)),
+                Span::styled(format!("  {}. ", idx + 1), Style::default().fg(theme.border_primary)),
+                Span::styled(op_type, Style::default().fg(theme.accent_secondary)),
                 Span::raw(" "),
-                Span::styled(entity, Style::default().fg(theme.text)),
+                Span::styled(entity, Style::default().fg(theme.text_primary)),
             ])).build());
         }
 
@@ -1530,22 +1530,22 @@ fn build_details_panel(state: &State, scroll_state: &ScrollableState) -> Element
         if let Some(result) = &item.result {
             lines.push(Element::text(""));
             lines.push(Element::styled_text(RataLine::from(vec![
-                Span::styled("Result:", Style::default().fg(theme.peach).bold()),
+                Span::styled("Result:", Style::default().fg(theme.accent_muted).bold()),
             ])).build());
 
             lines.push(Element::styled_text(RataLine::from(vec![
-                Span::styled("  Status: ", Style::default().fg(theme.overlay1)),
+                Span::styled("  Status: ", Style::default().fg(theme.border_primary)),
                 Span::styled(
                     if result.success { "Success" } else { "Failed" },
-                    Style::default().fg(if result.success { theme.green } else { theme.red })
+                    Style::default().fg(if result.success { theme.accent_success } else { theme.accent_error })
                 ),
             ])).build());
 
             lines.push(Element::styled_text(RataLine::from(vec![
-                Span::styled("  Duration: ", Style::default().fg(theme.overlay1)),
+                Span::styled("  Duration: ", Style::default().fg(theme.border_primary)),
                 Span::styled(
                     format!("{}ms", result.duration_ms),
-                    Style::default().fg(theme.text)
+                    Style::default().fg(theme.text_primary)
                 ),
             ])).build());
 
@@ -1553,7 +1553,7 @@ fn build_details_panel(state: &State, scroll_state: &ScrollableState) -> Element
             if let Some(error) = &result.error {
                 lines.push(Element::text(""));
                 lines.push(Element::styled_text(RataLine::from(vec![
-                    Span::styled("Error:", Style::default().fg(theme.red).bold()),
+                    Span::styled("Error:", Style::default().fg(theme.accent_error).bold()),
                 ])).build());
 
                 // Split error message into lines if too long
@@ -1574,7 +1574,7 @@ fn build_details_panel(state: &State, scroll_state: &ScrollableState) -> Element
 
                 for error_line in error_lines {
                     lines.push(Element::styled_text(RataLine::from(vec![
-                        Span::styled(format!("  {}", error_line), Style::default().fg(theme.red)),
+                        Span::styled(format!("  {}", error_line), Style::default().fg(theme.accent_error)),
                     ])).build());
                 }
             }
@@ -1583,12 +1583,12 @@ fn build_details_panel(state: &State, scroll_state: &ScrollableState) -> Element
             if !result.operation_results.is_empty() {
                 lines.push(Element::text(""));
                 lines.push(Element::styled_text(RataLine::from(vec![
-                    Span::styled("Operation Results:", Style::default().fg(theme.peach).bold()),
+                    Span::styled("Operation Results:", Style::default().fg(theme.accent_muted).bold()),
                 ])).build());
 
                 for (idx, op_result) in result.operation_results.iter().enumerate() {
                     let status_symbol = if op_result.success { "✓" } else { "✗" };
-                    let status_color = if op_result.success { theme.green } else { theme.red };
+                    let status_color = if op_result.success { theme.accent_success } else { theme.accent_error };
 
                     let msg = if let Some(err) = &op_result.error {
                         err.clone()
@@ -1597,10 +1597,10 @@ fn build_details_panel(state: &State, scroll_state: &ScrollableState) -> Element
                     };
 
                     lines.push(Element::styled_text(RataLine::from(vec![
-                        Span::styled(format!("  {}. ", idx + 1), Style::default().fg(theme.overlay1)),
+                        Span::styled(format!("  {}. ", idx + 1), Style::default().fg(theme.border_primary)),
                         Span::styled(status_symbol, Style::default().fg(status_color)),
                         Span::raw(" "),
-                        Span::styled(msg, Style::default().fg(theme.text)),
+                        Span::styled(msg, Style::default().fg(theme.text_primary)),
                     ])).build());
                 }
             }
@@ -1612,7 +1612,7 @@ fn build_details_panel(state: &State, scroll_state: &ScrollableState) -> Element
         // No selection
         Element::column(vec![
             Element::styled_text(RataLine::from(vec![
-                Span::styled("No item selected", Style::default().fg(theme.overlay1).italic()),
+                Span::styled("No item selected", Style::default().fg(theme.border_primary).italic()),
             ])).build(),
         ]).spacing(0).build()
     };

@@ -71,9 +71,9 @@ impl TreeItem for ComparisonTreeItem {
 
                 // Use stored container_match_type for color (keep color even when selected)
                 let color = match node.container_match_type {
-                    ContainerMatchType::FullMatch => theme.green,
-                    ContainerMatchType::Mixed => theme.yellow,
-                    ContainerMatchType::NoMatch => theme.red,
+                    ContainerMatchType::FullMatch => theme.accent_success,
+                    ContainerMatchType::Mixed => theme.accent_warning,
+                    ContainerMatchType::NoMatch => theme.accent_error,
                 };
 
                 // Container label
@@ -84,7 +84,7 @@ impl TreeItem for ComparisonTreeItem {
 
                 // Show match info if container has a mapping
                 if let Some(match_info) = &node.match_info {
-                    spans.push(Span::styled(" → ", Style::default().fg(theme.overlay1)));
+                    spans.push(Span::styled(" → ", Style::default().fg(theme.border_primary)));
 
                     // Extract just the container name from target path
                     let target_display = match_info.target_field
@@ -95,19 +95,19 @@ impl TreeItem for ComparisonTreeItem {
 
                     spans.push(Span::styled(
                         target_display,
-                        Style::default().fg(theme.blue),
+                        Style::default().fg(theme.accent_secondary),
                     ));
 
                     spans.push(Span::styled(
                         format!(" {}", match_info.match_type.label()),
-                        Style::default().fg(theme.overlay1),
+                        Style::default().fg(theme.border_primary),
                     ));
                 }
 
                 let mut builder = Element::styled_text(Line::from(spans));
 
                 if is_selected {
-                    builder = builder.background(Style::default().bg(theme.surface0));
+                    builder = builder.background(Style::default().bg(theme.bg_surface));
                 }
 
                 builder.build()
@@ -190,14 +190,14 @@ impl TreeItem for FieldNode {
         // Field name - colored by match state (keep color even when selected)
         let field_name_color = if let Some(match_info) = &self.match_info {
             match match_info.match_type {
-                MatchType::Exact => theme.green,        // Exact name + type match
-                MatchType::Prefix => theme.green,       // Prefix name + type match
-                MatchType::Manual => theme.green,       // User override
-                MatchType::ExampleValue => theme.sky,   // Example value match
-                MatchType::TypeMismatch => theme.yellow, // Name match but type differs
+                MatchType::Exact => theme.accent_success,        // Exact name + type match
+                MatchType::Prefix => theme.accent_success,       // Prefix name + type match
+                MatchType::Manual => theme.accent_success,       // User override
+                MatchType::ExampleValue => theme.palette_4,   // Example value match
+                MatchType::TypeMismatch => theme.accent_warning, // Name match but type differs
             }
         } else {
-            theme.red  // No match
+            theme.accent_error  // No match
         };
 
         let field_name_style = Style::default().fg(field_name_color);
@@ -210,12 +210,12 @@ impl TreeItem for FieldNode {
 
         // Required indicator (red asterisk)
         if self.metadata.is_required {
-            spans.push(Span::styled(" *", Style::default().fg(theme.red)));
+            spans.push(Span::styled(" *", Style::default().fg(theme.accent_error)));
         }
 
         // Mapping arrow and target field (if mapped)
         if let Some(match_info) = &self.match_info {
-            spans.push(Span::styled(" → ", Style::default().fg(theme.overlay1)));
+            spans.push(Span::styled(" → ", Style::default().fg(theme.border_primary)));
 
             // Extract just the field name from target path
             let target_display = match_info.target_field
@@ -226,37 +226,37 @@ impl TreeItem for FieldNode {
 
             spans.push(Span::styled(
                 target_display,
-                Style::default().fg(theme.blue),
+                Style::default().fg(theme.accent_secondary),
             ));
         }
 
         // Field type in angle brackets
         spans.push(Span::styled(
             format!(" <{:?}>", self.metadata.field_type),
-            Style::default().fg(theme.overlay1),
+            Style::default().fg(theme.border_primary),
         ));
 
         // Mapping source badge (if mapped)
         if let Some(match_info) = &self.match_info {
             spans.push(Span::styled(
                 format!(" {}", match_info.match_type.label()),
-                Style::default().fg(theme.overlay1),
+                Style::default().fg(theme.border_primary),
             ));
         }
 
         // Example value (if present)
         if let Some(example) = &self.example_value {
-            spans.push(Span::styled(" | ", Style::default().fg(theme.overlay1)));
+            spans.push(Span::styled(" | ", Style::default().fg(theme.border_primary)));
             spans.push(Span::styled(
                 truncate_value(example, 60),
-                Style::default().fg(theme.sky),
+                Style::default().fg(theme.palette_4),
             ));
         }
 
         let mut builder = Element::styled_text(Line::from(spans));
 
         if is_selected {
-            builder = builder.background(Style::default().bg(theme.surface0));
+            builder = builder.background(Style::default().bg(theme.bg_surface));
         }
 
         builder.build()
@@ -303,14 +303,14 @@ impl TreeItem for RelationshipNode {
         // Relationship name - colored by match state
         let rel_name_color = if let Some(match_info) = &self.match_info {
             match match_info.match_type {
-                MatchType::Exact => theme.green,        // Exact name + type match
-                MatchType::Prefix => theme.green,       // Prefix name + type match
-                MatchType::Manual => theme.green,       // User override
-                MatchType::ExampleValue => theme.sky,   // Example value match
-                MatchType::TypeMismatch => theme.yellow, // Name match but type differs
+                MatchType::Exact => theme.accent_success,        // Exact name + type match
+                MatchType::Prefix => theme.accent_success,       // Prefix name + type match
+                MatchType::Manual => theme.accent_success,       // User override
+                MatchType::ExampleValue => theme.palette_4,   // Example value match
+                MatchType::TypeMismatch => theme.accent_warning, // Name match but type differs
             }
         } else {
-            theme.red  // No match
+            theme.accent_error  // No match
         };
 
         spans.push(Span::styled(
@@ -320,10 +320,10 @@ impl TreeItem for RelationshipNode {
 
         // Mapping arrow and target relationship (if mapped)
         if let Some(match_info) = &self.match_info {
-            spans.push(Span::styled(" → ", Style::default().fg(theme.overlay1)));
+            spans.push(Span::styled(" → ", Style::default().fg(theme.border_primary)));
             spans.push(Span::styled(
                 match_info.target_field.clone(),
-                Style::default().fg(theme.blue),
+                Style::default().fg(theme.accent_secondary),
             ));
         }
 
@@ -343,21 +343,21 @@ impl TreeItem for RelationshipNode {
 
         spans.push(Span::styled(
             entity_display,
-            Style::default().fg(theme.overlay1),
+            Style::default().fg(theme.border_primary),
         ));
 
         // Mapping source badge (if mapped)
         if let Some(match_info) = &self.match_info {
             spans.push(Span::styled(
                 format!(" {}", match_info.match_type.label()),
-                Style::default().fg(theme.overlay1),
+                Style::default().fg(theme.border_primary),
             ));
         }
 
         let mut builder = Element::styled_text(Line::from(spans));
 
         if is_selected {
-            builder = builder.background(Style::default().bg(theme.surface0));
+            builder = builder.background(Style::default().bg(theme.bg_surface));
         }
 
         builder.build()
@@ -400,14 +400,14 @@ impl TreeItem for ViewNode {
         let mut builder = Element::styled_text(Line::from(Span::styled(
             text,
             if is_selected {
-                Style::default().fg(theme.lavender)
+                Style::default().fg(theme.accent_primary)
             } else {
-                Style::default().fg(theme.text)
+                Style::default().fg(theme.text_primary)
             },
         )));
 
         if is_selected {
-            builder = builder.background(Style::default().bg(theme.surface0));
+            builder = builder.background(Style::default().bg(theme.bg_surface));
         }
 
         builder.build()
@@ -450,14 +450,14 @@ impl TreeItem for FormNode {
         let mut builder = Element::styled_text(Line::from(Span::styled(
             text,
             if is_selected {
-                Style::default().fg(theme.lavender)
+                Style::default().fg(theme.accent_primary)
             } else {
-                Style::default().fg(theme.text)
+                Style::default().fg(theme.text_primary)
             },
         )));
 
         if is_selected {
-            builder = builder.background(Style::default().bg(theme.surface0));
+            builder = builder.background(Style::default().bg(theme.bg_surface));
         }
 
         builder.build()
@@ -505,14 +505,14 @@ impl TreeItem for EntityNode {
         // Entity name - colored by match state (keep color even when selected)
         let entity_name_color = if let Some(match_info) = &self.match_info {
             match match_info.match_type {
-                MatchType::Exact => theme.green,        // Exact name match
-                MatchType::Prefix => theme.green,       // Prefix name match
-                MatchType::Manual => theme.green,       // User override
-                MatchType::ExampleValue => theme.sky,   // Example value match
-                MatchType::TypeMismatch => theme.yellow, // Should not happen for entities
+                MatchType::Exact => theme.accent_success,        // Exact name match
+                MatchType::Prefix => theme.accent_success,       // Prefix name match
+                MatchType::Manual => theme.accent_success,       // User override
+                MatchType::ExampleValue => theme.palette_4,   // Example value match
+                MatchType::TypeMismatch => theme.accent_warning, // Should not happen for entities
             }
         } else {
-            theme.red  // No match
+            theme.accent_error  // No match
         };
 
         let entity_name_style = Style::default().fg(entity_name_color);
@@ -525,15 +525,15 @@ impl TreeItem for EntityNode {
         // Usage count
         spans.push(Span::styled(
             format!(" ({} uses)", self.usage_count),
-            Style::default().fg(theme.overlay1),
+            Style::default().fg(theme.border_primary),
         ));
 
         // Mapping arrow and target entity (if mapped)
         if let Some(match_info) = &self.match_info {
-            spans.push(Span::styled(" → ", Style::default().fg(theme.overlay1)));
+            spans.push(Span::styled(" → ", Style::default().fg(theme.border_primary)));
             spans.push(Span::styled(
                 match_info.target_field.clone(),
-                Style::default().fg(theme.blue),
+                Style::default().fg(theme.accent_secondary),
             ));
         }
 
@@ -541,14 +541,14 @@ impl TreeItem for EntityNode {
         if let Some(match_info) = &self.match_info {
             spans.push(Span::styled(
                 format!(" {}", match_info.match_type.label()),
-                Style::default().fg(theme.overlay1),
+                Style::default().fg(theme.border_primary),
             ));
         }
 
         let mut builder = Element::styled_text(Line::from(spans));
 
         if is_selected {
-            builder = builder.background(Style::default().bg(theme.surface0));
+            builder = builder.background(Style::default().bg(theme.bg_surface));
         }
 
         builder.build()

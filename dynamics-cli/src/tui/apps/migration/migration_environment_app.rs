@@ -29,9 +29,9 @@ impl ListItem for MigrationEnvironment {
 
         let theme = &crate::global_runtime_config().theme;
         let (fg_color, bg_style) = if is_selected {
-            (theme.lavender, Some(Style::default().bg(theme.surface0)))
+            (theme.accent_primary, Some(Style::default().bg(theme.bg_surface)))
         } else {
-            (theme.text, None)
+            (theme.text_primary, None)
         };
 
         let mut builder = Element::styled_text(Line::from(vec![
@@ -395,7 +395,7 @@ impl App for MigrationEnvironmentApp {
 
             let confirm_button = Element::button("delete-confirm", "Delete".to_string())
                 .on_press(Msg::ConfirmDelete)
-                .style(Style::default().fg(theme.red))
+                .style(Style::default().fg(theme.accent_error))
                 .build();
 
             let buttons = Element::row(vec![cancel_button, confirm_button])
@@ -407,7 +407,7 @@ impl App for MigrationEnvironmentApp {
                 Element::container(
                     col![
                         Element::styled_text(Line::from(vec![
-                            Span::styled("Delete Migration", Style::default().fg(theme.mauve).bold())
+                            Span::styled("Delete Migration", Style::default().fg(theme.accent_tertiary).bold())
                         ])).build() => Length(1),
                         spacer!() => Length(1),
                         Element::text(format!("Delete migration '{}'?\n\nThis action cannot be undone.", migration_name)) => Length(3),

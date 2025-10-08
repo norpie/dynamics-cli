@@ -13,7 +13,7 @@ pub fn render_primitive<Msg: Clone + Send + 'static>(
         Element::None => {}
 
         Element::Text { content, style } => {
-            let default_style = Style::default().fg(theme.text);
+            let default_style = Style::default().fg(theme.text_primary);
             let widget = Paragraph::new(content.as_str())
                 .style(style.unwrap_or(default_style));
             frame.render_widget(widget, area);

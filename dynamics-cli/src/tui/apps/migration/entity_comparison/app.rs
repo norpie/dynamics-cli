@@ -365,41 +365,41 @@ impl App for EntityComparisonApp {
             spans.push(Span::styled(
                 label,
                 if is_active {
-                    Style::default().fg(theme.lavender).italic()
+                    Style::default().fg(theme.accent_primary).italic()
                 } else {
-                    Style::default().fg(theme.subtext1)
+                    Style::default().fg(theme.text_secondary)
                 },
             ));
         }
 
         // Add separator
-        spans.push(Span::styled(" | ", Style::default().fg(theme.overlay1)));
+        spans.push(Span::styled(" | ", Style::default().fg(theme.border_primary)));
 
         // Hide matched status
         if state.hide_matched {
             spans.push(Span::styled(
                 "Hide Matched: ON",
-                Style::default().fg(theme.green),
+                Style::default().fg(theme.accent_success),
             ));
         } else {
             spans.push(Span::styled(
                 "Hide Matched: OFF",
-                Style::default().fg(theme.subtext1),
+                Style::default().fg(theme.text_secondary),
             ));
         }
 
         // Sort mode
-        spans.push(Span::styled(" | ", Style::default().fg(theme.overlay1)));
+        spans.push(Span::styled(" | ", Style::default().fg(theme.border_primary)));
         spans.push(Span::styled(
             format!("Sort: {}", state.sort_mode.label()),
-            Style::default().fg(theme.subtext1),
+            Style::default().fg(theme.text_secondary),
         ));
 
         // Technical/display names indicator
-        spans.push(Span::styled(" | ", Style::default().fg(theme.overlay1)));
+        spans.push(Span::styled(" | ", Style::default().fg(theme.border_primary)));
         spans.push(Span::styled(
             if state.show_technical_names { "Names: Technical" } else { "Names: Display" },
-            Style::default().fg(theme.subtext1),
+            Style::default().fg(theme.text_secondary),
         ));
 
         // Example display status
@@ -409,10 +409,10 @@ impl App for EntityComparisonApp {
                 if let Some(index) = state.examples.pairs.iter().position(|p| &p.id == active_pair_id) {
                     let pair_num = index + 1;
                     let total = state.examples.pairs.len();
-                    spans.push(Span::styled(" | ", Style::default().fg(theme.overlay1)));
+                    spans.push(Span::styled(" | ", Style::default().fg(theme.border_primary)));
                     spans.push(Span::styled(
                         format!("Example: {}/{}", pair_num, total),
-                        Style::default().fg(theme.sky),
+                        Style::default().fg(theme.palette_4),
                     ));
                 }
             }

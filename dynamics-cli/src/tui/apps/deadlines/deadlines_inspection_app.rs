@@ -26,9 +26,9 @@ impl ListItem for RecordListItem {
     fn to_element(&self, is_selected: bool, _is_hovered: bool) -> Element<Msg> {
         let theme = &crate::global_runtime_config().theme;
         let (fg_color, bg_style) = if is_selected {
-            (theme.lavender, Some(Style::default().bg(theme.surface0)))
+            (theme.accent_primary, Some(Style::default().bg(theme.bg_surface)))
         } else {
-            (theme.text, None)
+            (theme.text_primary, None)
         };
 
         // Extract name from direct fields
@@ -46,14 +46,14 @@ impl ListItem for RecordListItem {
 
         // Warning indicator
         let warning_indicator = if self.record.has_warnings() {
-            Span::styled("⚠ ", Style::default().fg(theme.yellow))
+            Span::styled("⚠ ", Style::default().fg(theme.accent_warning))
         } else {
             Span::styled("  ", Style::default())
         };
 
         let mut builder = Element::styled_text(Line::from(vec![
             warning_indicator,
-            Span::styled(format!("Row {}: ", self.record.source_row), Style::default().fg(theme.subtext0)),
+            Span::styled(format!("Row {}: ", self.record.source_row), Style::default().fg(theme.text_tertiary)),
             Span::styled(display_name, Style::default().fg(fg_color)),
         ]));
 
@@ -355,7 +355,7 @@ impl App for DeadlinesInspectionApp {
         } else {
             col![
                 Element::styled_text(Line::from(vec![
-                    Span::styled("No record selected", Style::default().fg(theme.subtext0))
+                    Span::styled("No record selected", Style::default().fg(theme.text_tertiary))
                 ])).build()
             ]
         };
@@ -422,15 +422,15 @@ impl App for DeadlinesInspectionApp {
             .count();
 
         Some(Line::from(vec![
-            Span::styled("Records: ", Style::default().fg(theme.subtext0)),
+            Span::styled("Records: ", Style::default().fg(theme.text_tertiary)),
             Span::styled(
                 state.transformed_records.len().to_string(),
-                Style::default().fg(theme.lavender),
+                Style::default().fg(theme.accent_primary),
             ),
-            Span::styled(" | Warnings: ", Style::default().fg(theme.subtext0)),
+            Span::styled(" | Warnings: ", Style::default().fg(theme.text_tertiary)),
             Span::styled(
                 records_with_warnings.to_string(),
-                Style::default().fg(if records_with_warnings > 0 { theme.yellow } else { theme.green }),
+                Style::default().fg(if records_with_warnings > 0 { theme.accent_warning } else { theme.accent_success }),
             ),
         ]))
     }
@@ -446,13 +446,13 @@ fn build_detail_panel(record: &TransformedDeadline, entity_type: &str) -> Elemen
     // Direct fields section
     if !record.direct_fields.is_empty() {
         builder = builder.add(Element::styled_text(Line::from(vec![
-            Span::styled("📝 Direct Fields", Style::default().fg(theme.blue).bold())
+            Span::styled("📝 Direct Fields", Style::default().fg(theme.accent_secondary).bold())
         ])).build(), Length(1));
 
         for (key, value) in &record.direct_fields {
             builder = builder.add(Element::styled_text(Line::from(vec![
-                Span::styled(format!("  {}: ", key), Style::default().fg(theme.subtext0)),
-                Span::styled(value.clone(), Style::default().fg(theme.text)),
+                Span::styled(format!("  {}: ", key), Style::default().fg(theme.text_tertiary)),
+                Span::styled(value.clone(), Style::default().fg(theme.text_primary)),
             ])).build(), Length(1));
         }
         builder = builder.add(spacer!(), Length(1));
@@ -461,7 +461,7 @@ fn build_detail_panel(record: &TransformedDeadline, entity_type: &str) -> Elemen
     // Lookup fields section
     if !record.lookup_fields.is_empty() {
         builder = builder.add(Element::styled_text(Line::from(vec![
-            Span::styled("🔗 Lookup Fields (Resolved IDs)", Style::default().fg(theme.blue).bold())
+            Span::styled("🔗 Lookup Fields (Resolved IDs)", Style::default().fg(theme.accent_secondary).bold())
         ])).build(), Length(1));
 
         for (key, (id, target_entity)) in &record.lookup_fields {
@@ -472,9 +472,9 @@ fn build_detail_panel(record: &TransformedDeadline, entity_type: &str) -> Elemen
             };
 
             builder = builder.add(Element::styled_text(Line::from(vec![
-                Span::styled(format!("  {}: ", key), Style::default().fg(theme.subtext0)),
-                Span::styled(truncated, Style::default().fg(theme.green)),
-                Span::styled(format!(" ({})", target_entity), Style::default().fg(theme.overlay1)),
+                Span::styled(format!("  {}: ", key), Style::default().fg(theme.text_tertiary)),
+                Span::styled(truncated, Style::default().fg(theme.accent_success)),
+                Span::styled(format!(" ({})", target_entity), Style::default().fg(theme.border_primary)),
             ])).build(), Length(1));
         }
         builder = builder.add(spacer!(), Length(1));
@@ -483,18 +483,18 @@ fn build_detail_panel(record: &TransformedDeadline, entity_type: &str) -> Elemen
     // Dates section
     if record.deadline_date.is_some() || record.commission_date.is_some() {
         builder = builder.add(Element::styled_text(Line::from(vec![
-            Span::styled("📅 Dates", Style::default().fg(theme.blue).bold())
+            Span::styled("📅 Dates", Style::default().fg(theme.accent_secondary).bold())
         ])).build(), Length(1));
 
         if let Some(date) = record.deadline_date {
             let mut line = vec![
-                Span::styled("  Deadline Date: ", Style::default().fg(theme.subtext0)),
-                Span::styled(date.format("%Y-%m-%d").to_string(), Style::default().fg(theme.text)),
+                Span::styled("  Deadline Date: ", Style::default().fg(theme.text_tertiary)),
+                Span::styled(date.format("%Y-%m-%d").to_string(), Style::default().fg(theme.text_primary)),
             ];
 
             if let Some(time) = record.deadline_time {
-                line.push(Span::styled(" at ", Style::default().fg(theme.subtext0)));
-                line.push(Span::styled(time.format("%H:%M:%S").to_string(), Style::default().fg(theme.text)));
+                line.push(Span::styled(" at ", Style::default().fg(theme.text_tertiary)));
+                line.push(Span::styled(time.format("%H:%M:%S").to_string(), Style::default().fg(theme.text_primary)));
             }
 
             builder = builder.add(Element::styled_text(Line::from(line)).build(), Length(1));
@@ -502,8 +502,8 @@ fn build_detail_panel(record: &TransformedDeadline, entity_type: &str) -> Elemen
 
         if let Some(date) = record.commission_date {
             builder = builder.add(Element::styled_text(Line::from(vec![
-                Span::styled("  Commission Date: ", Style::default().fg(theme.subtext0)),
-                Span::styled(date.format("%Y-%m-%d").to_string(), Style::default().fg(theme.text)),
+                Span::styled("  Commission Date: ", Style::default().fg(theme.text_tertiary)),
+                Span::styled(date.format("%Y-%m-%d").to_string(), Style::default().fg(theme.text_primary)),
             ])).build(), Length(1));
         }
         builder = builder.add(spacer!(), Length(1));
@@ -512,13 +512,13 @@ fn build_detail_panel(record: &TransformedDeadline, entity_type: &str) -> Elemen
     // Checkbox relationships section
     if !record.checkbox_relationships.is_empty() {
         builder = builder.add(Element::styled_text(Line::from(vec![
-            Span::styled("☑️  Checkbox Relationships (N:N)", Style::default().fg(theme.blue).bold())
+            Span::styled("☑️  Checkbox Relationships (N:N)", Style::default().fg(theme.accent_secondary).bold())
         ])).build(), Length(1));
 
         for (relationship, ids) in &record.checkbox_relationships {
             builder = builder.add(Element::styled_text(Line::from(vec![
-                Span::styled(format!("  {}: ", relationship), Style::default().fg(theme.subtext0)),
-                Span::styled(format!("{} items", ids.len()), Style::default().fg(theme.peach)),
+                Span::styled(format!("  {}: ", relationship), Style::default().fg(theme.text_tertiary)),
+                Span::styled(format!("{} items", ids.len()), Style::default().fg(theme.accent_muted)),
             ])).build(), Length(1));
 
             // Show first few IDs
@@ -530,14 +530,14 @@ fn build_detail_panel(record: &TransformedDeadline, entity_type: &str) -> Elemen
                 };
 
                 builder = builder.add(Element::styled_text(Line::from(vec![
-                    Span::styled(format!("    {}: ", idx + 1), Style::default().fg(theme.overlay0)),
-                    Span::styled(truncated, Style::default().fg(theme.green)),
+                    Span::styled(format!("    {}: ", idx + 1), Style::default().fg(theme.border_secondary)),
+                    Span::styled(truncated, Style::default().fg(theme.accent_success)),
                 ])).build(), Length(1));
             }
 
             if ids.len() > 3 {
                 builder = builder.add(Element::styled_text(Line::from(vec![
-                    Span::styled(format!("    ... and {} more", ids.len() - 3), Style::default().fg(theme.overlay0).italic()),
+                    Span::styled(format!("    ... and {} more", ids.len() - 3), Style::default().fg(theme.border_secondary).italic()),
                 ])).build(), Length(1));
             }
         }
@@ -548,20 +548,20 @@ fn build_detail_panel(record: &TransformedDeadline, entity_type: &str) -> Elemen
     builder = builder.add(Element::styled_text(Line::from(vec![
         Span::styled(
             if record.has_warnings() { "⚠️  Warnings" } else { "✅ Status" },
-            Style::default().fg(if record.has_warnings() { theme.yellow } else { theme.green }).bold()
+            Style::default().fg(if record.has_warnings() { theme.accent_warning } else { theme.accent_success }).bold()
         )
     ])).build(), Length(1));
 
     if !record.warnings.is_empty() {
         for warning in &record.warnings {
             builder = builder.add(Element::styled_text(Line::from(vec![
-                Span::styled("  • ", Style::default().fg(theme.yellow)),
-                Span::styled(warning.clone(), Style::default().fg(theme.red)),
+                Span::styled("  • ", Style::default().fg(theme.accent_warning)),
+                Span::styled(warning.clone(), Style::default().fg(theme.accent_error)),
             ])).build(), Length(1));
         }
     } else {
         builder = builder.add(Element::styled_text(Line::from(vec![
-            Span::styled("  No warnings - record is ready for upload", Style::default().fg(theme.green))
+            Span::styled("  No warnings - record is ready for upload", Style::default().fg(theme.accent_success))
         ])).build(), Length(1));
     }
 

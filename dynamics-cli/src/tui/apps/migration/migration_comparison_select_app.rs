@@ -105,9 +105,9 @@ impl ListItem for SavedComparison {
     fn to_element(&self, is_selected: bool, _is_hovered: bool) -> Element<Self::Msg> {
         let theme = &crate::global_runtime_config().theme;
         let (fg_color, bg_style) = if is_selected {
-            (theme.lavender, Some(Style::default().bg(theme.surface0)))
+            (theme.accent_primary, Some(Style::default().bg(theme.bg_surface)))
         } else {
-            (theme.text, None)
+            (theme.text_primary, None)
         };
 
         let mut builder = Element::styled_text(Line::from(vec![
@@ -532,7 +532,7 @@ impl App for MigrationComparisonSelectApp {
 
             let confirm_button = Element::button("delete-confirm", "Delete".to_string())
                 .on_press(Msg::ConfirmDelete)
-                .style(Style::default().fg(theme.red))
+                .style(Style::default().fg(theme.accent_error))
                 .build();
 
             let buttons = Element::row(vec![cancel_button, confirm_button])
@@ -544,7 +544,7 @@ impl App for MigrationComparisonSelectApp {
                 Element::container(
                     col![
                         Element::styled_text(Line::from(vec![
-                            Span::styled("Delete Comparison", Style::default().fg(theme.mauve).bold())
+                            Span::styled("Delete Comparison", Style::default().fg(theme.accent_tertiary).bold())
                         ])).build() => Length(1),
                         spacer!() => Length(1),
                         Element::text(format!("Delete comparison '{}'?\n\nThis action cannot be undone.", comparison_name)) => Length(3),
@@ -773,19 +773,19 @@ impl App for MigrationComparisonSelectApp {
             };
 
             Some(Line::from(vec![
-                Span::styled(migration_name.clone(), Style::default().fg(theme.text)),
+                Span::styled(migration_name.clone(), Style::default().fg(theme.text_primary)),
                 Span::styled(
                     format!(" ({} → {})", source, target),
-                    Style::default().fg(theme.subtext1),
+                    Style::default().fg(theme.text_secondary),
                 ),
                 Span::styled(
                     format!(" ({}:{})", source_count_str, target_count_str),
-                    Style::default().fg(theme.overlay1),
+                    Style::default().fg(theme.border_primary),
                 ),
             ]))
         } else {
             Some(Line::from(vec![
-                Span::styled("Loading migration data...", Style::default().fg(theme.subtext1))
+                Span::styled("Loading migration data...", Style::default().fg(theme.text_secondary))
             ]))
         }
     }

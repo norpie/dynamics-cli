@@ -36,11 +36,11 @@ impl<Msg: Clone> ListItem for ExamplePairItem<Msg> {
         };
 
         let mut builder = Element::styled_text(Line::from(vec![
-            Span::styled(display, Style::default().fg(theme.text))
+            Span::styled(display, Style::default().fg(theme.text_primary))
         ]));
 
         if is_selected {
-            builder = builder.background(Style::default().bg(theme.surface0));
+            builder = builder.background(Style::default().bg(theme.bg_surface));
         }
 
         builder.build()
@@ -274,7 +274,7 @@ impl<Msg: Clone> ExamplesModal<Msg> {
         let modal_body = col![
             Element::styled_text(
                 Line::from(vec![
-                    Span::styled("Example Record Pairs", Style::default().fg(theme.mauve).bold())
+                    Span::styled("Example Record Pairs", Style::default().fg(theme.accent_tertiary).bold())
                 ])
             ).build() => Length(1),
             spacer!() => Length(1),

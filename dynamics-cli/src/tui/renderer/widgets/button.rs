@@ -68,12 +68,12 @@ pub fn render_button<Msg: Clone + Send + 'static>(
     let is_focused = focused_id == Some(id);
 
     // Render button widget
-    let default_style = Style::default().fg(theme.text);
+    let default_style = Style::default().fg(theme.text_primary);
     // Always show focus border on button (unlike other widgets, buttons need clear visual focus)
     let border_style = if is_focused {
-        Style::default().fg(theme.lavender)
+        Style::default().fg(theme.accent_primary)
     } else {
-        Style::default().fg(theme.overlay0)
+        Style::default().fg(theme.border_secondary)
     };
     let block = Block::default()
         .borders(Borders::ALL)

@@ -672,13 +672,13 @@ impl Renderer {
             // Then render solid background fill (Paragraph with content fills reliably)
             let fill_lines: Vec<String> = (0..dropdown_height).map(|_| " ".repeat(dropdown.select_area.width as usize)).collect();
             let background = Paragraph::new(fill_lines.join("\n"))
-                .style(Style::default().bg(theme.base));
+                .style(Style::default().bg(theme.bg_base));
             frame.render_widget(background, dropdown_area);
 
             // Then render dropdown panel with borders on top
             let dropdown_block = Block::default()
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.overlay1));
+                .border_style(Style::default().fg(theme.border_primary));
 
             let dropdown_inner = dropdown_block.inner(dropdown_area);
             frame.render_widget(dropdown_block, dropdown_area);
@@ -699,11 +699,11 @@ impl Renderer {
 
                 // Determine styling for this option
                 let (prefix, fg_color, bg_color) = if idx == dropdown.highlight {
-                    ("> ", theme.text, theme.surface0)
+                    ("> ", theme.text_primary, theme.bg_surface)
                 } else if Some(idx) == dropdown.selected {
-                    ("✓ ", theme.green, theme.base)
+                    ("✓ ", theme.accent_success, theme.bg_base)
                 } else {
-                    ("  ", theme.text, theme.base)
+                    ("  ", theme.text_primary, theme.bg_base)
                 };
 
                 // Render the option text with background, padded to fill width

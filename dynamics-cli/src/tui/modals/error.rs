@@ -61,8 +61,8 @@ impl<Msg: Clone> ErrorModal<Msg> {
         // Error icon + title
         let theme = &crate::global_runtime_config().theme;
         let title_element = Element::styled_text(Line::from(vec![
-            Span::styled("✗ ", Style::default().fg(theme.red).bold()),
-            Span::styled(self.title, Style::default().fg(theme.red).bold())
+            Span::styled("✗ ", Style::default().fg(theme.accent_error).bold()),
+            Span::styled(self.title, Style::default().fg(theme.accent_error).bold())
         ])).build();
 
         // Details element (if present)

@@ -143,9 +143,9 @@ pub fn render_autocomplete<Msg: Clone + Send + 'static>(
 
     // Determine text style
     let text_style = if current_input.is_empty() && !is_focused {
-        Style::default().fg(theme.overlay1).italic()
+        Style::default().fg(theme.border_primary).italic()
     } else {
-        Style::default().fg(theme.text)
+        Style::default().fg(theme.text_primary)
     };
 
     // Render text without border (like TextInput/Select)

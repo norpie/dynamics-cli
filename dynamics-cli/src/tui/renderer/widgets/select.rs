@@ -141,7 +141,7 @@ pub fn render_select<Msg: Clone + Send + 'static>(
 
     // Render text without border
     let text_widget = Paragraph::new(display_text)
-        .style(Style::default().fg(theme.text));
+        .style(Style::default().fg(theme.text_primary));
     frame.render_widget(text_widget, area);
 
     // Register click handler for toggle

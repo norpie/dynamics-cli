@@ -333,7 +333,7 @@ pub fn render_scrollable<Msg: Clone + Send + 'static>(
                 width: 1,
                 height: 1,
             };
-            let thumb = Block::default().style(Style::default().fg(theme.overlay1));
+            let thumb = Block::default().style(Style::default().fg(theme.border_primary));
             frame.render_widget(thumb, thumb_area);
         }
     }
@@ -361,7 +361,7 @@ pub fn render_scrollable<Msg: Clone + Send + 'static>(
                 width: 1,
                 height: 1,
             };
-            let thumb = Block::default().style(Style::default().fg(theme.overlay1));
+            let thumb = Block::default().style(Style::default().fg(theme.border_primary));
             frame.render_widget(thumb, thumb_area);
         }
     }
@@ -370,7 +370,7 @@ pub fn render_scrollable<Msg: Clone + Send + 'static>(
     if is_focused && !inside_panel {
         let border = Block::default()
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(theme.lavender));
+            .border_style(Style::default().fg(theme.accent_primary));
         frame.render_widget(border, area);
     }
 }

@@ -128,9 +128,9 @@ pub fn render_text_input<Msg: Clone + Send + 'static>(
     // Determine text style
     let text_style = if value.is_empty() && !is_focused {
         // Placeholder style: italic, dim color
-        Style::default().fg(theme.overlay1).italic()
+        Style::default().fg(theme.border_primary).italic()
     } else {
-        Style::default().fg(theme.text)
+        Style::default().fg(theme.text_primary)
     };
 
     // Render text without border

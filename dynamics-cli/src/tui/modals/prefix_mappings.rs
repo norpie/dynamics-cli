@@ -23,11 +23,11 @@ impl<Msg: Clone> ListItem for PrefixMappingItem<Msg> {
         let display = format!("{} → {}", self.source_prefix, self.target_prefix);
 
         let mut builder = Element::styled_text(Line::from(vec![
-            Span::styled(display, Style::default().fg(theme.text))
+            Span::styled(display, Style::default().fg(theme.text_primary))
         ]));
 
         if is_selected {
-            builder = builder.background(Style::default().bg(theme.surface0));
+            builder = builder.background(Style::default().bg(theme.bg_surface));
         }
 
         builder.build()
@@ -229,7 +229,7 @@ impl<Msg: Clone> PrefixMappingsModal<Msg> {
         let modal_body = col![
             Element::styled_text(
                 Line::from(vec![
-                    Span::styled("Prefix Mappings", Style::default().fg(theme.mauve).bold())
+                    Span::styled("Prefix Mappings", Style::default().fg(theme.accent_tertiary).bold())
                 ])
             ).build() => Length(1),
             spacer!() => Length(1),
