@@ -316,6 +316,60 @@ impl MultiAppRuntime {
             self.runtimes.get_mut(&AppId::AppLauncher)
                 .expect("AppLauncher not found in runtimes")
                 .take_navigation();
+
+            // Properly handle lifecycle transitions
+            let current_app = self.active_app;
+            if current_app != AppId::AppLauncher {
+                // Handle current app based on quit and suspend policies
+                let quit_policy = self.factories.get(&current_app)
+                    .map(|f| f.quit_policy())
+                    .unwrap_or(crate::tui::QuitPolicy::Sleep);
+
+                match quit_policy {
+                    crate::tui::QuitPolicy::Sleep | crate::tui::QuitPolicy::QuitOnIdle(_) => {
+                        // Check suspend policy
+                        let suspend_policy = self.factories.get(&current_app)
+                            .map(|f| f.suspend_policy())
+                            .unwrap_or(crate::tui::SuspendPolicy::Suspend);
+
+                        match suspend_policy {
+                            crate::tui::SuspendPolicy::Suspend => {
+                                // Keep app in background and call on_suspend
+                                self.lifecycles.insert(current_app, AppLifecycle::Background);
+                                if let Some(runtime) = self.runtimes.get_mut(&current_app) {
+                                    runtime.on_suspend().ok();
+                                }
+                            }
+                            crate::tui::SuspendPolicy::AlwaysActive => {
+                                // Keep app in background but don't call on_suspend
+                                self.lifecycles.insert(current_app, AppLifecycle::Background);
+                            }
+                            crate::tui::SuspendPolicy::QuitOnSuspend => {
+                                // Destroy app instead of suspending
+                                if let Some(mut runtime) = self.runtimes.remove(&current_app) {
+                                    runtime.on_destroy().ok();
+                                }
+                                self.lifecycles.insert(current_app, AppLifecycle::Dead);
+                            }
+                        }
+                    }
+                    crate::tui::QuitPolicy::QuitOnExit => {
+                        if let Some(mut runtime) = self.runtimes.remove(&current_app) {
+                            runtime.on_destroy().ok();
+                        }
+                        self.lifecycles.insert(current_app, AppLifecycle::Dead);
+                    }
+                }
+
+                // Resume app launcher if it was backgrounded
+                if matches!(self.lifecycles.get(&AppId::AppLauncher), Some(AppLifecycle::Background)) {
+                    if let Some(runtime) = self.runtimes.get_mut(&AppId::AppLauncher) {
+                        runtime.on_resume().ok();
+                    }
+                }
+                self.lifecycles.insert(AppId::AppLauncher, AppLifecycle::Running);
+            }
+
             self.active_app = AppId::AppLauncher;
             return Ok(true);
         }
@@ -921,18 +975,38 @@ impl MultiAppRuntime {
 
         // Handle start_app first (it includes params)
         if let Some((target, params)) = start_app_request {
-            // Suspend current app if it has a Sleep policy
+            // Handle current app based on quit and suspend policies
             if let Some(current_runtime) = self.runtimes.get(&self.active_app) {
-                let policy = self.factories.get(&self.active_app)
+                let quit_policy = self.factories.get(&self.active_app)
                     .map(|f| f.quit_policy())
                     .unwrap_or(crate::tui::QuitPolicy::Sleep);
 
-                match policy {
-                    crate::tui::QuitPolicy::Sleep => {
-                        // Keep app in background
-                        self.lifecycles.insert(self.active_app, AppLifecycle::Background);
-                        if let Some(runtime) = self.runtimes.get_mut(&self.active_app) {
-                            runtime.on_suspend().ok();
+                match quit_policy {
+                    crate::tui::QuitPolicy::Sleep | crate::tui::QuitPolicy::QuitOnIdle(_) => {
+                        // Check suspend policy
+                        let suspend_policy = self.factories.get(&self.active_app)
+                            .map(|f| f.suspend_policy())
+                            .unwrap_or(crate::tui::SuspendPolicy::Suspend);
+
+                        match suspend_policy {
+                            crate::tui::SuspendPolicy::Suspend => {
+                                // Keep app in background and call on_suspend
+                                self.lifecycles.insert(self.active_app, AppLifecycle::Background);
+                                if let Some(runtime) = self.runtimes.get_mut(&self.active_app) {
+                                    runtime.on_suspend().ok();
+                                }
+                            }
+                            crate::tui::SuspendPolicy::AlwaysActive => {
+                                // Keep app in background but don't call on_suspend
+                                self.lifecycles.insert(self.active_app, AppLifecycle::Background);
+                            }
+                            crate::tui::SuspendPolicy::QuitOnSuspend => {
+                                // Destroy app instead of suspending
+                                if let Some(mut runtime) = self.runtimes.remove(&self.active_app) {
+                                    runtime.on_destroy().ok();
+                                }
+                                self.lifecycles.insert(self.active_app, AppLifecycle::Dead);
+                            }
                         }
                     }
                     crate::tui::QuitPolicy::QuitOnExit => {
@@ -941,13 +1015,6 @@ impl MultiAppRuntime {
                             runtime.on_destroy().ok();
                         }
                         self.lifecycles.insert(self.active_app, AppLifecycle::Dead);
-                    }
-                    crate::tui::QuitPolicy::QuitOnIdle(_) => {
-                        // For now, treat like Sleep
-                        self.lifecycles.insert(self.active_app, AppLifecycle::Background);
-                        if let Some(runtime) = self.runtimes.get_mut(&self.active_app) {
-                            runtime.on_suspend().ok();
-                        }
                     }
                 }
             }
@@ -966,18 +1033,38 @@ impl MultiAppRuntime {
         }
 
         if let Some(target) = nav_target {
-            // Suspend current app if it has a Sleep policy
+            // Handle current app based on quit and suspend policies
             if let Some(current_runtime) = self.runtimes.get(&self.active_app) {
-                let policy = self.factories.get(&self.active_app)
+                let quit_policy = self.factories.get(&self.active_app)
                     .map(|f| f.quit_policy())
                     .unwrap_or(crate::tui::QuitPolicy::Sleep);
 
-                match policy {
-                    crate::tui::QuitPolicy::Sleep => {
-                        // Keep app in background
-                        self.lifecycles.insert(self.active_app, AppLifecycle::Background);
-                        if let Some(runtime) = self.runtimes.get_mut(&self.active_app) {
-                            runtime.on_suspend().ok();
+                match quit_policy {
+                    crate::tui::QuitPolicy::Sleep | crate::tui::QuitPolicy::QuitOnIdle(_) => {
+                        // Check suspend policy
+                        let suspend_policy = self.factories.get(&self.active_app)
+                            .map(|f| f.suspend_policy())
+                            .unwrap_or(crate::tui::SuspendPolicy::Suspend);
+
+                        match suspend_policy {
+                            crate::tui::SuspendPolicy::Suspend => {
+                                // Keep app in background and call on_suspend
+                                self.lifecycles.insert(self.active_app, AppLifecycle::Background);
+                                if let Some(runtime) = self.runtimes.get_mut(&self.active_app) {
+                                    runtime.on_suspend().ok();
+                                }
+                            }
+                            crate::tui::SuspendPolicy::AlwaysActive => {
+                                // Keep app in background but don't call on_suspend
+                                self.lifecycles.insert(self.active_app, AppLifecycle::Background);
+                            }
+                            crate::tui::SuspendPolicy::QuitOnSuspend => {
+                                // Destroy app instead of suspending
+                                if let Some(mut runtime) = self.runtimes.remove(&self.active_app) {
+                                    runtime.on_destroy().ok();
+                                }
+                                self.lifecycles.insert(self.active_app, AppLifecycle::Dead);
+                            }
                         }
                     }
                     crate::tui::QuitPolicy::QuitOnExit => {
@@ -986,13 +1073,6 @@ impl MultiAppRuntime {
                             runtime.on_destroy().ok();
                         }
                         self.lifecycles.insert(self.active_app, AppLifecycle::Dead);
-                    }
-                    crate::tui::QuitPolicy::QuitOnIdle(_) => {
-                        // For now, treat like Sleep
-                        self.lifecycles.insert(self.active_app, AppLifecycle::Background);
-                        if let Some(runtime) = self.runtimes.get_mut(&self.active_app) {
-                            runtime.on_suspend().ok();
-                        }
                     }
                 }
             }

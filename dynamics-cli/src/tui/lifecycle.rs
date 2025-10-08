@@ -38,6 +38,25 @@ impl Default for QuitPolicy {
     }
 }
 
+/// Policy for what happens when an app goes to background
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SuspendPolicy {
+    /// Call on_suspend() when backgrounded (default)
+    Suspend,
+
+    /// Never call on_suspend(), stay fully active in background
+    AlwaysActive,
+
+    /// Destroy app immediately when backgrounded (don't keep state)
+    QuitOnSuspend,
+}
+
+impl Default for SuspendPolicy {
+    fn default() -> Self {
+        SuspendPolicy::Suspend
+    }
+}
+
 /// Reason why an app is being forcibly killed
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KillReason {

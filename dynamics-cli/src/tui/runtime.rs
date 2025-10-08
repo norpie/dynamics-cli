@@ -9,7 +9,7 @@ use std::pin::Pin;
 use std::future::Future;
 use std::any::Any;
 
-use crate::tui::{App, AppId, Command, Renderer, InteractionRegistry, Subscription, AppState, KeyBinding, QuitPolicy};
+use crate::tui::{App, AppId, Command, Renderer, InteractionRegistry, Subscription, AppState, KeyBinding, QuitPolicy, SuspendPolicy};
 use crate::tui::command::{ParallelConfig, DispatchTarget};
 use crate::tui::renderer::{FocusRegistry, FocusableInfo, DropdownRegistry};
 use crate::tui::element::FocusId;
@@ -22,6 +22,9 @@ pub trait AppFactory: Send {
 
     /// Get the quit policy for this app type
     fn quit_policy(&self) -> QuitPolicy;
+
+    /// Get the suspend policy for this app type
+    fn suspend_policy(&self) -> SuspendPolicy;
 }
 
 /// Trait for runtime operations, allowing type-erased storage of different Runtime<A> types
@@ -1051,5 +1054,9 @@ where
 
     fn quit_policy(&self) -> QuitPolicy {
         A::quit_policy()
+    }
+
+    fn suspend_policy(&self) -> SuspendPolicy {
+        A::suspend_policy()
     }
 }

@@ -1,4 +1,4 @@
-use crate::tui::{Command, Element, Subscription, Theme, LayeredView, QuitPolicy};
+use crate::tui::{Command, Element, Subscription, Theme, LayeredView, QuitPolicy, SuspendPolicy};
 use crate::tui::element::FocusId;
 use ratatui::text::Line;
 use std::any::Any;
@@ -68,6 +68,11 @@ pub trait App: Sized + Send + 'static {
     /// Policy for what happens when navigating away from this app
     fn quit_policy() -> QuitPolicy {
         QuitPolicy::Sleep
+    }
+
+    /// Policy for what happens when app is suspended (backgrounded)
+    fn suspend_policy() -> SuspendPolicy {
+        SuspendPolicy::Suspend
     }
 
     /// Check if app can quit (return Err to veto)
