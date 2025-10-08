@@ -16,11 +16,20 @@ use crate::tui::color::color_to_hex;
 /// Create on_key handler for color picker
 pub fn color_picker_on_key<Msg: Clone + Send + 'static>(
     on_event: fn(ColorPickerEvent) -> Msg,
+    state: &ColorPickerState,
 ) -> Box<dyn Fn(KeyEvent) -> DispatchTarget<Msg> + Send> {
+    let current_color = state.color();
+
     Box::new(move |key_event| match key_event.code {
-        KeyCode::Enter => DispatchTarget::PassThrough,  // Could be submit - let widget state decide
-        KeyCode::Esc => DispatchTarget::PassThrough,    // Let runtime handle unfocus/modal close
-        _ => DispatchTarget::PassThrough,  // Widget handles all keys internally
+        KeyCode::Enter => {
+            // Submit with current color
+            DispatchTarget::AppMsg(on_event(ColorPickerEvent::Submitted(current_color)))
+        },
+        KeyCode::Esc => DispatchTarget::PassThrough,  // Let runtime handle unfocus/modal close
+        key_code => {
+            // Pass key to app for handling
+            DispatchTarget::AppMsg(on_event(ColorPickerEvent::Changed(key_code)))
+        }
     })
 }
 
@@ -48,7 +57,7 @@ pub fn render_color_picker<Msg: Clone + Send + 'static>(
         focus_registry.register_focusable(FocusableInfo {
             id: id.clone(),
             rect: area,
-            on_key: color_picker_on_key(*event_handler),
+            on_key: color_picker_on_key(*event_handler, state),
             on_focus: on_focus.clone(),
             on_blur: on_blur.clone(),
             inside_panel: _inside_panel,

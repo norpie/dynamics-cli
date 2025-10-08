@@ -63,10 +63,8 @@ pub enum FileBrowserEvent {
 /// Event type for ColorPicker widget
 #[derive(Clone, Debug)]
 pub enum ColorPickerEvent {
-    /// Color value changed (arrow keys, typing in hex, etc.)
-    Changed(ratatui::style::Color),
-    /// Display mode toggled (M key)
-    ModeToggled,
+    /// Key pressed (for state updates)
+    Changed(KeyCode),
     /// Color confirmed (Enter key)
     Submitted(ratatui::style::Color),
 }

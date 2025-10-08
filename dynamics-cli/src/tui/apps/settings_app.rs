@@ -1094,9 +1094,9 @@ impl App for SettingsApp {
             Msg::ColorPickerEvent(event) => {
                 use crate::tui::widgets::ColorPickerEvent;
                 match event {
-                    ColorPickerEvent::Changed(_) => Command::None,
-                    ColorPickerEvent::ModeToggled => {
-                        state.color_picker_state.toggle_mode();
+                    ColorPickerEvent::Changed(key_code) => {
+                        // Let the state handle the key and update itself
+                        state.color_picker_state.handle_key(key_code);
                         Command::None
                     }
                     ColorPickerEvent::Submitted(_) => {
@@ -1513,17 +1513,41 @@ impl SettingsApp {
             .on_event(Msg::ColorPickerEvent)
             .build();
 
-            let title = format!("Edit {} - {}", editing.theme_name, editing.color_name);
+            let title = format!("Edit Color: {} - {}", editing.theme_name, editing.color_name);
+
+            // Show current color preview
+            let colored_box = "████████████";
+            let hex_value = format!("#{}", state.color_picker_state.hex());
+            let preview_line = Line::from(vec![
+                Span::raw("Current: "),
+                Span::styled(colored_box, Style::default().fg(state.color_picker_state.color())),
+                Span::raw("  "),
+                Span::styled(hex_value, Style::default().fg(theme.text_secondary)),
+            ]);
 
             let content = col![
-                picker => Length(12),
+                Element::styled_text(preview_line).build() => Length(1),
+                Element::text("") => Length(1),
+                picker => Length(9),
                 Element::text("") => Length(1),
                 Element::styled_text(Line::from(vec![
-                    Span::raw("Press "),
-                    Span::styled("Enter", Style::default().fg(theme.accent_primary).bold()),
-                    Span::raw(" to save, "),
-                    Span::styled("Esc", Style::default().fg(theme.accent_primary).bold()),
-                    Span::raw(" to cancel"),
+                    Span::styled("Controls: ", Style::default().fg(theme.text_primary).bold()),
+                ])).build() => Length(1),
+                Element::styled_text(Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled("←/→", Style::default().fg(theme.accent_primary).bold()),
+                    Span::raw(" Adjust value  "),
+                    Span::styled("Tab", Style::default().fg(theme.accent_primary).bold()),
+                    Span::raw(" Next channel  "),
+                    Span::styled("M", Style::default().fg(theme.accent_primary).bold()),
+                    Span::raw(" Toggle HSL/RGB"),
+                ])).build() => Length(1),
+                Element::styled_text(Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled("Enter", Style::default().fg(theme.accent_success).bold()),
+                    Span::raw(" Save  "),
+                    Span::styled("Esc", Style::default().fg(theme.accent_error).bold()),
+                    Span::raw(" Cancel"),
                 ])).build() => Length(1),
             ];
 
