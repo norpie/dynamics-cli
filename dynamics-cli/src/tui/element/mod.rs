@@ -260,6 +260,17 @@ pub enum Element<Msg> {
         on_blur: Option<Msg>,
         on_render: Option<fn(usize) -> Msg>,  // Called with actual viewport height from renderer
     },
+
+    /// Color picker widget (HSL/RGB sliders + hex input)
+    ColorPicker {
+        id: FocusId,
+        value: ratatui::style::Color,                       // Current color
+        mode: crate::tui::widgets::ColorPickerMode,         // HSL or RGB mode
+        state: crate::tui::widgets::ColorPickerState,       // Widget state
+        on_event: Option<fn(crate::tui::widgets::ColorPickerEvent) -> Msg>,  // Unified event handler
+        on_focus: Option<Msg>,
+        on_blur: Option<Msg>,
+    },
 }
 
 impl<Msg> Element<Msg> {

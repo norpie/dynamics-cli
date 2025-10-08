@@ -1,4 +1,5 @@
 pub mod autocomplete;
+pub mod color_picker;
 pub mod events;
 pub mod fields;
 pub mod file_browser;
@@ -9,7 +10,8 @@ pub mod text_input;
 pub mod tree;
 
 pub use autocomplete::AutocompleteState;
-pub use events::{AutocompleteEvent, FileBrowserEvent, ListEvent, SelectEvent, TextInputEvent, TreeEvent};
+pub use color_picker::{ColorPickerState, ColorPickerMode, Channel};
+pub use events::{AutocompleteEvent, ColorPickerEvent, FileBrowserEvent, ListEvent, SelectEvent, TextInputEvent, TreeEvent};
 pub use fields::{AutocompleteField, SelectField, TextInputField};
 pub use file_browser::{FileBrowserState, FileBrowserEntry, FileBrowserAction};
 pub use list::{ListItem, ListState};

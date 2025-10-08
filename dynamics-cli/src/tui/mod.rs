@@ -10,6 +10,7 @@ pub mod state;
 pub mod widgets;
 pub mod resource;
 pub mod modals;
+pub mod color;
 pub mod lifecycle;
 
 #[macro_use]

@@ -55,7 +55,7 @@ impl Theme {
         }
     }
 
-    fn mocha() -> Self {
+    pub fn mocha() -> Self {
         Self {
             // Accent colors (from Catppuccin Mocha)
             accent_primary: Color::Rgb(0xb4, 0xbe, 0xfe),    // lavender
@@ -88,7 +88,7 @@ impl Theme {
         }
     }
 
-    fn latte() -> Self {
+    pub fn latte() -> Self {
         Self {
             // Accent colors (from Catppuccin Latte)
             accent_primary: Color::Rgb(0x72, 0x87, 0xfd),    // lavender

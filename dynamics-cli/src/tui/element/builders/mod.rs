@@ -13,6 +13,7 @@ mod scrollable;
 mod select;
 mod autocomplete;
 mod file_browser;
+mod color_picker;
 
 // Re-export builders
 pub use styled_text::StyledTextBuilder;
@@ -29,3 +30,4 @@ pub use scrollable::ScrollableBuilder;
 pub use select::SelectBuilder;
 pub use autocomplete::AutocompleteBuilder;
 pub use file_browser::FileBrowserBuilder;
+pub use color_picker::ColorPickerBuilder;
