@@ -995,19 +995,35 @@ impl MultiAppRuntime {
 
     /// Check if any navigation commands were issued
     fn check_navigation(&mut self) -> Result<bool> {
-        // Check if start_app was requested (takes priority over navigation)
-        let start_app_request = if let Some(runtime) = self.runtimes.get_mut(&self.active_app) {
-            runtime.take_start_app()
-        } else {
-            None
-        };
+        // Check ALL apps for navigation requests (not just active app)
+        // This allows background apps (like LoadingScreen) to trigger navigation when tasks complete
+        let mut start_app_request = None;
+        let mut nav_target = None;
+        let mut nav_source_app = self.active_app;
 
-        // Check if navigation was requested from active app
-        let nav_target = if let Some(runtime) = self.runtimes.get_mut(&self.active_app) {
-            runtime.take_navigation()
-        } else {
-            None
-        };
+        // Check active app first (priority)
+        if let Some(runtime) = self.runtimes.get_mut(&self.active_app) {
+            start_app_request = runtime.take_start_app();
+            nav_target = runtime.take_navigation();
+        }
+
+        // If active app didn't request navigation, check all background apps
+        if start_app_request.is_none() && nav_target.is_none() {
+            for (app_id, runtime) in self.runtimes.iter_mut() {
+                if *app_id != self.active_app {
+                    if let Some(start) = runtime.take_start_app() {
+                        start_app_request = Some(start);
+                        nav_source_app = *app_id;
+                        break;
+                    }
+                    if let Some(target) = runtime.take_navigation() {
+                        nav_target = Some(target);
+                        nav_source_app = *app_id;
+                        break;
+                    }
+                }
+            }
+        }
 
         // Handle start_app first (it includes params)
         if let Some((target, params)) = start_app_request {

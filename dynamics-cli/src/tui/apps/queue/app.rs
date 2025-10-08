@@ -1004,6 +1004,10 @@ impl App for OperationQueueApp {
             None
         }
     }
+
+    fn suspend_policy() -> crate::tui::SuspendPolicy {
+        crate::tui::SuspendPolicy::AlwaysActive
+    }
 }
 
 /// Helper function to save queue settings to database

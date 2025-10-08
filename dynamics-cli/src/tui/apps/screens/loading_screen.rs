@@ -85,7 +85,7 @@ impl App for LoadingScreen {
     }
 
     fn quit_policy() -> crate::tui::QuitPolicy {
-        crate::tui::QuitPolicy::QuitOnExit
+        crate::tui::QuitPolicy::Sleep
     }
 
     fn update(state: &mut State, msg: Msg) -> Command<Msg> {
@@ -255,5 +255,9 @@ impl App for LoadingScreen {
 
     fn title() -> &'static str {
         "Loading"
+    }
+
+    fn suspend_policy() -> crate::tui::SuspendPolicy {
+        crate::tui::SuspendPolicy::AlwaysActive
     }
 }
