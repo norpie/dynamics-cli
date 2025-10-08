@@ -41,7 +41,7 @@ pub struct State {
 
     // Theme editor state (theme view)
     theme_names: Vec<String>,
-    theme_list_state: ListState,
+    theme_select_state: crate::tui::widgets::SelectState,
     selected_theme_idx: usize,
     active_theme_name: String,
     editing_color: Option<EditingColor>,
@@ -100,10 +100,12 @@ pub enum Msg {
 
     // Theme editor
     ThemeNamesLoaded(Vec<String>),
-    SelectTheme(usize),
-    ThemeListNavigate(crossterm::event::KeyCode),
+    ThemeSelectEvent(crate::tui::widgets::SelectEvent),
+    ActivateSelectedTheme,
     ActivateTheme(String),
     ThemeActivated(Result<String, String>),
+    CreateTheme,
+    DeleteSelectedTheme,
     EditThemeColor(String, String),  // theme_name, color_name
     ColorPickerEvent(crate::tui::widgets::ColorPickerEvent),
     SaveColor,
@@ -129,7 +131,7 @@ impl Default for State {
             edit_select_state: crate::tui::widgets::SelectState::new(),
             error: None,
             theme_names: Vec::new(),
-            theme_list_state: ListState::with_selection(),
+            theme_select_state: crate::tui::widgets::SelectState::new(),
             selected_theme_idx: 0,
             active_theme_name: "mocha".to_string(),
             editing_color: None,
@@ -222,13 +224,8 @@ impl App for SettingsApp {
         let registry = crate::options_registry();
         state.namespaces = registry.namespaces();
 
-        // Load options for first namespace
-        if !state.namespaces.is_empty() {
-            state.current_options = registry.list_namespace(&state.namespaces[0]);
-        }
-
-        // Load current values
-        let cmd = Command::batch(vec![
+        // Check if first namespace is "theme" and set up accordingly
+        let mut commands = vec![
             Command::perform(
                 async {
                     let config = crate::global_config();
@@ -245,9 +242,33 @@ impl App for SettingsApp {
                 Msg::ValuesLoaded,
             ),
             Command::set_focus(FocusId::new("namespace-list")),
-        ]);
+        ];
 
-        (state, cmd)
+        // Load options for first namespace
+        if !state.namespaces.is_empty() {
+            let first_namespace = &state.namespaces[0];
+            if first_namespace == "theme" {
+                state.view_mode = ViewMode::ThemeEditor;
+                // Load theme names for theme editor
+                commands.push(Command::perform(
+                    async {
+                        use crate::config::options::registrations::themes;
+                        let registry = crate::options_registry();
+                        themes::list_themes(&registry)
+                    },
+                    Msg::ThemeNamesLoaded
+                ));
+            } else {
+                let mut options = registry.list_namespace(first_namespace);
+                // Filter out theme.active if in theme namespace (handled by theme editor)
+                if first_namespace == "theme" {
+                    options.retain(|opt| opt.local_key != "active");
+                }
+                state.current_options = options;
+            }
+        }
+
+        (state, Command::batch(commands))
     }
 
     fn update(state: &mut State, msg: Msg) -> Command<Msg> {
@@ -277,7 +298,14 @@ impl App for SettingsApp {
 
                         // Load options for this namespace
                         let registry = crate::options_registry();
-                        state.current_options = registry.list_namespace(namespace);
+                        let mut options = registry.list_namespace(namespace);
+
+                        // Filter out theme.active if in theme namespace (handled by theme editor)
+                        if namespace == "theme" {
+                            options.retain(|opt| opt.local_key != "active");
+                        }
+
+                        state.current_options = options;
 
                         // Focus the options list after selecting a category
                         return Command::set_focus(FocusId::new("option-list"));
@@ -363,12 +391,8 @@ impl App for SettingsApp {
                 // Sync the selected namespace index with the list state
                 if let Some(selected) = state.namespace_list_state.selected() {
                     if selected != state.selected_namespace && selected < state.namespaces.len() {
-                        state.selected_namespace = selected;
-                        state.selected_option = 0;
-
-                        // Load options for this namespace
-                        let registry = crate::options_registry();
-                        state.current_options = registry.list_namespace(&state.namespaces[selected]);
+                        // Delegate to SelectNamespace to handle view mode switching
+                        return Self::update(state, Msg::SelectNamespace(selected));
                     }
                 }
 
@@ -743,8 +767,13 @@ impl App for SettingsApp {
 
             // Theme editor messages
             Msg::ThemeNamesLoaded(names) => {
-                state.theme_names = names;
+                state.theme_names = names.clone();
                 state.selected_theme_idx = 0;
+
+                // Initialize select state with theme names
+                if !names.is_empty() {
+                    state.theme_select_state = crate::tui::widgets::SelectState::with_selected(0);
+                }
 
                 // Load active theme name
                 let cmd = Command::perform(
@@ -758,21 +787,62 @@ impl App for SettingsApp {
 
                 Command::batch(vec![
                     cmd,
-                    Command::set_focus(FocusId::new("theme-list"))
+                    Command::set_focus(FocusId::new("theme-select"))
                 ])
             }
 
-            Msg::SelectTheme(idx) => {
-                if idx < state.theme_names.len() {
-                    state.selected_theme_idx = idx;
+            Msg::ThemeSelectEvent(event) => {
+                use crate::tui::widgets::SelectEvent;
+                use crossterm::event::KeyCode;
+
+                // Update option count before handling event
+                state.theme_select_state.update_option_count(state.theme_names.len());
+
+                match event {
+                    SelectEvent::Navigate(KeyCode::Enter) if !state.theme_select_state.is_open() => {
+                        // Open dropdown when closed
+                        state.theme_select_state.toggle();
+                        Command::None
+                    }
+                    SelectEvent::Navigate(KeyCode::Enter) if state.theme_select_state.is_open() => {
+                        // Select highlighted item when open
+                        state.theme_select_state.select_highlighted();
+                        let selected_idx = state.theme_select_state.selected();
+                        state.selected_theme_idx = selected_idx;
+
+                        // Activate the selected theme
+                        if let Some(theme_name) = state.theme_names.get(selected_idx) {
+                            return Self::update(state, Msg::ActivateTheme(theme_name.clone()));
+                        }
+                        Command::None
+                    }
+                    SelectEvent::Navigate(KeyCode::Esc) => {
+                        // Close dropdown
+                        if state.theme_select_state.is_open() {
+                            state.theme_select_state.close();
+                        }
+                        Command::None
+                    }
+                    SelectEvent::Select(idx) => {
+                        // Handle click selection
+                        state.selected_theme_idx = idx;
+                        if let Some(theme_name) = state.theme_names.get(idx) {
+                            return Self::update(state, Msg::ActivateTheme(theme_name.clone()));
+                        }
+                        Command::None
+                    }
+                    _ => {
+                        // Handle other navigation (Up/Down arrows)
+                        state.theme_select_state.handle_event(event);
+                        Command::None
+                    }
                 }
-                Command::None
             }
 
-            Msg::ThemeListNavigate(key) => {
-                state.theme_list_state.handle_key(key, state.theme_names.len(), 20);
-                if let Some(selected) = state.theme_list_state.selected() {
-                    state.selected_theme_idx = selected;
+            Msg::ActivateSelectedTheme => {
+                // Get the selected theme name and dispatch ActivateTheme
+                if let Some(theme_name) = state.theme_names.get(state.selected_theme_idx) {
+                    return Self::update(state, Msg::ActivateTheme(theme_name.clone()));
                 }
                 Command::None
             }
@@ -796,12 +866,39 @@ impl App for SettingsApp {
             }
 
             Msg::ThemeActivated(Ok(name)) => {
-                state.active_theme_name = name;
+                state.active_theme_name = name.clone();
+
+                // Update select state to show the active theme
+                if let Some(idx) = state.theme_names.iter().position(|n| n == &name) {
+                    state.selected_theme_idx = idx;
+                    state.theme_select_state = crate::tui::widgets::SelectState::with_selected(idx);
+                }
+
                 Command::None
             }
 
             Msg::ThemeActivated(Err(e)) => {
                 state.error = Some(format!("Failed to activate theme: {}", e));
+                Command::None
+            }
+
+            Msg::CreateTheme => {
+                // TODO: Implement create theme flow
+                // This will open a modal to input theme name, then copy from an existing theme
+                log::info!("Create theme requested - not yet implemented");
+                Command::None
+            }
+
+            Msg::DeleteSelectedTheme => {
+                // TODO: Implement delete theme flow
+                // This should show a confirmation modal before deleting
+                if let Some(theme_name) = state.theme_names.get(state.selected_theme_idx) {
+                    if theme_name == &state.active_theme_name {
+                        state.error = Some("Cannot delete the active theme".to_string());
+                        return Command::None;
+                    }
+                    log::info!("Delete theme requested: {} - not yet implemented", theme_name);
+                }
                 Command::None
             }
 
@@ -820,13 +917,13 @@ impl App for SettingsApp {
                     },
                     |result: Result<(String, String, ratatui::style::Color), String>| match result {
                         Ok((theme, color, value)) => {
-                            // This will be handled by creating the editing state
-                            // For now, just a placeholder
-                            Msg::SelectTheme(0)  // TODO: Better handling
+                            // TODO: Open color picker modal with this color
+                            log::info!("Would edit color {}.{} = {:?}", theme, color, value);
+                            Msg::CancelEdit  // Placeholder - will implement in Phase 5
                         }
                         Err(e) => {
                             log::error!("Failed to load color: {}", e);
-                            Msg::SelectTheme(0)
+                            Msg::CancelEdit  // Placeholder
                         }
                     }
                 )
@@ -912,48 +1009,59 @@ impl App for SettingsApp {
             .title("Categories")
             .build();
 
-        // Right panel: option list with values
-        let option_list_content = if state.current_options.is_empty() {
-            Element::styled_text(Line::from(vec![
-                Span::styled("No options in this category", Style::default().fg(theme.text_tertiary))
-            ])).build()
-        } else {
-            // Calculate max name width for alignment
-            let max_name_width = state.current_options.iter()
-                .map(|opt| opt.display_name.len())
-                .max()
-                .unwrap_or(0);
+        // Right panel: depends on view mode
+        let (right_panel, namespace_title) = match state.view_mode {
+            ViewMode::ThemeEditor => {
+                // Theme editor view
+                Self::render_theme_editor(state, theme)
+            }
+            ViewMode::AutoGenerated => {
+                // Original auto-generated options view
+                let option_list_content = if state.current_options.is_empty() {
+                    Element::styled_text(Line::from(vec![
+                        Span::styled("No options in this category", Style::default().fg(theme.text_tertiary))
+                    ])).build()
+                } else {
+                    // Calculate max name width for alignment
+                    let max_name_width = state.current_options.iter()
+                        .map(|opt| opt.display_name.len())
+                        .max()
+                        .unwrap_or(0);
 
-            // Create wrapped options with values
-            let options_with_values: Vec<OptionWithValue> = state.current_options.iter()
-                .map(|opt| OptionWithValue {
-                    value: state.values.get(&opt.key).unwrap_or(&opt.default).clone(),
-                    definition: opt.clone(),
-                    max_name_width,
-                })
-                .collect();
+                    // Create wrapped options with values
+                    let options_with_values: Vec<OptionWithValue> = state.current_options.iter()
+                        .map(|opt| OptionWithValue {
+                            value: state.values.get(&opt.key).unwrap_or(&opt.default).clone(),
+                            definition: opt.clone(),
+                            max_name_width,
+                        })
+                        .collect();
 
-            Element::list(
-                "option-list",
-                &options_with_values,
-                &state.option_list_state,
-                theme
-            )
-            .on_select(Msg::SelectOption)
-            .on_activate(Msg::SelectOption)
-            .on_navigate(Msg::OptionListNavigate)
-            .build()
+                    Element::list(
+                        "option-list",
+                        &options_with_values,
+                        &state.option_list_state,
+                        theme
+                    )
+                    .on_select(Msg::SelectOption)
+                    .on_activate(Msg::SelectOption)
+                    .on_navigate(Msg::OptionListNavigate)
+                    .build()
+                };
+
+                let namespace_title = if state.selected_namespace < state.namespaces.len() {
+                    format!("Options - {}", state.namespaces[state.selected_namespace])
+                } else {
+                    "Options".to_string()
+                };
+
+                let option_list_panel = Element::panel(option_list_content)
+                    .title(&namespace_title)
+                    .build();
+
+                (option_list_panel, namespace_title)
+            }
         };
-
-        let namespace_title = if state.selected_namespace < state.namespaces.len() {
-            format!("Options - {}", state.namespaces[state.selected_namespace])
-        } else {
-            "Options".to_string()
-        };
-
-        let option_list_panel = Element::panel(option_list_content)
-            .title(&namespace_title)
-            .build();
 
         // Main layout - just the two lists side by side
         let main_ui = if let Some(error) = &state.error {
@@ -969,7 +1077,7 @@ impl App for SettingsApp {
             row![
                 left_panel => Length(30),
                 col![
-                    option_list_panel => Fill(1),
+                    right_panel => Fill(1),
                     error_section => Length(2),
                 ] => Fill(1),
             ]
@@ -977,7 +1085,7 @@ impl App for SettingsApp {
             // Without error display
             row![
                 left_panel => Length(30),
-                option_list_panel => Fill(1),
+                right_panel => Fill(1),
             ]
         };
 
@@ -1032,6 +1140,148 @@ impl App for SettingsApp {
 }
 
 impl SettingsApp {
+    /// Render the theme editor view (select dropdown of themes with actions)
+    fn render_theme_editor(state: &mut State, theme: &crate::tui::Theme) -> (Element<Msg>, String) {
+        use_constraints!();
+
+        // Theme selector
+        let theme_select = if state.theme_names.is_empty() {
+            Element::panel(
+                Element::styled_text(Line::from(vec![
+                    Span::styled("No themes available", Style::default().fg(theme.text_tertiary))
+                ])).build()
+            )
+            .title(&format!("Active Theme: {}", &state.active_theme_name))
+            .build()
+        } else {
+            let select_widget = Element::select(
+                FocusId::new("theme-select"),
+                state.theme_names.clone(),
+                &mut state.theme_select_state
+            )
+            .on_event(Msg::ThemeSelectEvent)
+            .build();
+
+            Element::panel(select_widget)
+                .title(&format!("Active Theme: {}", &state.active_theme_name))
+                .build()
+        };
+
+        // Action buttons (no Activate button needed - select auto-activates)
+        let create_button = Element::button(
+            "theme-create",
+            "Create New"
+        )
+        .on_press(Msg::CreateTheme)
+        .build();
+
+        let delete_button = Element::button(
+            "theme-delete",
+            "Delete"
+        )
+        .on_press(Msg::DeleteSelectedTheme)
+        .build();
+
+        let buttons = row![
+            create_button => Length(15),
+            Element::text("") => Length(1),
+            delete_button => Length(10),
+            Element::text("") => Fill(1),
+        ];
+
+        // Color preview for selected theme
+        let preview_panel = Self::render_theme_preview(state, theme);
+
+        // Combine selector, preview, and buttons
+        let content = col![
+            theme_select => Length(3),  // Same size as button (borders + content)
+            Element::text("") => Length(1),
+            preview_panel => Length(14),  // 12 color rows + borders
+            Element::text("") => Length(1),
+            buttons => Length(3),  // Buttons with padding
+        ];
+
+        let panel = Element::panel(content)
+            .title("Themes")
+            .build();
+
+        (panel, "Themes".to_string())
+    }
+
+    /// Render color swatches preview for the selected theme
+    fn render_theme_preview(state: &State, theme: &crate::tui::Theme) -> Element<Msg> {
+        use_constraints!();
+
+        let selected_theme = state.theme_names.get(state.selected_theme_idx);
+
+        if selected_theme.is_none() {
+            return Element::panel(Element::text("No theme selected"))
+                .title("Preview")
+                .build();
+        }
+
+        let theme_name = selected_theme.unwrap();
+
+        // Show current runtime theme colors as preview
+        // TODO: Load actual selected theme from DB instead of showing runtime theme
+        let colored_box = "████";
+
+        let preview_col = col![
+            Element::styled_text(Line::from(vec![
+                Span::styled(colored_box, Style::default().fg(theme.accent_primary)),
+                Span::raw(" Accent Primary"),
+            ])).build() => Length(1),
+            Element::styled_text(Line::from(vec![
+                Span::styled(colored_box, Style::default().fg(theme.accent_secondary)),
+                Span::raw(" Accent Secondary"),
+            ])).build() => Length(1),
+            Element::styled_text(Line::from(vec![
+                Span::styled(colored_box, Style::default().fg(theme.accent_tertiary)),
+                Span::raw(" Accent Tertiary"),
+            ])).build() => Length(1),
+            Element::styled_text(Line::from(vec![
+                Span::styled(colored_box, Style::default().fg(theme.accent_error)),
+                Span::raw(" Accent Error"),
+            ])).build() => Length(1),
+            Element::styled_text(Line::from(vec![
+                Span::styled(colored_box, Style::default().fg(theme.accent_warning)),
+                Span::raw(" Accent Warning"),
+            ])).build() => Length(1),
+            Element::styled_text(Line::from(vec![
+                Span::styled(colored_box, Style::default().fg(theme.accent_success)),
+                Span::raw(" Accent Success"),
+            ])).build() => Length(1),
+            Element::styled_text(Line::from(vec![
+                Span::styled(colored_box, Style::default().fg(theme.accent_info)),
+                Span::raw(" Accent Info"),
+            ])).build() => Length(1),
+            Element::styled_text(Line::from(vec![
+                Span::styled(colored_box, Style::default().fg(theme.accent_muted)),
+                Span::raw(" Accent Muted"),
+            ])).build() => Length(1),
+            Element::styled_text(Line::from(vec![
+                Span::styled(colored_box, Style::default().fg(theme.text_primary)),
+                Span::raw(" Text Primary"),
+            ])).build() => Length(1),
+            Element::styled_text(Line::from(vec![
+                Span::styled(colored_box, Style::default().fg(theme.text_secondary)),
+                Span::raw(" Text Secondary"),
+            ])).build() => Length(1),
+            Element::styled_text(Line::from(vec![
+                Span::styled(colored_box, Style::default().fg(theme.text_tertiary)),
+                Span::raw(" Text Tertiary"),
+            ])).build() => Length(1),
+            Element::styled_text(Line::from(vec![
+                Span::styled(colored_box, Style::default().fg(theme.border_primary)),
+                Span::raw(" Border Primary"),
+            ])).build() => Length(1),
+        ];
+
+        Element::panel(preview_col)
+            .title(&format!("Preview: {}", theme_name))
+            .build()
+    }
+
     fn render_edit_modal(
         state: &mut State,
         opt: &OptionDefinition,

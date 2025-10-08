@@ -85,10 +85,11 @@ pub fn list_themes(registry: &OptionsRegistry) -> Vec<String> {
     let theme_opts = registry.list_namespace("theme");
 
     // Extract unique theme names from keys like "theme.mocha.accent_primary"
+    // Ignore "theme.active" which is the control option, not a theme
     let mut names = std::collections::HashSet::new();
     for opt_def in theme_opts {
         let parts: Vec<&str> = opt_def.key.split('.').collect();
-        if parts.len() >= 2 {
+        if parts.len() >= 3 {  // Only include keys with 3+ parts (theme.NAME.color)
             names.insert(parts[1].to_string());
         }
     }
