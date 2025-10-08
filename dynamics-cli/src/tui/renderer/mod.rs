@@ -456,6 +456,18 @@ impl Renderer {
                 render_file_browser(frame, registry, focus_registry, dropdown_registry, focused_id, id, entries, *selected, *scroll_offset, on_navigate, on_focus, on_blur, on_render, area, inside_panel, Self::render_element);
             }
 
+            Element::ColorPicker {
+                id,
+                value,
+                mode,
+                state,
+                on_event,
+                on_focus,
+                on_blur,
+            } => {
+                render_color_picker(frame, registry, focus_registry, focused_id, id, *value, *mode, state, on_event, on_focus, on_blur, area, inside_panel);
+            }
+
             Element::Stack { layers } => {
                 render_stack(frame, registry, focus_registry, dropdown_registry, focused_id, layers, area, inside_panel, Self::render_element, Self::estimate_element_size);
             }
@@ -567,6 +579,7 @@ impl Renderer {
                 let entry_count = entries.len() as u16;
                 (max_width, entry_count.min(max_height))
             }
+            Element::ColorPicker { .. } => (max_width.min(50), 9),
             Element::Stack { layers } => {
                 // Stack size is the max of all layers
                 let mut max_w = 0u16;
@@ -632,6 +645,10 @@ impl Renderer {
             Element::FileBrowser { entries, .. } => {
                 // Like list - full width, height based on entry count (up to container height)
                 (container.width, (entries.len() as u16).min(container.height))
+            }
+            Element::ColorPicker { .. } => {
+                // Color picker: fixed size (sliders + preview + hex)
+                (container.width.min(50), 9)
             }
             _ => {
                 // Default: 50% of container

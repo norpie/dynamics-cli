@@ -17,15 +17,6 @@ pub fn register(registry: &OptionsRegistry) -> Result<()> {
             .build()?
     )?;
 
-    // Active theme option
-    registry.register(
-        OptionDefBuilder::new("tui", "active_theme")
-            .display_name("Active Theme")
-            .description("The currently active color theme")
-            .string_type("mocha", Some(32))
-            .build()?
-    )?;
-
     // Color picker mode option
     registry.register(
         OptionDefBuilder::new("tui", "colorpicker_mode")
@@ -38,6 +29,6 @@ pub fn register(registry: &OptionsRegistry) -> Result<()> {
             .build()?
     )?;
 
-    log::info!("Registered {} TUI options", 3);
+    log::info!("Registered {} TUI options", 2);
     Ok(())
 }

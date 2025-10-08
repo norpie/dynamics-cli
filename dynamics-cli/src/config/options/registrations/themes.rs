@@ -7,11 +7,20 @@ use anyhow::Result;
 
 /// Register all theme-related options
 pub fn register(registry: &OptionsRegistry) -> Result<()> {
+    // Active theme control option
+    registry.register(
+        OptionDefBuilder::new("theme", "active")
+            .display_name("Active Theme")
+            .description("The currently active color theme")
+            .string_type("mocha", Some(32))
+            .build()?
+    )?;
+
     // Register built-in themes
     register_theme(registry, "mocha", &Theme::mocha())?;
     register_theme(registry, "latte", &Theme::latte())?;
 
-    log::info!("Registered {} theme options (2 themes × 21 colors)", 42);
+    log::info!("Registered {} theme options (1 control + 2 themes × 21 colors)", 43);
     Ok(())
 }
 

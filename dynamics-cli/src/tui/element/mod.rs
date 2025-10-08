@@ -456,6 +456,23 @@ impl<Msg> Element<Msg> {
             Element::Select { .. } => LayoutConstraint::Length(1),  // Borderless like TextInput
             Element::Autocomplete { .. } => LayoutConstraint::Length(1),  // Borderless like TextInput
             Element::FileBrowser { .. } => LayoutConstraint::Fill(1),  // Fill available space like List
+            Element::ColorPicker { .. } => LayoutConstraint::Length(9),  // 3 sliders + hex + labels
+        }
+    }
+
+    /// Create a color picker element
+    pub fn color_picker(
+        id: impl Into<FocusId>,
+        state: &crate::tui::widgets::ColorPickerState,
+    ) -> ColorPickerBuilder<Msg> {
+        ColorPickerBuilder {
+            id: id.into(),
+            value: state.color(),
+            mode: state.mode(),
+            state: state.clone(),
+            on_event: None,
+            on_focus: None,
+            on_blur: None,
         }
     }
 

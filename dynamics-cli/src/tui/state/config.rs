@@ -64,7 +64,7 @@ impl RuntimeConfig {
         };
 
         // Load active theme from options (defaults to mocha if not found)
-        let theme_name = config.options.get_string("tui.active_theme").await
+        let theme_name = config.options.get_string("theme.active").await
             .unwrap_or_else(|_| "mocha".to_string());
 
         // Load theme colors from options database
