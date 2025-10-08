@@ -78,7 +78,7 @@ pub fn autocomplete_on_key_event<Msg: Clone + Send + 'static>(
 /// Render Autocomplete element
 pub fn render_autocomplete<Msg: Clone + Send + 'static>(
     frame: &mut Frame,
-    theme: &Theme,
+    
     registry: &mut InteractionRegistry<Msg>,
     focus_registry: &mut FocusRegistry<Msg>,
     dropdown_registry: &mut DropdownRegistry<Msg>,
@@ -99,6 +99,7 @@ pub fn render_autocomplete<Msg: Clone + Send + 'static>(
     area: Rect,
     inside_panel: bool,
 ) {
+    let theme = &crate::global_runtime_config().theme;
     // Register in focus registry - prefer on_event if available
     let on_key_handler = if let Some(event_fn) = on_event {
         autocomplete_on_key_event(is_open, *event_fn)

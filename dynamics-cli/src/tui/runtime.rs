@@ -878,7 +878,7 @@ impl<A: App> Runtime<A> {
         // Render using the new layered API
         Renderer::render_layers(
             frame,
-            &crate::global_runtime_config().theme,
+            
             &mut self.registry,
             &mut self.focus_registry,
             self.focused_id.as_ref(),

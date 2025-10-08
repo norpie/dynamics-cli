@@ -27,7 +27,7 @@ pub fn button_on_key<Msg: Clone + Send + 'static>(on_press: Option<Msg>) -> Box<
 /// Render Button element
 pub fn render_button<Msg: Clone + Send + 'static>(
     frame: &mut Frame,
-    theme: &Theme,
+    
     registry: &mut InteractionRegistry<Msg>,
     focus_registry: &mut FocusRegistry<Msg>,
     focused_id: Option<&FocusId>,
@@ -42,6 +42,7 @@ pub fn render_button<Msg: Clone + Send + 'static>(
     area: Rect,
     inside_panel: bool,
 ) {
+    let theme = &crate::global_runtime_config().theme;
     // Register in focus registry
     focus_registry.register_focusable(FocusableInfo {
         id: id.clone(),

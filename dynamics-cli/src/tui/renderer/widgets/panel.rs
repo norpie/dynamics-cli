@@ -51,7 +51,7 @@ pub fn element_contains_focused_non_button_panel<Msg>(element: &Element<Msg>, fo
 /// Render Panel element
 pub fn render_panel<Msg: Clone + Send + 'static>(
     frame: &mut Frame,
-    theme: &Theme,
+    
     registry: &mut InteractionRegistry<Msg>,
     focus_registry: &mut FocusRegistry<Msg>,
     dropdown_registry: &mut DropdownRegistry<Msg>,
@@ -60,8 +60,9 @@ pub fn render_panel<Msg: Clone + Send + 'static>(
     title: &Option<String>,
     area: Rect,
     inside_panel: bool,
-    render_fn: impl Fn(&mut Frame, &Theme, &mut InteractionRegistry<Msg>, &mut FocusRegistry<Msg>, &mut DropdownRegistry<Msg>, Option<&FocusId>, &Element<Msg>, Rect, bool),
+    render_fn: impl Fn(&mut Frame, &mut InteractionRegistry<Msg>, &mut FocusRegistry<Msg>, &mut DropdownRegistry<Msg>, Option<&FocusId>, &Element<Msg>, Rect, bool),
 ) {
+    let theme = &crate::global_runtime_config().theme;
     // Check if the child (or any descendant) contains a focused widget (excluding buttons)
     // All focusable widgets except buttons trigger panel focus styling
     let child_has_focused_widget = focused_id
@@ -102,5 +103,5 @@ pub fn render_panel<Msg: Clone + Send + 'static>(
     frame.render_widget(block, area);
 
     // Render child in the inner area, marking it as inside a panel
-    render_fn(frame, theme, registry, focus_registry, dropdown_registry, focused_id, child, inner_area, true);
+    render_fn(frame, registry, focus_registry, dropdown_registry, focused_id, child, inner_area, true);
 }

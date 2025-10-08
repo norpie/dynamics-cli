@@ -61,7 +61,7 @@ pub fn file_browser_on_key<Msg: Clone + Send + 'static>(
 /// Render FileBrowser element (like list but Enter is treated as navigation)
 pub fn render_file_browser<Msg: Clone + Send + 'static>(
     frame: &mut Frame,
-    theme: &Theme,
+    
     registry: &mut InteractionRegistry<Msg>,
     focus_registry: &mut FocusRegistry<Msg>,
     dropdown_registry: &mut DropdownRegistry<Msg>,
@@ -76,8 +76,9 @@ pub fn render_file_browser<Msg: Clone + Send + 'static>(
     on_render: &Option<fn(usize) -> Msg>,
     area: Rect,
     inside_panel: bool,
-    render_fn: impl Fn(&mut Frame, &Theme, &mut InteractionRegistry<Msg>, &mut FocusRegistry<Msg>, &mut DropdownRegistry<Msg>, Option<&FocusId>, &Element<Msg>, Rect, bool),
+    render_fn: impl Fn(&mut Frame, &mut InteractionRegistry<Msg>, &mut FocusRegistry<Msg>, &mut DropdownRegistry<Msg>, Option<&FocusId>, &Element<Msg>, Rect, bool),
 ) {
+    let theme = &crate::global_runtime_config().theme;
     // Call on_render with actual viewport height from renderer
     if let Some(render_fn) = on_render {
         registry.add_render_message(render_fn(area.height as usize));
@@ -125,7 +126,7 @@ pub fn render_file_browser<Msg: Clone + Send + 'static>(
 
         // Render each visible item
         for ((_, child), chunk) in visible_items.iter().zip(chunks.iter()) {
-            render_fn(frame, theme, registry, focus_registry, dropdown_registry, focused_id, child, *chunk, inside_panel);
+            render_fn(frame, registry, focus_registry, dropdown_registry, focused_id, child, *chunk, inside_panel);
         }
     }
 
@@ -170,7 +171,7 @@ pub fn render_file_browser<Msg: Clone + Send + 'static>(
 /// Render List element
 pub fn render_list<Msg: Clone + Send + 'static>(
     frame: &mut Frame,
-    theme: &Theme,
+
     registry: &mut InteractionRegistry<Msg>,
     focus_registry: &mut FocusRegistry<Msg>,
     dropdown_registry: &mut DropdownRegistry<Msg>,
@@ -187,8 +188,9 @@ pub fn render_list<Msg: Clone + Send + 'static>(
     on_render: &Option<fn(usize) -> Msg>,
     area: Rect,
     inside_panel: bool,
-    render_fn: impl Fn(&mut Frame, &Theme, &mut InteractionRegistry<Msg>, &mut FocusRegistry<Msg>, &mut DropdownRegistry<Msg>, Option<&FocusId>, &Element<Msg>, Rect, bool),
+    render_fn: impl Fn(&mut Frame, &mut InteractionRegistry<Msg>, &mut FocusRegistry<Msg>, &mut DropdownRegistry<Msg>, Option<&FocusId>, &Element<Msg>, Rect, bool),
 ) {
+    let theme = &crate::global_runtime_config().theme;
     // Call on_render with actual viewport height from renderer
     if let Some(render_fn) = on_render {
         registry.add_render_message(render_fn(area.height as usize));
@@ -236,7 +238,7 @@ pub fn render_list<Msg: Clone + Send + 'static>(
 
         // Render each visible item
         for ((_, child), chunk) in visible_items.iter().zip(chunks.iter()) {
-            render_fn(frame, theme, registry, focus_registry, dropdown_registry, focused_id, child, *chunk, inside_panel);
+            render_fn(frame, registry, focus_registry, dropdown_registry, focused_id, child, *chunk, inside_panel);
         }
 
         // Register click handlers for list items

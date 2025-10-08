@@ -469,7 +469,7 @@ impl MultiAppRuntime {
         let mut registry: InteractionRegistry<()> = InteractionRegistry::new();
         let mut focus_registry: FocusRegistry<()> = FocusRegistry::new();
         let mut dropdown_registry: DropdownRegistry<()> = DropdownRegistry::new();
-        Renderer::render(frame, theme, &mut registry, &mut focus_registry, &mut dropdown_registry, None, &header, area);
+        Renderer::render(frame, &mut registry, &mut focus_registry, &mut dropdown_registry, None, &header, area);
     }
 
     fn render_help_menu(&mut self, frame: &mut Frame, area: ratatui::layout::Rect, theme: &Theme) {
@@ -650,7 +650,7 @@ impl MultiAppRuntime {
         // Clear and render to global registries
         self.global_interaction_registry = crate::tui::InteractionRegistry::new();
         self.global_focus_registry = crate::tui::renderer::FocusRegistry::new();
-        Renderer::render(frame, theme, &mut self.global_interaction_registry, &mut self.global_focus_registry, &mut dropdown_registry, self.global_focused_id.as_ref(), &modal, modal_area);
+        Renderer::render(frame, &mut self.global_interaction_registry, &mut self.global_focus_registry, &mut dropdown_registry, self.global_focused_id.as_ref(), &modal, modal_area);
 
         // Check if focused element still exists in the tree
         if let Some(focused_id) = &self.global_focused_id {
@@ -760,7 +760,7 @@ impl MultiAppRuntime {
         // Clear and render to global registries
         self.global_interaction_registry = crate::tui::InteractionRegistry::new();
         self.global_focus_registry = crate::tui::renderer::FocusRegistry::new();
-        Renderer::render(frame, theme, &mut self.global_interaction_registry, &mut self.global_focus_registry, &mut dropdown_registry, self.global_focused_id.as_ref(), &quit_modal, modal_area);
+        Renderer::render(frame, &mut self.global_interaction_registry, &mut self.global_focus_registry, &mut dropdown_registry, self.global_focused_id.as_ref(), &quit_modal, modal_area);
 
         // Check if focused element still exists in the tree
         if let Some(focused_id) = &self.global_focused_id {

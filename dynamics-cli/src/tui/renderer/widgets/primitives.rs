@@ -4,10 +4,11 @@ use crate::tui::{Element, Theme};
 /// Render primitive elements (None, Text, StyledText)
 pub fn render_primitive<Msg: Clone + Send + 'static>(
     frame: &mut Frame,
-    theme: &Theme,
+    
     element: &Element<Msg>,
     area: Rect,
 ) {
+    let theme = &crate::global_runtime_config().theme;
     match element {
         Element::None => {}
 

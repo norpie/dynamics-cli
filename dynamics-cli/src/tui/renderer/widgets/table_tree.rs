@@ -37,7 +37,7 @@ pub fn table_tree_on_key_event<Msg: Clone + Send + 'static>(
 #[allow(clippy::too_many_arguments)]
 pub fn render_table_tree<Msg: Clone + Send + 'static>(
     frame: &mut Frame,
-    theme: &Theme,
+    
     registry: &mut InteractionRegistry<Msg>,
     focus_registry: &mut FocusRegistry<Msg>,
     _dropdown_registry: &mut DropdownRegistry<Msg>,
@@ -57,6 +57,7 @@ pub fn render_table_tree<Msg: Clone + Send + 'static>(
     area: Rect,
     inside_panel: bool,
 ) {
+    let theme = &crate::global_runtime_config().theme;
     // Call on_render with actual viewport height from renderer
     // Subtract 1 for header row
     let content_height = area.height.saturating_sub(1) as usize;

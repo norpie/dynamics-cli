@@ -4,7 +4,8 @@ use crate::tui::element::FocusId;
 use crate::tui::renderer::{InteractionRegistry, FocusRegistry, DropdownRegistry};
 
 /// Render a semi-transparent dim overlay
-pub fn render_dim_overlay(frame: &mut Frame, theme: &Theme, area: Rect) {
+pub fn render_dim_overlay(frame: &mut Frame, area: Rect) {
+    let theme = &crate::global_runtime_config().theme;
     use ratatui::widgets::Paragraph;
 
     // Render dim overlay using Paragraph for reliable background fill
@@ -74,7 +75,7 @@ pub fn calculate_layer_position<Msg>(
 /// Render Stack element
 pub fn render_stack<Msg: Clone + Send + 'static>(
     frame: &mut Frame,
-    theme: &Theme,
+    
     registry: &mut InteractionRegistry<Msg>,
     focus_registry: &mut FocusRegistry<Msg>,
     dropdown_registry: &mut DropdownRegistry<Msg>,
@@ -82,7 +83,7 @@ pub fn render_stack<Msg: Clone + Send + 'static>(
     layers: &[Layer<Msg>],
     area: Rect,
     inside_panel: bool,
-    render_fn: impl Fn(&mut Frame, &Theme, &mut InteractionRegistry<Msg>, &mut FocusRegistry<Msg>, &mut DropdownRegistry<Msg>, Option<&FocusId>, &Element<Msg>, Rect, bool),
+    render_fn: impl Fn(&mut Frame, &mut InteractionRegistry<Msg>, &mut FocusRegistry<Msg>, &mut DropdownRegistry<Msg>, Option<&FocusId>, &Element<Msg>, Rect, bool),
     estimate_fn: impl Fn(&Element<Msg>, Rect) -> (u16, u16),
 ) {
     log::debug!("Stack::render_stack - rendering {} layers", layers.len());
@@ -92,7 +93,7 @@ pub fn render_stack<Msg: Clone + Send + 'static>(
         log::debug!("  Stack: rendering layer {}", layer_idx);
         // Render dim overlay if requested
         if layer.dim_below {
-            render_dim_overlay(frame, theme, area);
+            render_dim_overlay(frame, area);
         }
 
         // Calculate position based on alignment
@@ -102,7 +103,7 @@ pub fn render_stack<Msg: Clone + Send + 'static>(
         focus_registry.push_layer(layer_idx);
 
         // Render the layer element
-        render_fn(frame, theme, registry, focus_registry, dropdown_registry, focused_id, &layer.element, layer_area, inside_panel);
+        render_fn(frame, registry, focus_registry, dropdown_registry, focused_id, &layer.element, layer_area, inside_panel);
 
         // Pop focus layer context
         focus_registry.pop_layer();
@@ -120,7 +121,7 @@ pub fn render_stack<Msg: Clone + Send + 'static>(
 
         // Re-push the topmost layer context
         focus_registry.push_layer(layer_idx);
-        render_fn(frame, theme, registry, focus_registry, dropdown_registry, focused_id, &last_layer.element, layer_area, inside_panel);
+        render_fn(frame, registry, focus_registry, dropdown_registry, focused_id, &last_layer.element, layer_area, inside_panel);
         // Keep the layer pushed so focusables remain in active layer
 
         // Debug: Log focus registry state

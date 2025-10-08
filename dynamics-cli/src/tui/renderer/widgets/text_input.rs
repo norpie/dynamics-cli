@@ -48,7 +48,7 @@ pub fn text_input_on_key_event<Msg: Clone + Send + 'static>(
 /// Render TextInput element
 pub fn render_text_input<Msg: Clone + Send + 'static>(
     frame: &mut Frame,
-    theme: &Theme,
+    
     registry: &mut InteractionRegistry<Msg>,
     focus_registry: &mut FocusRegistry<Msg>,
     focused_id: Option<&FocusId>,
@@ -67,6 +67,7 @@ pub fn render_text_input<Msg: Clone + Send + 'static>(
     area: Rect,
     inside_panel: bool,
 ) {
+    let theme = &crate::global_runtime_config().theme;
     // Choose handler based on which callback is provided
     let on_key = if let Some(event_handler) = on_event {
         text_input_on_key_event(*event_handler)

@@ -107,7 +107,7 @@ impl Renderer {
     /// Render a layered view (new API)
     pub fn render_layers<Msg: Clone + Send + 'static>(
         frame: &mut Frame,
-        theme: &Theme,
+        
         registry: &mut InteractionRegistry<Msg>,
         focus_registry: &mut FocusRegistry<Msg>,
         focused_id: Option<&FocusId>,
@@ -128,8 +128,8 @@ impl Renderer {
                 RenderLayer::App { element } => {
                     // Layer 0: App content
                     let mut app_dropdown_registry = DropdownRegistry::new();
-                    Self::render_element(frame, theme, registry, focus_registry, &mut app_dropdown_registry, focused_id, element, app_area, false);
-                    Self::render_dropdowns(frame, theme, registry, &app_dropdown_registry);
+                    Self::render_element(frame, registry, focus_registry, &mut app_dropdown_registry, focused_id, element, app_area, false);
+                    Self::render_dropdowns(frame, registry, &app_dropdown_registry);
                 }
 
                 RenderLayer::AppModal { element, alignment } => {
@@ -138,7 +138,7 @@ impl Renderer {
                     focus_registry.push_layer(layer_idx);
 
                     // Dim app area
-                    render_dim_overlay(frame, theme, app_area);
+                    render_dim_overlay(frame, app_area);
 
                     // Calculate modal position based on alignment
                     let modal_area = calculate_layer_position(element, *alignment, app_area, Self::estimate_element_size);
@@ -148,8 +148,8 @@ impl Renderer {
 
                     // Render modal
                     let mut modal_dropdown_registry = DropdownRegistry::new();
-                    Self::render_element(frame, theme, registry, focus_registry, &mut modal_dropdown_registry, focused_id, element, modal_area, false);
-                    Self::render_dropdowns(frame, theme, registry, &modal_dropdown_registry);
+                    Self::render_element(frame, registry, focus_registry, &mut modal_dropdown_registry, focused_id, element, modal_area, false);
+                    Self::render_dropdowns(frame, registry, &modal_dropdown_registry);
 
                     // Pop back to parent layer
                     focus_registry.pop_layer();
@@ -160,8 +160,8 @@ impl Renderer {
                     if !has_global_modal {
                         if let Some(ui_area) = global_ui_area {
                             let mut global_ui_dropdown_registry = DropdownRegistry::new();
-                            Self::render_element(frame, theme, registry, focus_registry, &mut global_ui_dropdown_registry, focused_id, element, ui_area, false);
-                            Self::render_dropdowns(frame, theme, registry, &global_ui_dropdown_registry);
+                            Self::render_element(frame, registry, focus_registry, &mut global_ui_dropdown_registry, focused_id, element, ui_area, false);
+                            Self::render_dropdowns(frame, registry, &global_ui_dropdown_registry);
                         }
                     }
                 }
@@ -172,7 +172,7 @@ impl Renderer {
                     focus_registry.push_layer(layer_idx);
 
                     // Dim entire screen
-                    render_dim_overlay(frame, theme, frame.size());
+                    render_dim_overlay(frame, frame.size());
 
                     // Calculate modal position based on alignment
                     let modal_area = calculate_layer_position(element, *alignment, frame.size(), Self::estimate_element_size);
@@ -182,8 +182,8 @@ impl Renderer {
 
                     // Render modal
                     let mut global_modal_dropdown_registry = DropdownRegistry::new();
-                    Self::render_element(frame, theme, registry, focus_registry, &mut global_modal_dropdown_registry, focused_id, element, modal_area, false);
-                    Self::render_dropdowns(frame, theme, registry, &global_modal_dropdown_registry);
+                    Self::render_element(frame, registry, focus_registry, &mut global_modal_dropdown_registry, focused_id, element, modal_area, false);
+                    Self::render_dropdowns(frame, registry, &global_modal_dropdown_registry);
 
                     // Pop back to parent layer
                     focus_registry.pop_layer();
@@ -234,25 +234,25 @@ impl Renderer {
 
             match layer {
                 RenderLayer::App { element } => {
-                    Self::render_element(frame, theme, registry, focus_registry, &mut topmost_dropdown_registry, focused_id, element, app_area, false);
+                    Self::render_element(frame, registry, focus_registry, &mut topmost_dropdown_registry, focused_id, element, app_area, false);
                 }
                 RenderLayer::AppModal { element, alignment } => {
                     let modal_area = calculate_layer_position(element, *alignment, app_area, Self::estimate_element_size);
-                    Self::render_element(frame, theme, registry, focus_registry, &mut topmost_dropdown_registry, focused_id, element, modal_area, false);
+                    Self::render_element(frame, registry, focus_registry, &mut topmost_dropdown_registry, focused_id, element, modal_area, false);
                 }
                 RenderLayer::GlobalUI { element } => {
                     if let Some(ui_area) = global_ui_area {
-                        Self::render_element(frame, theme, registry, focus_registry, &mut topmost_dropdown_registry, focused_id, element, ui_area, false);
+                        Self::render_element(frame, registry, focus_registry, &mut topmost_dropdown_registry, focused_id, element, ui_area, false);
                     }
                 }
                 RenderLayer::GlobalModal { element, alignment } => {
                     let modal_area = calculate_layer_position(element, *alignment, frame.size(), Self::estimate_element_size);
-                    Self::render_element(frame, theme, registry, focus_registry, &mut topmost_dropdown_registry, focused_id, element, modal_area, false);
+                    Self::render_element(frame, registry, focus_registry, &mut topmost_dropdown_registry, focused_id, element, modal_area, false);
                 }
             }
 
             // Render dropdowns AFTER re-rendering content (so they appear on top)
-            Self::render_dropdowns(frame, theme, registry, &topmost_dropdown_registry);
+            Self::render_dropdowns(frame, registry, &topmost_dropdown_registry);
 
             // Keep the layer pushed so focusables remain in active layer
         }
@@ -261,7 +261,7 @@ impl Renderer {
     /// Legacy render method (kept for backward compatibility during migration)
     pub fn render<Msg: Clone + Send + 'static>(
         frame: &mut Frame,
-        theme: &Theme,
+        
         registry: &mut InteractionRegistry<Msg>,
         focus_registry: &mut FocusRegistry<Msg>,
         dropdown_registry: &mut DropdownRegistry<Msg>,
@@ -269,14 +269,14 @@ impl Renderer {
         element: &Element<Msg>,
         area: Rect,
     ) {
-        Self::render_element(frame, theme, registry, focus_registry, dropdown_registry, focused_id, element, area, false);
+        Self::render_element(frame, registry, focus_registry, dropdown_registry, focused_id, element, area, false);
         // After rendering main UI, render all dropdowns as overlays
-        Self::render_dropdowns(frame, theme, registry, dropdown_registry);
+        Self::render_dropdowns(frame, registry, dropdown_registry);
     }
 
     fn render_element<Msg: Clone + Send + 'static>(
         frame: &mut Frame,
-        theme: &Theme,
+        
         registry: &mut InteractionRegistry<Msg>,
         focus_registry: &mut FocusRegistry<Msg>,
         dropdown_registry: &mut DropdownRegistry<Msg>,
@@ -287,7 +287,7 @@ impl Renderer {
     ) {
         // Handle primitives (None, Text, StyledText)
         if primitives::is_primitive(element) {
-            primitives::render_primitive(frame, theme, element, area);
+            primitives::render_primitive(frame, element, area);
             return;
         }
 
@@ -303,23 +303,23 @@ impl Renderer {
                 on_blur,
                 style,
             } => {
-                render_button(frame, theme, registry, focus_registry, focused_id, id, label, on_press, on_hover, on_hover_exit, on_focus, on_blur, style, area, inside_panel);
+                render_button(frame, registry, focus_registry, focused_id, id, label, on_press, on_hover, on_hover_exit, on_focus, on_blur, style, area, inside_panel);
             }
 
             Element::Column { items, spacing } => {
-                layout::render_column(frame, theme, registry, focus_registry, dropdown_registry, focused_id, items, *spacing, area, inside_panel, Self::render_element);
+                layout::render_column(frame, registry, focus_registry, dropdown_registry, focused_id, items, *spacing, area, inside_panel, Self::render_element);
             }
 
             Element::Row { items, spacing } => {
-                layout::render_row(frame, theme, registry, focus_registry, dropdown_registry, focused_id, items, *spacing, area, inside_panel, Self::render_element);
+                layout::render_row(frame, registry, focus_registry, dropdown_registry, focused_id, items, *spacing, area, inside_panel, Self::render_element);
             }
 
             Element::Container { child, padding } => {
-                layout::render_container(frame, theme, registry, focus_registry, dropdown_registry, focused_id, child, *padding, area, inside_panel, Self::render_element);
+                layout::render_container(frame, registry, focus_registry, dropdown_registry, focused_id, child, *padding, area, inside_panel, Self::render_element);
             }
 
             Element::Panel { child, title, .. } => {
-                render_panel(frame, theme, registry, focus_registry, dropdown_registry, focused_id, child, title, area, inside_panel, Self::render_element);
+                render_panel(frame, registry, focus_registry, dropdown_registry, focused_id, child, title, area, inside_panel, Self::render_element);
             }
 
             Element::List {
@@ -334,7 +334,7 @@ impl Renderer {
                 on_blur,
                 on_render,
             } => {
-                render_list(frame, theme, registry, focus_registry, dropdown_registry, focused_id, id, items, *selected, *scroll_offset, on_select, on_activate, on_navigate, on_focus, on_blur, on_render, area, inside_panel, Self::render_element);
+                render_list(frame, registry, focus_registry, dropdown_registry, focused_id, id, items, *selected, *scroll_offset, on_select, on_activate, on_navigate, on_focus, on_blur, on_render, area, inside_panel, Self::render_element);
             }
 
             Element::TextInput {
@@ -351,7 +351,7 @@ impl Renderer {
                 on_focus,
                 on_blur,
             } => {
-                render_text_input(frame, theme, registry, focus_registry, focused_id, id, value, *cursor_pos, *scroll_offset, placeholder, max_length, *masked, on_change, on_submit, on_event, on_focus, on_blur, area, inside_panel);
+                render_text_input(frame, registry, focus_registry, focused_id, id, value, *cursor_pos, *scroll_offset, placeholder, max_length, *masked, on_change, on_submit, on_event, on_focus, on_blur, area, inside_panel);
             }
 
             Element::Tree {
@@ -368,7 +368,7 @@ impl Renderer {
                 on_blur,
                 on_render,
             } => {
-                render_tree(frame, theme, registry, focus_registry, dropdown_registry, focused_id, id, items, node_ids, selected, *scroll_offset, on_select, on_toggle, on_navigate, on_event, on_focus, on_blur, on_render, area, inside_panel, Self::render_element);
+                render_tree(frame, registry, focus_registry, dropdown_registry, focused_id, id, items, node_ids, selected, *scroll_offset, on_select, on_toggle, on_navigate, on_event, on_focus, on_blur, on_render, area, inside_panel, Self::render_element);
             }
 
             Element::TableTree {
@@ -385,7 +385,7 @@ impl Renderer {
                 on_blur,
                 on_render,
             } => {
-                render_table_tree(frame, theme, registry, focus_registry, dropdown_registry, focused_id, id, flattened_nodes, node_ids, selected, *scroll_offset, column_widths, column_headers, on_select, on_event, on_focus, on_blur, on_render, area, inside_panel);
+                render_table_tree(frame, registry, focus_registry, dropdown_registry, focused_id, id, flattened_nodes, node_ids, selected, *scroll_offset, column_widths, column_headers, on_select, on_event, on_focus, on_blur, on_render, area, inside_panel);
             }
 
             Element::Scrollable {
@@ -400,7 +400,7 @@ impl Renderer {
                 on_focus,
                 on_blur,
             } => {
-                render_scrollable(frame, theme, registry, focus_registry, dropdown_registry, focused_id, id, child, *scroll_offset, content_height, *horizontal_scroll_offset, content_width, on_navigate, on_render, on_focus, on_blur, area, inside_panel, Self::render_element);
+                render_scrollable(frame, registry, focus_registry, dropdown_registry, focused_id, id, child, *scroll_offset, content_height, *horizontal_scroll_offset, content_width, on_navigate, on_render, on_focus, on_blur, area, inside_panel, Self::render_element);
             }
 
             Element::Select {
@@ -416,7 +416,7 @@ impl Renderer {
                 on_focus,
                 on_blur,
             } => {
-                render_select(frame, theme, registry, focus_registry, dropdown_registry, focused_id, id, options, *selected, *is_open, *highlight, on_select, on_toggle, on_navigate, on_event, on_focus, on_blur, area, inside_panel);
+                render_select(frame, registry, focus_registry, dropdown_registry, focused_id, id, options, *selected, *is_open, *highlight, on_select, on_toggle, on_navigate, on_event, on_focus, on_blur, area, inside_panel);
             }
 
             Element::Autocomplete {
@@ -434,7 +434,7 @@ impl Renderer {
                 on_focus,
                 on_blur,
             } => {
-                render_autocomplete(frame, theme, registry, focus_registry, dropdown_registry, focused_id, id, &[], current_input, placeholder, *is_open, filtered_options, *highlight, on_input, on_select, on_navigate, on_event, on_focus, on_blur, area, inside_panel);
+                render_autocomplete(frame, registry, focus_registry, dropdown_registry, focused_id, id, &[], current_input, placeholder, *is_open, filtered_options, *highlight, on_input, on_select, on_navigate, on_event, on_focus, on_blur, area, inside_panel);
             }
 
             Element::FileBrowser {
@@ -453,11 +453,11 @@ impl Renderer {
                 on_render,
             } => {
                 // Render with file browser key handler (Enter is treated as navigation)
-                render_file_browser(frame, theme, registry, focus_registry, dropdown_registry, focused_id, id, entries, *selected, *scroll_offset, on_navigate, on_focus, on_blur, on_render, area, inside_panel, Self::render_element);
+                render_file_browser(frame, registry, focus_registry, dropdown_registry, focused_id, id, entries, *selected, *scroll_offset, on_navigate, on_focus, on_blur, on_render, area, inside_panel, Self::render_element);
             }
 
             Element::Stack { layers } => {
-                render_stack(frame, theme, registry, focus_registry, dropdown_registry, focused_id, layers, area, inside_panel, Self::render_element, Self::estimate_element_size);
+                render_stack(frame, registry, focus_registry, dropdown_registry, focused_id, layers, area, inside_panel, Self::render_element, Self::estimate_element_size);
             }
 
             // Primitives are handled at the top of the function
@@ -643,10 +643,11 @@ impl Renderer {
     /// Render all registered dropdowns as overlays (called after main UI rendering)
     fn render_dropdowns<Msg: Clone>(
         frame: &mut Frame,
-        theme: &Theme,
+        
         registry: &mut InteractionRegistry<Msg>,
         dropdown_registry: &DropdownRegistry<Msg>,
     ) {
+    let theme = &crate::global_runtime_config().theme;
         for dropdown in dropdown_registry.dropdowns() {
             // Calculate dropdown position (below the select, or above if no room)
             let dropdown_height = (dropdown.options.len() as u16).min(10) + 2; // +2 for borders

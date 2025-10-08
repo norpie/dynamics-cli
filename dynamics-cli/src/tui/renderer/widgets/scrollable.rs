@@ -143,7 +143,7 @@ pub fn scrollable_on_key<Msg: Clone + Send + 'static>(
 /// Render Scrollable element
 pub fn render_scrollable<Msg: Clone + Send + 'static>(
     frame: &mut Frame,
-    theme: &Theme,
+    
     registry: &mut InteractionRegistry<Msg>,
     focus_registry: &mut FocusRegistry<Msg>,
     dropdown_registry: &mut DropdownRegistry<Msg>,
@@ -160,8 +160,9 @@ pub fn render_scrollable<Msg: Clone + Send + 'static>(
     on_blur: &Option<Msg>,
     area: Rect,
     inside_panel: bool,
-    render_fn: impl Fn(&mut Frame, &Theme, &mut InteractionRegistry<Msg>, &mut FocusRegistry<Msg>, &mut DropdownRegistry<Msg>, Option<&FocusId>, &Element<Msg>, Rect, bool),
+    render_fn: impl Fn(&mut Frame, &mut InteractionRegistry<Msg>, &mut FocusRegistry<Msg>, &mut DropdownRegistry<Msg>, Option<&FocusId>, &Element<Msg>, Rect, bool),
 ) {
+    let theme = &crate::global_runtime_config().theme;
     // Register in focus registry
     focus_registry.register_focusable(FocusableInfo {
         id: id.clone(),
@@ -284,7 +285,7 @@ pub fn render_scrollable<Msg: Clone + Send + 'static>(
                             height: (item_height as u16).min(available_item_height),
                         };
 
-                        render_fn(frame, theme, registry, focus_registry, dropdown_registry, focused_id, &scrolled_child, item_area, inside_panel);
+                        render_fn(frame, registry, focus_registry, dropdown_registry, focused_id, &scrolled_child, item_area, inside_panel);
                     }
                 }
 
@@ -305,7 +306,7 @@ pub fn render_scrollable<Msg: Clone + Send + 'static>(
                 child.clone()
             };
 
-            render_fn(frame, theme, registry, focus_registry, dropdown_registry, focused_id, &scrolled_child, content_area, inside_panel);
+            render_fn(frame, registry, focus_registry, dropdown_registry, focused_id, &scrolled_child, content_area, inside_panel);
         }
     }
 
