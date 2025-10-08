@@ -10,6 +10,7 @@ use crate::tui::{AppId, Runtime, AppRuntime, apps::{AppLauncher, LoadingScreen, 
 use crate::tui::runtime::AppFactory;
 use crate::tui::element::{ColumnBuilder, RowBuilder, FocusId};
 use crate::tui::widgets::ScrollableState;
+use crate::tui::modals::AppOverviewModal;
 
 /// Group key bindings by description, combining keys with the same description into aliases
 fn group_bindings_by_description(bindings: &[(KeyBinding, &str)]) -> Vec<(String, String)> {
@@ -45,6 +46,9 @@ enum GlobalMsg {
     // Help modal
     HelpScroll(KeyCode),
     CloseHelp,
+
+    // App overview modal
+    CloseAppOverview,
 }
 
 /// Manages multiple app runtimes and handles navigation between them
@@ -65,6 +69,7 @@ pub struct MultiAppRuntime {
     help_modal: ModalState<()>,
     help_scroll_state: ScrollableState,
     quit_modal: ModalState<()>,
+    app_overview_modal: ModalState<()>,
 
     // Global focus system
     global_interaction_registry: crate::tui::InteractionRegistry<GlobalMsg>,
@@ -104,6 +109,7 @@ impl MultiAppRuntime {
             help_modal: ModalState::Closed,
             help_scroll_state: ScrollableState::new(),
             quit_modal: ModalState::Closed,
+            app_overview_modal: ModalState::Closed,
             global_interaction_registry: crate::tui::InteractionRegistry::new(),
             global_focus_registry: crate::tui::renderer::FocusRegistry::new(),
             global_focused_id: None,
@@ -237,6 +243,11 @@ impl MultiAppRuntime {
                 self.global_focused_id = None; // Clear focus when closing modal
                 return Ok(true);
             }
+            GlobalMsg::CloseAppOverview => {
+                self.app_overview_modal.close();
+                self.global_focused_id = None; // Clear focus when closing modal
+                return Ok(true);
+            }
         }
     }
 
@@ -244,7 +255,7 @@ impl MultiAppRuntime {
         log::debug!("🎹 MultiRuntime::handle_key: key={:?}, mods={:?}", key_event.code, key_event.modifiers);
 
         // Priority 1: Global modal keyboard handling (Tab, focused elements)
-        if self.quit_modal.is_open() || self.help_modal.is_open() {
+        if self.quit_modal.is_open() || self.help_modal.is_open() || self.app_overview_modal.is_open() {
             // Tab/Shift-Tab: Move focus within global modal
             if KeyBinding::new(KeyCode::Tab).matches(&key_event) {
                 self.move_global_focus(true);
@@ -282,6 +293,14 @@ impl MultiAppRuntime {
             return Ok(true);  // Consume all other keys (except Tab, handled above)
         }
 
+        // Priority 3.5: App overview modal Esc to close
+        if self.app_overview_modal.is_open() {
+            if key_event.code == KeyCode::Esc {
+                return self.handle_global_msg(GlobalMsg::CloseAppOverview);
+            }
+            return Ok(true);  // Consume all other keys (except Tab, handled above)
+        }
+
         // Priority 4: F1 toggles help menu
         if key_event.code == KeyCode::F(1) {
             self.help_modal.open_empty();
@@ -298,6 +317,13 @@ impl MultiAppRuntime {
                 .expect("AppLauncher not found in runtimes")
                 .take_navigation();
             self.active_app = AppId::AppLauncher;
+            return Ok(true);
+        }
+
+        // Priority 6: Ctrl+O opens app overview modal
+        if KeyBinding::ctrl(KeyCode::Char('o')).matches(&key_event) {
+            self.app_overview_modal.open_empty();
+            self.global_focused_id = Some(FocusId::new("app-overview-close")); // Auto-focus close button
             return Ok(true);
         }
 
@@ -427,6 +453,11 @@ impl MultiAppRuntime {
         // If help menu is open, overlay it on top
         if self.help_modal.is_open() {
             self.render_help_menu(frame, full_area);
+        }
+
+        // If app overview modal is open, overlay it on top
+        if self.app_overview_modal.is_open() {
+            self.render_app_overview(frame, full_area);
         }
 
         // If quit confirmation is open, overlay it on top (highest priority)
@@ -764,6 +795,78 @@ impl MultiAppRuntime {
         self.global_interaction_registry = crate::tui::InteractionRegistry::new();
         self.global_focus_registry = crate::tui::renderer::FocusRegistry::new();
         Renderer::render(frame, &mut self.global_interaction_registry, &mut self.global_focus_registry, &mut dropdown_registry, self.global_focused_id.as_ref(), &quit_modal, modal_area);
+
+        // Check if focused element still exists in the tree
+        if let Some(focused_id) = &self.global_focused_id {
+            if !self.global_focus_registry.contains(focused_id) {
+                // Clear stale focus first
+                self.global_focused_id = None;
+
+                // Try to restore from layer stack (only valid IDs)
+                self.global_focused_id = self.global_focus_registry.restore_focus_from_layers();
+            }
+        } else {
+            // No focus currently - try to restore from layer stack if there are focusables
+            self.global_focused_id = self.global_focus_registry.restore_focus_from_layers();
+        }
+
+        // Save validated/restored focus to the active layer for next frame
+        self.global_focus_registry.save_layer_focus(self.global_focused_id.clone());
+    }
+
+    /// Render app overview modal
+    fn render_app_overview(&mut self, frame: &mut Frame, area: ratatui::layout::Rect) {
+        let theme = &crate::global_runtime_config().theme;
+        use ratatui::widgets::Paragraph;
+        use ratatui::style::Style;
+
+        // Render dim overlay
+        let dim_overlay = Paragraph::new("")
+            .style(Style::default().bg(theme.bg_surface));
+        frame.render_widget(dim_overlay, area);
+
+        // Collect all apps with their lifecycle states
+        let mut apps: Vec<(AppId, AppLifecycle)> = self.lifecycles.iter()
+            .map(|(id, lifecycle)| (*id, *lifecycle))
+            .collect();
+
+        // Sort by app_id for consistent ordering
+        apps.sort_by_key(|(id, _)| format!("{:?}", id));
+
+        // Calculate modal height before moving apps
+        let app_count = apps.len();
+
+        // Build app overview modal using AppOverviewModal
+        let modal = AppOverviewModal::new(apps)
+            .on_close(GlobalMsg::CloseAppOverview)
+            .build();
+
+        // Calculate modal position (centered)
+        let modal_width = 80;
+        let modal_height = (app_count + 10).min(area.height.saturating_sub(4) as usize) as u16; // Title + blank + apps + blank + button + borders
+        let modal_area = ratatui::layout::Rect {
+            x: area.x + (area.width.saturating_sub(modal_width)) / 2,
+            y: area.y + (area.height.saturating_sub(modal_height)) / 2,
+            width: modal_width,
+            height: modal_height,
+        };
+
+        // Clear the modal area to prevent bleed-through from dim overlay
+        use ratatui::widgets::Clear;
+        frame.render_widget(Clear, modal_area);
+
+        // Render with global registries
+        use crate::tui::Renderer;
+        use crate::tui::renderer::DropdownRegistry;
+        let mut dropdown_registry: DropdownRegistry<GlobalMsg> = DropdownRegistry::new();
+
+        // Sync runtime's focus to active layer BEFORE clearing registries
+        self.global_focus_registry.save_layer_focus(self.global_focused_id.clone());
+
+        // Clear and render to global registries
+        self.global_interaction_registry = crate::tui::InteractionRegistry::new();
+        self.global_focus_registry = crate::tui::renderer::FocusRegistry::new();
+        Renderer::render(frame, &mut self.global_interaction_registry, &mut self.global_focus_registry, &mut dropdown_registry, self.global_focused_id.as_ref(), &modal, modal_area);
 
         // Check if focused element still exists in the tree
         if let Some(focused_id) = &self.global_focused_id {
