@@ -1046,17 +1046,23 @@ impl App for DeadlinesMappingApp {
 
                 Command::None
             }
-            Msg::Back => Command::navigate_to(AppId::DeadlinesFileSelect),
+            Msg::Back => Command::batch(vec![
+                Command::navigate_to(AppId::DeadlinesFileSelect),
+                Command::quit_self(),
+            ]),
             Msg::Continue => {
-                Command::start_app(
-                    AppId::DeadlinesInspection,
-                    super::models::InspectionParams {
-                        entity_type: state.detected_entity.clone()
-                            .or_else(|| state.manual_override.clone())
-                            .unwrap_or_default(),
-                        transformed_records: state.transformed_records.clone(),
-                    },
-                )
+                Command::batch(vec![
+                    Command::start_app(
+                        AppId::DeadlinesInspection,
+                        super::models::InspectionParams {
+                            entity_type: state.detected_entity.clone()
+                                .or_else(|| state.manual_override.clone())
+                                .unwrap_or_default(),
+                            transformed_records: state.transformed_records.clone(),
+                        },
+                    ),
+                    Command::quit_self(),
+                ])
             }
         }
     }

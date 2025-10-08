@@ -306,7 +306,10 @@ impl App for MigrationComparisonSelectApp {
                             source_entity: comparison.source_entity.clone(),
                             target_entity: comparison.target_entity.clone(),
                         };
-                        return Command::start_app(AppId::EntityComparison, params);
+                        return Command::batch(vec![
+                            Command::start_app(AppId::EntityComparison, params),
+                            Command::quit_self(),
+                        ]);
                     } else {
                         log::warn!("Selected index {} out of bounds", selected_idx);
                     }
@@ -492,7 +495,10 @@ impl App for MigrationComparisonSelectApp {
                     }
                 }
             }
-            Msg::Back => Command::navigate_to(AppId::MigrationEnvironment),
+            Msg::Back => Command::batch(vec![
+                Command::navigate_to(AppId::MigrationEnvironment),
+                Command::quit_self(),
+            ]),
         }
     }
 

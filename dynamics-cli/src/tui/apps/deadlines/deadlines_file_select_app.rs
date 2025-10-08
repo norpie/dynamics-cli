@@ -177,19 +177,25 @@ impl App for DeadlinesFileSelectApp {
             Msg::ConfirmSelection => {
                 if let (Some(file_path), Resource::Success(_sheets)) = (&state.selected_file, &state.available_sheets) {
                     if let Some(sheet_name) = state.sheet_selector.value() {
-                        return Command::start_app(
-                            AppId::DeadlinesMapping,
-                            super::models::MappingParams {
-                                file_path: file_path.clone(),
-                                sheet_name: sheet_name.to_string(),
-                            }
-                        );
+                        return Command::batch(vec![
+                            Command::start_app(
+                                AppId::DeadlinesMapping,
+                                super::models::MappingParams {
+                                    file_path: file_path.clone(),
+                                    sheet_name: sheet_name.to_string(),
+                                }
+                            ),
+                            Command::quit_self(),
+                        ]);
                     }
                 }
                 Command::None
             }
             Msg::Back => {
-                Command::navigate_to(AppId::AppLauncher)
+                Command::batch(vec![
+                    Command::navigate_to(AppId::AppLauncher),
+                    Command::quit_self(),
+                ])
             }
             Msg::SetViewportHeight(height) => {
                 let item_count = state.file_browser_state.entries().len();

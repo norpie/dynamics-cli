@@ -161,15 +161,18 @@ impl App for MigrationEnvironmentApp {
             }
             Msg::SelectEnvironment(idx) => {
                 if let Some(migration) = state.environments.get(idx) {
-                    // Start the comparison select app with typed parameters
-                    Command::start_app(
-                        AppId::MigrationComparisonSelect,
-                        MigrationSelectParams {
-                            migration_name: migration.name.clone(),
-                            source_env: migration.source.clone(),
-                            target_env: migration.target.clone(),
-                        }
-                    )
+                    // Start the comparison select app with typed parameters and quit self
+                    Command::batch(vec![
+                        Command::start_app(
+                            AppId::MigrationComparisonSelect,
+                            MigrationSelectParams {
+                                migration_name: migration.name.clone(),
+                                source_env: migration.source.clone(),
+                                target_env: migration.target.clone(),
+                            }
+                        ),
+                        Command::quit_self(),
+                    ])
                 } else {
                     Command::None
                 }
