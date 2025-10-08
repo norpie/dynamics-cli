@@ -5,6 +5,7 @@ use ratatui::prelude::Stylize;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use anyhow::Result;
 use std::collections::HashMap;
+use std::time::Instant;
 
 use crate::tui::{AppId, Runtime, AppRuntime, apps::{AppLauncher, LoadingScreen, ErrorScreen, SettingsApp, EnvironmentSelectorApp, migration::{MigrationEnvironmentApp, MigrationComparisonSelectApp, EntityComparisonApp}, DeadlinesFileSelectApp, DeadlinesMappingApp, DeadlinesInspectionApp, OperationQueueApp}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App, ModalState, KeyBinding, AppLifecycle};
 use crate::tui::runtime::AppFactory;
@@ -62,6 +63,9 @@ pub struct MultiAppRuntime {
     /// Lifecycle state for each app
     lifecycles: HashMap<AppId, AppLifecycle>,
 
+    /// Timestamp of when each app was last active (for recency ordering)
+    last_active_time: HashMap<AppId, Instant>,
+
     /// Currently active app
     active_app: AppId,
 
@@ -105,6 +109,7 @@ impl MultiAppRuntime {
             factories,
             runtimes: HashMap::new(),
             lifecycles,
+            last_active_time: HashMap::new(),
             active_app: AppId::AppLauncher,
             help_modal: ModalState::Closed,
             help_scroll_state: ScrollableState::new(),
@@ -117,6 +122,7 @@ impl MultiAppRuntime {
 
         // Eagerly create the AppLauncher since it's the starting app
         runtime.ensure_app_exists(AppId::AppLauncher, Box::new(())).ok();
+        runtime.last_active_time.insert(AppId::AppLauncher, Instant::now());
 
         // Eagerly create the OperationQueue so it can receive pub/sub messages from any app
         runtime.ensure_app_exists(AppId::OperationQueue, Box::new(())).ok();
@@ -371,6 +377,7 @@ impl MultiAppRuntime {
             }
 
             self.active_app = AppId::AppLauncher;
+            self.last_active_time.insert(AppId::AppLauncher, Instant::now());
             return Ok(true);
         }
 
@@ -879,13 +886,23 @@ impl MultiAppRuntime {
             .style(Style::default().bg(theme.bg_surface));
         frame.render_widget(dim_overlay, area);
 
-        // Collect all apps with their lifecycle states
-        let mut apps: Vec<(AppId, AppLifecycle)> = self.lifecycles.iter()
-            .map(|(id, lifecycle)| (*id, *lifecycle))
+        // Get recent apps first (Running/Background in recency order)
+        let recent_app_ids = self.get_recent_apps();
+        let mut apps: Vec<(AppId, AppLifecycle)> = recent_app_ids.iter()
+            .filter_map(|id| {
+                self.lifecycles.get(id).map(|lifecycle| (*id, *lifecycle))
+            })
             .collect();
 
-        // Sort by app_id for consistent ordering
-        apps.sort_by_key(|(id, _)| format!("{:?}", id));
+        // Then add other apps (NotCreated, Dead, QuittingRequested) sorted by name
+        let mut other_apps: Vec<(AppId, AppLifecycle)> = self.lifecycles.iter()
+            .filter(|(id, lifecycle)| {
+                !matches!(lifecycle, AppLifecycle::Running | AppLifecycle::Background)
+            })
+            .map(|(id, lifecycle)| (*id, *lifecycle))
+            .collect();
+        other_apps.sort_by_key(|(id, _)| format!("{:?}", id));
+        apps.extend(other_apps);
 
         // Calculate modal height before moving apps
         let app_count = apps.len();
@@ -938,6 +955,25 @@ impl MultiAppRuntime {
 
         // Save validated/restored focus to the active layer for next frame
         self.global_focus_registry.save_layer_focus(self.global_focused_id.clone());
+    }
+
+    /// Get apps ordered by recency (most recent first), filtered to Running/Background apps only
+    pub fn get_recent_apps(&self) -> Vec<AppId> {
+        let mut apps: Vec<(AppId, Instant)> = self.last_active_time
+            .iter()
+            .filter(|(id, _)| {
+                // Only include Running or Background apps
+                matches!(self.lifecycles.get(id),
+                    Some(AppLifecycle::Running) | Some(AppLifecycle::Background))
+            })
+            .map(|(id, time)| (*id, *time))
+            .collect();
+
+        // Sort by timestamp descending (most recent first)
+        apps.sort_by(|a, b| b.1.cmp(&a.1));
+
+        // Return just the app IDs
+        apps.into_iter().map(|(id, _)| id).collect()
     }
 
     pub async fn poll_async(&mut self) -> Result<()> {
@@ -1029,6 +1065,7 @@ impl MultiAppRuntime {
             self.ensure_app_exists(target, params)?;
 
             self.active_app = target;
+            self.last_active_time.insert(target, Instant::now());
             return Ok(true); // Navigation happened
         }
 
@@ -1089,6 +1126,7 @@ impl MultiAppRuntime {
             }
 
             self.active_app = target;
+            self.last_active_time.insert(target, Instant::now());
             Ok(true) // Navigation happened
         } else {
             Ok(false) // No navigation
