@@ -126,8 +126,9 @@ impl<'a> HelpModal<'a> {
     }
 
     /// Build the modal Element (with unit type since it's global UI)
-    pub fn build(self, theme: &Theme) -> Element<()> {
+    pub fn build(self) -> Element<()> {
         // Build ALL help content items (no skipping - scrollable widget handles scrolling)
+        let theme = &crate::global_runtime_config().theme;
         let mut help_items = vec![
             Element::styled_text(Line::from(vec![
                 Span::styled("Keyboard Shortcuts", Style::default().fg(theme.lavender).bold())

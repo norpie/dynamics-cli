@@ -46,7 +46,7 @@ pub trait App: Sized + Send + 'static {
 
     /// Render the current state to layered UI elements
     /// Note: Takes &mut for internal optimizations (e.g., cache rebuilds)
-    fn view(state: &mut Self::State, theme: &Theme) -> LayeredView<Self::Msg>;
+    fn view(state: &mut Self::State) -> LayeredView<Self::Msg>;
 
     /// Declare what inputs this app wants to receive
     fn subscriptions(state: &Self::State) -> Vec<Subscription<Self::Msg>>;
@@ -55,7 +55,7 @@ pub trait App: Sized + Send + 'static {
     fn title() -> &'static str;
 
     /// Return optional status text (dynamic, styled based on state)
-    fn status(state: &Self::State, theme: &Theme) -> Option<Line<'static>> {
+    fn status(state: &Self::State) -> Option<Line<'static>> {
         None
     }
 

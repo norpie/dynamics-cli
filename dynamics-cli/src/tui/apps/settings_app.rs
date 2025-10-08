@@ -675,8 +675,9 @@ impl App for SettingsApp {
         }
     }
 
-    fn view(state: &mut State, theme: &Theme) -> LayeredView<Msg> {
+    fn view(state: &mut State) -> LayeredView<Msg> {
         use_constraints!();
+        let theme = &crate::global_runtime_config().theme;
 
         // Left sidebar: namespace list
         let namespace_list = Element::list(
@@ -806,7 +807,7 @@ impl App for SettingsApp {
         "Settings"
     }
 
-    fn status(_state: &State, _theme: &Theme) -> Option<Line<'static>> {
+    fn status(_state: &State) -> Option<Line<'static>> {
         Some(Line::from(vec![
             Span::raw("Configure application options")
         ]))

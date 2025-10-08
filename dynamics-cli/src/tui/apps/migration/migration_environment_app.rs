@@ -369,8 +369,9 @@ impl App for MigrationEnvironmentApp {
         }
     }
 
-    fn view(state: &mut State, theme: &Theme) -> LayeredView<Msg> {
+    fn view(state: &mut State) -> LayeredView<Msg> {
         use_constraints!();
+        let theme = &crate::global_runtime_config().theme;
 
         let list = Element::list("migration-list", &state.environments, &state.list_state, theme)
             .on_select(Msg::SelectEnvironment)

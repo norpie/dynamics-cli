@@ -914,8 +914,9 @@ impl App for EnvironmentSelectorApp {
         }
     }
 
-    fn view(state: &mut State, theme: &Theme) -> LayeredView<Msg> {
+    fn view(state: &mut State) -> LayeredView<Msg> {
         // Environment names for selector
+        let theme = &crate::global_runtime_config().theme;
         let env_names: Vec<String> = state.environments.iter()
             .map(|e| {
                 let mut name = e.name.clone();
@@ -950,8 +951,9 @@ impl App for EnvironmentSelectorApp {
         "Environment & Credential Configuration"
     }
 
-    fn status(state: &State, theme: &Theme) -> Option<Line<'static>> {
+    fn status(state: &State) -> Option<Line<'static>> {
         state.current_environment.as_ref().map(|env| {
+        let theme = &crate::global_runtime_config().theme;
             Line::from(vec![
                 Span::styled("Current: ", Style::default().fg(theme.subtext0)),
                 Span::styled(env.clone(), Style::default().fg(theme.green)),

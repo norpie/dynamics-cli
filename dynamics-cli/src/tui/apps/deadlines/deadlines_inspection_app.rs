@@ -310,8 +310,9 @@ impl App for DeadlinesInspectionApp {
         }
     }
 
-    fn view(state: &mut State, theme: &Theme) -> LayeredView<Msg> {
+    fn view(state: &mut State) -> LayeredView<Msg> {
         use_constraints!();
+        let theme = &crate::global_runtime_config().theme;
 
         // Convert records to list items
         let list_items: Vec<RecordListItem> = state.transformed_records.iter()
@@ -413,7 +414,8 @@ impl App for DeadlinesInspectionApp {
         "Deadlines - Inspection"
     }
 
-    fn status(state: &State, theme: &Theme) -> Option<Line<'static>> {
+    fn status(state: &State) -> Option<Line<'static>> {
+        let theme = &crate::global_runtime_config().theme;
         let records_with_warnings = state.transformed_records.iter()
             .filter(|r| r.has_warnings())
             .count();

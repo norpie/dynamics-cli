@@ -224,7 +224,8 @@ impl App for EntityComparisonApp {
         super::update::update(state, msg)
     }
 
-    fn view(state: &mut Self::State, theme: &Theme) -> LayeredView<Self::Msg> {
+    fn view(state: &mut Self::State) -> LayeredView<Self::Msg> {
+        let theme = &crate::global_runtime_config().theme;
         let main_ui = render_main_layout(state, theme);
         let mut view = LayeredView::new(main_ui);
 
@@ -341,8 +342,9 @@ impl App for EntityComparisonApp {
         "Entity Comparison"
     }
 
-    fn status(state: &Self::State, theme: &Theme) -> Option<Line<'static>> {
+    fn status(state: &Self::State) -> Option<Line<'static>> {
         // Build tab indicator with active tab highlighted
+        let theme = &crate::global_runtime_config().theme;
         let tabs = [
             ActiveTab::Fields,
             ActiveTab::Relationships,

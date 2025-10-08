@@ -192,8 +192,9 @@ impl<Msg: Clone> ExamplesModal<Msg> {
     }
 
     /// Build the modal Element
-    pub fn build(self, theme: &Theme) -> Element<Msg> {
+    pub fn build(self) -> Element<Msg> {
         use_constraints!();
+        let theme = &crate::global_runtime_config().theme;
 
         // Build text input elements from state
         let source_handler = self.on_source_input_event

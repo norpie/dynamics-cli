@@ -1060,7 +1060,8 @@ impl App for DeadlinesMappingApp {
         }
     }
 
-    fn view(state: &mut State, theme: &Theme) -> LayeredView<Msg> {
+    fn view(state: &mut State) -> LayeredView<Msg> {
+        let theme = &crate::global_runtime_config().theme;
         let content = match &state.entities {
             Resource::NotAsked => {
                 col![Element::styled_text(Line::from(vec![Span::styled(
@@ -1272,8 +1273,9 @@ impl App for DeadlinesMappingApp {
         "Deadlines - Mapping"
     }
 
-    fn status(state: &State, theme: &Theme) -> Option<Line<'static>> {
+    fn status(state: &State) -> Option<Line<'static>> {
         state.current_environment.as_ref().map(|env| {
+        let theme = &crate::global_runtime_config().theme;
             Line::from(vec![
                 Span::styled("Environment: ", Style::default().fg(theme.subtext0)),
                 Span::styled(

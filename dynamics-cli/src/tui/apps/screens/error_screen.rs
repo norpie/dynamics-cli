@@ -65,7 +65,8 @@ impl App for ErrorScreen {
         }
     }
 
-    fn view(state: &mut State, theme: &Theme) -> LayeredView<Msg> {
+    fn view(state: &mut State) -> LayeredView<Msg> {
+        let theme = &crate::global_runtime_config().theme;
         let content = vec![
             Element::styled_text(Line::from(vec![
                 Span::styled("❌ Error", Style::default().fg(theme.red).bold()),
@@ -104,7 +105,8 @@ impl App for ErrorScreen {
         "Error"
     }
 
-    fn status(state: &State, theme: &Theme) -> Option<Line<'static>> {
+    fn status(state: &State) -> Option<Line<'static>> {
+        let theme = &crate::global_runtime_config().theme;
         Some(Line::from(Span::styled("[Error]", Style::default().fg(theme.red))))
     }
 }

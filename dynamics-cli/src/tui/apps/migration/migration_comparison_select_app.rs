@@ -495,8 +495,9 @@ impl App for MigrationComparisonSelectApp {
         }
     }
 
-    fn view(state: &mut Self::State, theme: &Theme) -> LayeredView<Self::Msg> {
+    fn view(state: &mut Self::State) -> LayeredView<Self::Msg> {
         use_constraints!();
+        let theme = &crate::global_runtime_config().theme;
 
         log::trace!("MigrationComparisonSelectApp::view() - migration_name={:?}, comparisons={}",
             state.migration_name, state.comparisons.len());
@@ -749,8 +750,9 @@ impl App for MigrationComparisonSelectApp {
         "Migration Comparison Select"
     }
 
-    fn status(state: &Self::State, theme: &Theme) -> Option<Line<'static>> {
+    fn status(state: &Self::State) -> Option<Line<'static>> {
         log::trace!("MigrationComparisonSelectApp::status() - migration_name={:?}", state.migration_name);
+        let theme = &crate::global_runtime_config().theme;
         if let Some(ref migration_name) = state.migration_name {
             let source = state.source_env.as_deref().unwrap_or("?");
             let target = state.target_env.as_deref().unwrap_or("?");

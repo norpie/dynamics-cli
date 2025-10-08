@@ -102,8 +102,9 @@ impl<Msg: Clone> ConfirmationModal<Msg> {
     }
 
     /// Build the modal Element
-    pub fn build(self, theme: &Theme) -> Element<Msg> {
+    pub fn build(self) -> Element<Msg> {
         // Title line
+        let theme = &crate::global_runtime_config().theme;
         let title_element = Element::styled_text(Line::from(vec![
             Span::styled(self.title, Style::default().fg(theme.mauve).bold())
         ])).build();

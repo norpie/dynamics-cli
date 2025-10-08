@@ -157,7 +157,7 @@ pub fn render_back_confirmation_modal(theme: &Theme) -> Element<Msg> {
         .on_cancel(Msg::CancelBack)
         .width(60)
         .height(10)
-        .build(theme)
+        .build()
 }
 
 pub fn render_examples_modal(state: &State, theme: &Theme) -> Element<Msg> {
@@ -188,7 +188,7 @@ pub fn render_examples_modal(state: &State, theme: &Theme) -> Element<Msg> {
         .on_add(Msg::AddExamplePair)
         .on_delete(Msg::DeleteExamplePair)
         .on_close(Msg::CloseExamplesModal)
-        .build(theme)
+        .build()
 }
 
 pub fn render_prefix_mappings_modal(state: &State, theme: &Theme) -> Element<Msg> {
@@ -215,7 +215,7 @@ pub fn render_prefix_mappings_modal(state: &State, theme: &Theme) -> Element<Msg
         .on_add(Msg::AddPrefixMapping)
         .on_delete(Msg::DeletePrefixMapping)
         .on_close(Msg::ClosePrefixMappingsModal)
-        .build(theme)
+        .build()
 }
 
 /// Filter out matched items from tree based on hide_matched setting
@@ -358,5 +358,5 @@ pub fn render_manual_mappings_modal(state: &State, theme: &Theme) -> Element<Msg
         .on_list_select(Msg::ManualMappingsListSelect)
         .on_delete(Msg::DeleteManualMappingFromModal)
         .on_close(Msg::CloseManualMappingsModal)
-        .build(theme)
+        .build()
 }

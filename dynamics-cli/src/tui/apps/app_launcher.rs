@@ -112,7 +112,8 @@ impl App for AppLauncher {
         }
     }
 
-    fn view(state: &mut State, theme: &Theme) -> LayeredView<Msg> {
+    fn view(state: &mut State) -> LayeredView<Msg> {
+        let theme = &crate::global_runtime_config().theme;
         let list = Element::list(
             FocusId::new("app-list"),
             &state.apps,
@@ -140,7 +141,7 @@ impl App for AppLauncher {
         "App Launcher"
     }
 
-    fn status(_state: &State, _theme: &Theme) -> Option<Line<'static>> {
+    fn status(_state: &State) -> Option<Line<'static>> {
         None
     }
 }

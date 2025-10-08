@@ -175,8 +175,9 @@ impl App for LoadingScreen {
         }
     }
 
-    fn view(state: &mut State, theme: &Theme) -> LayeredView<Msg> {
+    fn view(state: &mut State) -> LayeredView<Msg> {
         let mut content = vec![];
+        let theme = &crate::global_runtime_config().theme;
 
         // Header
         let all_done = state.tasks.iter().all(|t| {

@@ -57,8 +57,9 @@ impl<Msg: Clone> ErrorModal<Msg> {
     }
 
     /// Build the modal Element
-    pub fn build(self, theme: &Theme) -> Element<Msg> {
+    pub fn build(self) -> Element<Msg> {
         // Error icon + title
+        let theme = &crate::global_runtime_config().theme;
         let title_element = Element::styled_text(Line::from(vec![
             Span::styled("✗ ", Style::default().fg(theme.red).bold()),
             Span::styled(self.title, Style::default().fg(theme.red).bold())

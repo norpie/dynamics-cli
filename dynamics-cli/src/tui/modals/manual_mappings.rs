@@ -119,8 +119,9 @@ impl<Msg: Clone> ManualMappingsModal<Msg> {
     }
 
     /// Build the modal Element
-    pub fn build(self, theme: &Theme) -> Element<Msg> {
+    pub fn build(self) -> Element<Msg> {
         use_constraints!();
+        let theme = &crate::global_runtime_config().theme;
 
         // Build list
         let list_handler = self.on_list_navigate

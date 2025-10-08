@@ -183,7 +183,7 @@ impl<A: App> Runtime<A> {
     /// Get the app's status (optional, dynamic)
     pub fn get_status(&self) -> Option<ratatui::text::Line<'static>> {
         let config = crate::global_runtime_config();
-        A::status(&self.state, &config.theme)
+        A::status(&self.state)
     }
 
     /// Get a reference to the app's state
@@ -872,13 +872,13 @@ impl<A: App> Runtime<A> {
 
         // Get the layered view from the app
         let config = crate::global_runtime_config();
-        let layered_view = A::view(&mut self.state, &config.theme);
+        let layered_view = A::view(&mut self.state);
 
         log::debug!("Runtime: rendering layers");
         // Render using the new layered API
         Renderer::render_layers(
             frame,
-            &config.theme,
+            &crate::global_runtime_config().theme,
             &mut self.registry,
             &mut self.focus_registry,
             self.focused_id.as_ref(),

@@ -201,8 +201,9 @@ impl App for DeadlinesFileSelectApp {
         }
     }
 
-    fn view(state: &mut State, theme: &Theme) -> LayeredView<Msg> {
+    fn view(state: &mut State) -> LayeredView<Msg> {
         use crate::tui::element::LayoutConstraint::*;
+        let theme = &crate::global_runtime_config().theme;
         use crate::{col, row, spacer};
 
         // File browser panel
@@ -293,8 +294,9 @@ impl App for DeadlinesFileSelectApp {
         "Deadlines - File Selection"
     }
 
-    fn status(state: &State, theme: &Theme) -> Option<Line<'static>> {
+    fn status(state: &State) -> Option<Line<'static>> {
         state.current_environment.as_ref().map(|env| {
+        let theme = &crate::global_runtime_config().theme;
             Line::from(vec![
                 Span::styled("Environment: ", Style::default().fg(theme.subtext0)),
                 Span::styled(env.clone(), Style::default().fg(theme.lavender)),

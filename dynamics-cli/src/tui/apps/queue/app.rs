@@ -816,8 +816,9 @@ impl App for OperationQueueApp {
         }
     }
 
-    fn view(state: &mut State, theme: &Theme) -> LayeredView<Msg> {
+    fn view(state: &mut State) -> LayeredView<Msg> {
         use_constraints!();
+        let theme = &crate::global_runtime_config().theme;
 
         // Build tree nodes from filtered queue items
         let mut filtered_items: Vec<QueueItem> = state
@@ -982,8 +983,9 @@ impl App for OperationQueueApp {
         "Operation Queue"
     }
 
-    fn status(state: &State, theme: &Theme) -> Option<Line<'static>> {
+    fn status(state: &State) -> Option<Line<'static>> {
         use ratatui::text::Span;
+        let theme = &crate::global_runtime_config().theme;
         use ratatui::style::Style;
 
         let interrupted_count = state.queue_items.iter()
@@ -1639,7 +1641,7 @@ fn build_clear_confirm_modal(theme: &Theme) -> Element<Msg> {
         .on_confirm(Msg::ConfirmClearQueue)
         .on_cancel(Msg::CancelModal)
         .width(60)
-        .build(theme)
+        .build()
 }
 
 fn build_delete_confirm_modal(theme: &Theme) -> Element<Msg> {
@@ -1652,7 +1654,7 @@ fn build_delete_confirm_modal(theme: &Theme) -> Element<Msg> {
         .on_confirm(Msg::ConfirmDeleteSelected)
         .on_cancel(Msg::CancelModal)
         .width(60)
-        .build(theme)
+        .build()
 }
 
 fn build_interruption_warning_modal(state: &State, theme: &Theme) -> Element<Msg> {
@@ -1694,5 +1696,5 @@ fn build_interruption_warning_modal(state: &State, theme: &Theme) -> Element<Msg
         modal = modal.add_item(format!("... and {} more", interrupted_items.len() - 5));
     }
 
-    modal.build(theme)
+    modal.build()
 }
