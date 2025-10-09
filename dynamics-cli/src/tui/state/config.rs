@@ -136,6 +136,27 @@ async fn load_theme_from_options(options: &Options, name: &str) -> anyhow::Resul
     })
 }
 
+/// Load all themes by their names from the options database
+///
+/// Returns a HashMap mapping theme names to Theme structs.
+/// Themes that fail to load are logged and skipped.
+pub async fn load_all_themes(options: &Options, names: Vec<String>) -> std::collections::HashMap<String, Theme> {
+    let mut themes = std::collections::HashMap::new();
+
+    for name in names {
+        match load_theme_from_options(options, &name).await {
+            Ok(theme) => {
+                themes.insert(name, theme);
+            }
+            Err(e) => {
+                log::warn!("Failed to load theme '{}': {}. Skipping.", name, e);
+            }
+        }
+    }
+
+    themes
+}
+
 /// Load a single color from options by theme name and color name
 async fn load_color(options: &Options, theme: &str, color: &str) -> anyhow::Result<Color> {
     let key = format!("theme.{}.{}", theme, color);
