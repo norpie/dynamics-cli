@@ -10,6 +10,12 @@ keywords = ["dynamics", "cli", "microsoft", "crm", "dynamics365"]
 categories = ["command-line-utilities"]
 readme = "../README.md"
 
+[package.metadata.wix]
+upgrade-guid = "A1FBEF78-4FDA-44AD-B827-C23FD1F21E05"
+path-guid = "50ACFB3E-4690-49F9-BD05-E22D1CE94142"
+license = false
+eula = false
+
 # [lib]
 # name = "dynamics_cli"
 # path = "src/lib.rs"
