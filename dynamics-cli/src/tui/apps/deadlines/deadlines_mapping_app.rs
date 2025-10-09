@@ -571,6 +571,13 @@ fn process_row(
 
                 // Skip empty cells
                 if cell_value.trim().is_empty() {
+                    // Check if this is a required field
+                    if mapping.required {
+                        transformed.warnings.push(format!(
+                            "Required field '{}' is empty",
+                            mapping.excel_column
+                        ));
+                    }
                     continue;
                 }
 
@@ -636,6 +643,22 @@ fn process_row(
                         // Checkboxes are handled separately below
                     }
                 }
+            } else {
+                // Cell not found in row
+                if mapping.required {
+                    transformed.warnings.push(format!(
+                        "Required field '{}' is missing (column exists but cell is out of bounds)",
+                        mapping.excel_column
+                    ));
+                }
+            }
+        } else {
+            // Column not found in headers
+            if mapping.required {
+                transformed.warnings.push(format!(
+                    "Required field '{}' is missing from Excel file",
+                    mapping.excel_column
+                ));
             }
         }
     }

@@ -66,6 +66,7 @@ pub struct FieldMapping {
     pub excel_column: String,
     pub dynamics_field: String,
     pub field_type: FieldType,
+    pub required: bool,
 }
 
 /// Get field mappings for cgk_deadlines entity
@@ -78,6 +79,7 @@ pub fn get_cgk_mappings() -> Vec<FieldMapping> {
             field_type: FieldType::Lookup {
                 target_entity: "cgk_pillar".to_string(),
             },
+            required: true,
         },
 
         // Fund
@@ -87,6 +89,7 @@ pub fn get_cgk_mappings() -> Vec<FieldMapping> {
             field_type: FieldType::Lookup {
                 target_entity: "cgk_fund".to_string(),
             },
+            required: true,
         },
 
         // Deadline name (just the value from Deadline column)
@@ -94,6 +97,7 @@ pub fn get_cgk_mappings() -> Vec<FieldMapping> {
             excel_column: "Deadline*".to_string(),
             dynamics_field: "cgk_deadlinename".to_string(),
             field_type: FieldType::Direct,
+            required: false,
         },
 
         // Project manager
@@ -103,6 +107,7 @@ pub fn get_cgk_mappings() -> Vec<FieldMapping> {
             field_type: FieldType::Lookup {
                 target_entity: "systemuser".to_string(),
             },
+            required: false,
         },
 
         // Info field
@@ -110,6 +115,7 @@ pub fn get_cgk_mappings() -> Vec<FieldMapping> {
             excel_column: "Info".to_string(),
             dynamics_field: "cgk_info".to_string(),
             field_type: FieldType::Direct,
+            required: false,
         },
 
         // Deadline date (combined with time from "Uur" column)
@@ -117,6 +123,7 @@ pub fn get_cgk_mappings() -> Vec<FieldMapping> {
             excel_column: "Datum Deadline".to_string(),
             dynamics_field: "cgk_date".to_string(),
             field_type: FieldType::Date,
+            required: false,
         },
 
         // Time for deadline (combined into cgk_date)
@@ -124,6 +131,7 @@ pub fn get_cgk_mappings() -> Vec<FieldMapping> {
             excel_column: "Uur".to_string(),
             dynamics_field: "cgk_date".to_string(),
             field_type: FieldType::Time,
+            required: false,
         },
 
         // Commission lookup
@@ -133,6 +141,7 @@ pub fn get_cgk_mappings() -> Vec<FieldMapping> {
             field_type: FieldType::Lookup {
                 target_entity: "cgk_commission".to_string(),
             },
+            required: false,
         },
 
         // Commission meeting date
@@ -140,6 +149,7 @@ pub fn get_cgk_mappings() -> Vec<FieldMapping> {
             excel_column: "Datum Commissievergadering".to_string(),
             dynamics_field: "cgk_datumcommissievergadering".to_string(),
             field_type: FieldType::Date,
+            required: false,
         },
 
         // Board meeting (Raad van Bestuur) - hidden field only visible in $metadata
@@ -149,6 +159,7 @@ pub fn get_cgk_mappings() -> Vec<FieldMapping> {
             field_type: FieldType::Lookup {
                 target_entity: "cgk_deadline".to_string(), // Self-referencing for CGK
             },
+            required: false,
         },
     ]
 }
@@ -163,6 +174,7 @@ pub fn get_nrq_mappings() -> Vec<FieldMapping> {
             field_type: FieldType::Lookup {
                 target_entity: "nrq_domain".to_string(),
             },
+            required: true,
         },
 
         // Fund
@@ -172,6 +184,7 @@ pub fn get_nrq_mappings() -> Vec<FieldMapping> {
             field_type: FieldType::Lookup {
                 target_entity: "nrq_fund".to_string(),
             },
+            required: true,
         },
 
         // Deadline name
@@ -179,6 +192,7 @@ pub fn get_nrq_mappings() -> Vec<FieldMapping> {
             excel_column: "Deadline*".to_string(),
             dynamics_field: "nrq_name".to_string(),
             field_type: FieldType::Direct,
+            required: false,
         },
 
         // Project manager - use email column (non-naam version)
@@ -188,6 +202,7 @@ pub fn get_nrq_mappings() -> Vec<FieldMapping> {
             field_type: FieldType::Lookup {
                 target_entity: "systemuser".to_string(),
             },
+            required: false,
         },
 
         // Info field
@@ -195,6 +210,7 @@ pub fn get_nrq_mappings() -> Vec<FieldMapping> {
             excel_column: "Info".to_string(),
             dynamics_field: "nrq_info".to_string(),
             field_type: FieldType::Direct,
+            required: false,
         },
 
         // Deadline date
@@ -202,6 +218,7 @@ pub fn get_nrq_mappings() -> Vec<FieldMapping> {
             excel_column: "Datum Deadline".to_string(),
             dynamics_field: "nrq_date".to_string(),
             field_type: FieldType::Date,
+            required: false,
         },
 
         // Commission meeting time (machine-readable time field)
@@ -209,6 +226,7 @@ pub fn get_nrq_mappings() -> Vec<FieldMapping> {
             excel_column: "Uur".to_string(),
             dynamics_field: "nrq_time".to_string(),
             field_type: FieldType::Time,
+            required: false,
         },
 
         // Commission
@@ -218,6 +236,7 @@ pub fn get_nrq_mappings() -> Vec<FieldMapping> {
             field_type: FieldType::Lookup {
                 target_entity: "nrq_commission".to_string(),
             },
+            required: false,
         },
 
         // Commission meeting date
@@ -225,6 +244,7 @@ pub fn get_nrq_mappings() -> Vec<FieldMapping> {
             excel_column: "Datum Commissievergadering".to_string(),
             dynamics_field: "nrq_commissiondate".to_string(),
             field_type: FieldType::Date,
+            required: false,
         },
 
         // Board meeting (Raad van Bestuur) - separate entity for NRQ
@@ -234,6 +254,7 @@ pub fn get_nrq_mappings() -> Vec<FieldMapping> {
             field_type: FieldType::Lookup {
                 target_entity: "nrq_boardmeeting".to_string(),
             },
+            required: false,
         },
     ]
 }
