@@ -127,7 +127,23 @@ pub async fn get_applied_migrations(pool: &SqlitePool) -> Result<Vec<AppliedMigr
 }
 
 /// Calculate checksum for migration SQL
+/// Normalizes line endings to LF before hashing to ensure cross-platform consistency
 pub fn calculate_checksum(sql: &str) -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    // Normalize line endings by removing \r (Windows CRLF -> Unix LF)
+    // This ensures the same checksum on Windows and Unix systems
+    let normalized = sql.replace("\r\n", "\n").replace('\r', "\n");
+
+    let mut hasher = DefaultHasher::new();
+    normalized.hash(&mut hasher);
+    format!("{:x}", hasher.finish())
+}
+
+/// Calculate checksum using the old method (without line ending normalization)
+/// Used for backwards compatibility with databases that have old checksums
+fn calculate_checksum_legacy(sql: &str) -> String {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
 
@@ -144,13 +160,20 @@ pub async fn validate_migrations(pool: &SqlitePool) -> Result<()> {
     for applied_migration in applied {
         if let Some(available_migration) = available.get(&applied_migration.version) {
             let expected_checksum = calculate_checksum(&available_migration.up_sql);
-            if applied_migration.checksum != expected_checksum {
+            let legacy_checksum = calculate_checksum_legacy(&available_migration.up_sql);
+
+            // Accept either the new (normalized) or legacy (raw) checksum for backwards compatibility
+            let is_valid = applied_migration.checksum == expected_checksum
+                || applied_migration.checksum == legacy_checksum;
+
+            if !is_valid {
                 anyhow::bail!(
-                    "Migration {} checksum mismatch! Applied: {}, Expected: {}. \
+                    "Migration {} checksum mismatch! Applied: {}, Expected: {} (or legacy: {}). \
                     This indicates the migration file has been modified after being applied.",
                     applied_migration.version,
                     applied_migration.checksum,
-                    expected_checksum
+                    expected_checksum,
+                    legacy_checksum
                 );
             }
         } else {

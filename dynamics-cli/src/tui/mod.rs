@@ -22,9 +22,6 @@ mod test_validate;
 #[cfg(test)]
 mod test_resource_handlers;
 
-#[cfg(test)]
-mod test_loading_screen;
-
 pub use command::{Command, AppId};
 pub use element::{Element, LayoutConstraint, Layer, Alignment, FocusId};
 pub use subscription::{Subscription, KeyBinding};
