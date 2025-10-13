@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyEvent},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -10,6 +10,7 @@ use ratatui::{
     Terminal,
 };
 use std::io;
+use std::time::Instant;
 
 use crate::tui::MultiAppRuntime;
 
@@ -64,6 +65,11 @@ async fn run_tui<B: Backend>(
     terminal: &mut Terminal<B>,
     runtime: &mut MultiAppRuntime,
 ) -> Result<()> {
+    // Event deduplication state to prevent double-registration on Windows
+    // Windows terminal can send duplicate Tab events within milliseconds
+    let mut last_key_event: Option<(KeyEvent, Instant)> = None;
+    const DEDUP_WINDOW_MS: u128 = 10; // 10ms deduplication window
+
     loop {
         let frame_start = std::time::Instant::now();
 
@@ -74,6 +80,20 @@ async fn run_tui<B: Backend>(
 
             // Handle global shortcuts first
             if let Event::Key(key) = &event_result {
+                // Deduplicate key events (Windows-specific Tab double-press issue)
+                if let Some((last_key, last_time)) = last_key_event {
+                    let elapsed = frame_start.duration_since(last_time).as_millis();
+                    if elapsed < DEDUP_WINDOW_MS
+                        && last_key.code == key.code
+                        && last_key.modifiers == key.modifiers
+                    {
+                        // Duplicate event within deduplication window - skip
+                        log::debug!("Skipping duplicate key event: {:?} ({}ms since last)", key.code, elapsed);
+                        continue;
+                    }
+                }
+                last_key_event = Some((*key, frame_start));
+
                 if key.code == crossterm::event::KeyCode::Char('q')
                     && key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL)
                 {
