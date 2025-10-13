@@ -174,7 +174,7 @@ pub fn get_nrq_mappings() -> Vec<FieldMapping> {
             field_type: FieldType::Lookup {
                 target_entity: "nrq_domain".to_string(),
             },
-            required: true,
+            required: false,
         },
 
         // Fund
@@ -184,7 +184,7 @@ pub fn get_nrq_mappings() -> Vec<FieldMapping> {
             field_type: FieldType::Lookup {
                 target_entity: "nrq_fund".to_string(),
             },
-            required: true,
+            required: false,
         },
 
         // Deadline name
