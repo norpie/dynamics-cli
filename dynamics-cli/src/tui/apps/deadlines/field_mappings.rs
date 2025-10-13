@@ -79,7 +79,7 @@ pub fn get_cgk_mappings() -> Vec<FieldMapping> {
             field_type: FieldType::Lookup {
                 target_entity: "cgk_pillar".to_string(),
             },
-            required: true,
+            required: false,
         },
 
         // Fund
@@ -89,7 +89,7 @@ pub fn get_cgk_mappings() -> Vec<FieldMapping> {
             field_type: FieldType::Lookup {
                 target_entity: "cgk_fund".to_string(),
             },
-            required: true,
+            required: false,
         },
 
         // Deadline name (just the value from Deadline column)
