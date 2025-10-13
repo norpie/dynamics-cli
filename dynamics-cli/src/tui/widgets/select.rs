@@ -96,6 +96,14 @@ impl SelectState {
         }
     }
 
+    /// Clear selection (used when clearing the field)
+    pub fn clear(&mut self) {
+        self.selected_index = 0;
+        self.highlight_index = 0;
+        self.option_count = 0;
+        self.is_open = false;
+    }
+
     /// Navigate to next option (when dropdown is open)
     pub fn navigate_next(&mut self) {
         if self.option_count > 0 {

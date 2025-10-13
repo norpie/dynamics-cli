@@ -169,8 +169,15 @@ impl SelectField {
     }
 
     /// Set selected value (useful for initialization)
+    /// If value is None, also clears the visual state
     pub fn set_value(&mut self, value: Option<String>) {
+        // Check if clearing before moving value
+        let is_clearing = value.is_none();
         self.selected_option = value;
+        // If clearing value, also clear the state
+        if is_clearing {
+            self.state.clear();
+        }
     }
 
     /// Set selected value and update state index to match (requires options list)

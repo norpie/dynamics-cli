@@ -129,7 +129,10 @@ pub fn render_select<Msg: Clone + Send + 'static>(
     let is_focused = focused_id == Some(id);
 
     // Get selected option text
-    let selected_text = if selected < options.len() {
+    // If options is empty, show placeholder text
+    let selected_text = if options.is_empty() {
+        ""
+    } else if selected < options.len() {
         &options[selected]
     } else {
         ""

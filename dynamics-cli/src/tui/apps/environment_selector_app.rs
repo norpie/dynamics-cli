@@ -52,6 +52,10 @@ pub struct State {
     // UI state
     env_panel_dirty: bool,
     cred_panel_dirty: bool,
+
+    // Track recently saved items to auto-select them after reload
+    recently_saved_env: Option<String>,
+    recently_saved_cred: Option<String>,
 }
 
 impl State {
@@ -86,6 +90,9 @@ impl State {
 
             env_panel_dirty: false,
             cred_panel_dirty: false,
+
+            recently_saved_env: None,
+            recently_saved_cred: None,
         }
     }
 
@@ -239,14 +246,30 @@ impl App for EnvironmentSelectorApp {
                 state.credentials = data.credentials;
                 state.data_load_state = Resource::Success(());
 
-                // Auto-select first environment if available
+                // Select recently saved environment, or first one if none saved recently
                 if !state.environments.is_empty() {
-                    let env = &state.environments[0];
-                    state.env_selector.set_value(Some(env.name.clone()));
-                    state.env_name_field.set_value(env.name.clone());
-                    state.env_host_field.set_value(env.host.clone());
-                    state.env_creds_selector.set_value(Some(env.credentials_ref.clone()));
-                    state.env_panel_dirty = false;
+                    let env_to_select = if let Some(ref saved_name) = state.recently_saved_env {
+                        // Try to find the recently saved environment
+                        state.environments.iter().find(|e| &e.name == saved_name)
+                            .or_else(|| state.environments.first())
+                    } else {
+                        // No recent save, select first
+                        state.environments.first()
+                    };
+
+                    if let Some(env) = env_to_select {
+                        let env_names: Vec<String> = state.environments.iter()
+                            .map(|e| e.name.clone())
+                            .collect();
+                        state.env_selector.set_value_with_options(Some(env.name.clone()), &env_names);
+                        state.env_name_field.set_value(env.name.clone());
+                        state.env_host_field.set_value(env.host.clone());
+                        state.env_creds_selector.set_value(Some(env.credentials_ref.clone()));
+                        state.env_panel_dirty = false;
+                    }
+
+                    // Clear the recently saved flag after using it
+                    state.recently_saved_env = None;
                 }
 
                 // Set active environment selector with proper index
@@ -257,22 +280,36 @@ impl App for EnvironmentSelectorApp {
                     state.active_env_selector.set_value_with_options(Some(current.clone()), &env_names);
                 }
 
-                // Auto-select and load first credential if available
+                // Select recently saved credential, or first one if none saved recently
                 if !state.credentials.is_empty() {
-                    let cred_name = state.credentials[0].clone();
-                    state.cred_selector.set_value(Some(cred_name.clone()));
-                    state.cred_name_field.set_value(cred_name.clone());
+                    let cred_to_select = if let Some(ref saved_name) = state.recently_saved_cred {
+                        // Try to find the recently saved credential
+                        state.credentials.iter().find(|c| c == &saved_name)
+                            .or_else(|| state.credentials.first())
+                    } else {
+                        // No recent save, select first
+                        state.credentials.first()
+                    };
 
-                    return Command::perform(
-                        async move {
-                            let config = crate::global_config();
-                            log::debug!("Auto-loading first credential: {}", cred_name);
-                            config.get_credentials(&cred_name).await
-                                .map_err(|e| e.to_string())?
-                                .ok_or_else(|| "Credential not found".to_string())
-                        },
-                        Msg::CredentialDataLoaded
-                    );
+                    if let Some(cred_name) = cred_to_select {
+                        let cred_name = cred_name.clone();
+                        state.cred_selector.set_value_with_options(Some(cred_name.clone()), &state.credentials);
+                        state.cred_name_field.set_value(cred_name.clone());
+
+                        // Clear the recently saved flag after using it
+                        state.recently_saved_cred = None;
+
+                        return Command::perform(
+                            async move {
+                                let config = crate::global_config();
+                                log::debug!("Auto-loading credential: {}", cred_name);
+                                config.get_credentials(&cred_name).await
+                                    .map_err(|e| e.to_string())?
+                                    .ok_or_else(|| "Credential not found".to_string())
+                            },
+                            Msg::CredentialDataLoaded
+                        );
+                    }
                 }
 
                 Command::None
@@ -388,6 +425,8 @@ impl App for EnvironmentSelectorApp {
                 }
 
                 state.env_save_state = Resource::Loading;
+                // Remember the name so we can select it after reload
+                state.recently_saved_env = Some(name.clone());
 
                 Command::perform(
                     async move {
@@ -444,6 +483,7 @@ impl App for EnvironmentSelectorApp {
 
             Msg::EnvironmentSaved(Err(err)) => {
                 state.env_save_state = Resource::Failure(err.clone());
+                state.recently_saved_env = None; // Clear on error
                 log::error!("Failed to save environment: {}", err);
                 Command::None
             }
@@ -693,6 +733,9 @@ impl App for EnvironmentSelectorApp {
                     return Command::None;
                 }
 
+                // Remember the name so we can select it after reload
+                state.recently_saved_cred = Some(name.clone());
+
                 let cred_set = match type_str {
                     "Username/Password" => {
                         CredentialSet::UsernamePassword {
@@ -780,6 +823,7 @@ impl App for EnvironmentSelectorApp {
 
             Msg::CredentialSaved(Err(err)) => {
                 state.cred_save_state = Resource::Failure(err.clone());
+                state.recently_saved_cred = None; // Clear on error
                 log::error!("Failed to save credential: {}", err);
                 Command::None
             }
@@ -978,9 +1022,15 @@ where
 
     // Form fields (wrapped in panels for labels)
     // Selector at top
+    // Only show options if a value is selected, otherwise show empty to indicate "new"
+    let env_select_options = if state.env_selector.value().is_some() {
+        env_names.to_vec()
+    } else {
+        Vec::new()
+    };
     let env_select = Element::select(
         "env-selector",
-        env_names.to_vec(),
+        env_select_options,
         &mut state.env_selector.state
     )
     .on_event(|e| AppMsg::EnvSelectorEvent(e).into())
@@ -1010,9 +1060,15 @@ where
         .title("Host")
         .build();
 
+    // Only show credentials options if a value is selected
+    let creds_select_options = if state.env_creds_selector.value().is_some() {
+        state.credentials.clone()
+    } else {
+        Vec::new()
+    };
     let creds_select = Element::select(
         "env-creds",
-        state.credentials.clone(),
+        creds_select_options,
         &mut state.env_creds_selector.state
     )
     .on_event(|e| AppMsg::EnvCredsEvent(e).into())
@@ -1098,9 +1154,15 @@ where
 
     // Form fields (wrapped in panels for labels)
     // Selector at top
+    // Only show options if a value is selected, otherwise show empty to indicate "new"
+    let cred_select_options = if state.cred_selector.value().is_some() {
+        state.credentials.clone()
+    } else {
+        Vec::new()
+    };
     let cred_select = Element::select(
         "cred-selector",
-        state.credentials.clone(),
+        cred_select_options,
         &mut state.cred_selector.state
     )
     .on_event(|e| AppMsg::CredSelectorEvent(e).into())
