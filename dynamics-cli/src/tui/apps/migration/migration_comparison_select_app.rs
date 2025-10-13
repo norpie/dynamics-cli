@@ -96,6 +96,8 @@ pub enum Msg {
     RenameFormSubmit,
     RenameFormCancel,
     ComparisonRenamed(Result<(), String>),
+    PreloadAllComparisons,
+    PreloadTaskComplete, // Ignore individual preload task results
     Back,
 }
 
@@ -495,6 +497,135 @@ impl App for MigrationComparisonSelectApp {
                     }
                 }
             }
+            Msg::PreloadAllComparisons => {
+                if state.comparisons.is_empty() {
+                    return Command::None;
+                }
+
+                let source_env = state.source_env.clone().unwrap_or_default();
+                let target_env = state.target_env.clone().unwrap_or_default();
+
+                // Build parallel command with all comparison fetches
+                let mut builder = Command::perform_parallel();
+
+                for comparison in &state.comparisons {
+                    let source_entity = comparison.source_entity.clone();
+                    let target_entity = comparison.target_entity.clone();
+
+                    // Add 6 metadata tasks per comparison
+                    builder = builder
+                        .add_task(
+                            format!("Loading {} fields ({})", source_entity, source_env),
+                            {
+                                let env = source_env.clone();
+                                let entity = source_entity.clone();
+                                async move {
+                                    use crate::tui::apps::migration::entity_comparison::{FetchType, fetch_with_cache};
+                                    fetch_with_cache(&env, &entity, FetchType::SourceFields, true).await
+                                }
+                            }
+                        )
+                        .add_task(
+                            format!("Loading {} forms ({})", source_entity, source_env),
+                            {
+                                let env = source_env.clone();
+                                let entity = source_entity.clone();
+                                async move {
+                                    use crate::tui::apps::migration::entity_comparison::{FetchType, fetch_with_cache};
+                                    fetch_with_cache(&env, &entity, FetchType::SourceForms, true).await
+                                }
+                            }
+                        )
+                        .add_task(
+                            format!("Loading {} views ({})", source_entity, source_env),
+                            {
+                                let env = source_env.clone();
+                                let entity = source_entity.clone();
+                                async move {
+                                    use crate::tui::apps::migration::entity_comparison::{FetchType, fetch_with_cache};
+                                    fetch_with_cache(&env, &entity, FetchType::SourceViews, true).await
+                                }
+                            }
+                        )
+                        .add_task(
+                            format!("Loading {} fields ({})", target_entity, target_env),
+                            {
+                                let env = target_env.clone();
+                                let entity = target_entity.clone();
+                                async move {
+                                    use crate::tui::apps::migration::entity_comparison::{FetchType, fetch_with_cache};
+                                    fetch_with_cache(&env, &entity, FetchType::TargetFields, true).await
+                                }
+                            }
+                        )
+                        .add_task(
+                            format!("Loading {} forms ({})", target_entity, target_env),
+                            {
+                                let env = target_env.clone();
+                                let entity = target_entity.clone();
+                                async move {
+                                    use crate::tui::apps::migration::entity_comparison::{FetchType, fetch_with_cache};
+                                    fetch_with_cache(&env, &entity, FetchType::TargetForms, true).await
+                                }
+                            }
+                        )
+                        .add_task(
+                            format!("Loading {} views ({})", target_entity, target_env),
+                            {
+                                let env = target_env.clone();
+                                let entity = target_entity.clone();
+                                async move {
+                                    use crate::tui::apps::migration::entity_comparison::{FetchType, fetch_with_cache};
+                                    fetch_with_cache(&env, &entity, FetchType::TargetViews, true).await
+                                }
+                            }
+                        );
+
+                    // Add example pair fetch tasks
+                    let source_entity_for_examples = source_entity.clone();
+                    let target_entity_for_examples = target_entity.clone();
+                    let source_env_for_examples = source_env.clone();
+                    let target_env_for_examples = target_env.clone();
+
+                    builder = builder.add_task(
+                        format!("Loading example pairs for {} -> {}", source_entity, target_entity),
+                        async move {
+                            let config = crate::global_config();
+                            let example_pairs = config.get_example_pairs(&source_entity_for_examples, &target_entity_for_examples)
+                                .await
+                                .unwrap_or_default();
+
+                            // Fetch all example records
+                            for pair in example_pairs {
+                                let _ = crate::tui::apps::migration::entity_comparison::fetch_example_pair_data(
+                                    &source_env_for_examples,
+                                    &source_entity_for_examples,
+                                    &pair.source_record_id,
+                                    &target_env_for_examples,
+                                    &target_entity_for_examples,
+                                    &pair.target_record_id,
+                                ).await;
+                            }
+
+                            Ok::<(), String>(())
+                        }
+                    );
+                }
+
+                builder
+                    .with_title("Preloading All Comparisons")
+                    .on_complete(AppId::MigrationComparisonSelect)
+                    .on_cancel(AppId::MigrationComparisonSelect)
+                    .cancellable(true)
+                    .build(|_task_idx, _result| {
+                        // Ignore individual task results, cache already populated
+                        Msg::PreloadTaskComplete
+                    })
+            }
+            Msg::PreloadTaskComplete => {
+                // No-op: preload tasks complete, cache already populated
+                Command::None
+            }
             Msg::Back => Command::batch(vec![
                 Command::navigate_to(AppId::MigrationEnvironment),
                 Command::quit_self(),
@@ -741,6 +872,11 @@ impl App for MigrationComparisonSelectApp {
                 KeyCode::Char('R'),
                 "Rename comparison",
                 Msg::RequestRename,
+            ));
+            subs.push(Subscription::keyboard(
+                KeyCode::Char('P'),
+                "Preload all comparisons",
+                Msg::PreloadAllComparisons,
             ));
         } else if state.show_create_modal {
             subs.push(Subscription::keyboard(KeyCode::Esc, "Close modal", Msg::CreateFormCancel));
