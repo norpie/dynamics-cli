@@ -254,6 +254,31 @@ pub fn handle_close_results_modal(state: &mut State) -> Command<Msg> {
     Command::None
 }
 
+/// Handle navigation in import results list
+pub fn handle_results_navigate(state: &mut State, key: KeyCode) -> Command<Msg> {
+    if let Some(results) = &state.import_results {
+        // Calculate total number of lines
+        let mut line_count = 2; // header + blank line
+
+        if !results.added.is_empty() {
+            line_count += 1 + results.added.len() + 1;
+        }
+        if !results.updated.is_empty() {
+            line_count += 1 + results.updated.len() + 1;
+        }
+        if !results.removed.is_empty() {
+            line_count += 1 + results.removed.len() + 1;
+        }
+        if !results.unparsed.is_empty() {
+            line_count += 1 + results.unparsed.len();
+        }
+
+        // Use approximate viewport height - the actual height is set by on_render
+        state.import_results_list.handle_key(key, line_count, 20);
+    }
+    Command::None
+}
+
 /// Update viewport height for results list scrolling
 pub fn handle_results_set_viewport_height(state: &mut State, height: usize) -> Command<Msg> {
     if let Some(results) = &state.import_results {

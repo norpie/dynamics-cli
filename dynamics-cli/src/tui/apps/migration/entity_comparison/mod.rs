@@ -78,6 +78,7 @@ pub enum Msg {
     ImportNavigate(crossterm::event::KeyCode),
     ImportSetViewportHeight(usize),
     CloseImportResultsModal,
+    ImportResultsNavigate(crossterm::event::KeyCode),
     ImportResultsSetViewportHeight(usize),
 }
 

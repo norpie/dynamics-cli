@@ -82,6 +82,7 @@ pub fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         Msg::ImportNavigate(key) => import::handle_navigate(state, key),
         Msg::ImportSetViewportHeight(h) => import::handle_set_viewport_height(state, h),
         Msg::CloseImportResultsModal => import::handle_close_results_modal(state),
+        Msg::ImportResultsNavigate(key) => import::handle_results_navigate(state, key),
         Msg::ImportResultsSetViewportHeight(h) => import::handle_results_set_viewport_height(state, h),
     }
 }

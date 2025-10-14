@@ -487,6 +487,7 @@ pub fn render_import_results_modal(state: &mut State) -> Element<Msg> {
 
     // List
     let list = Element::list("import-results-list", &list_items, &state.import_results_list, theme)
+        .on_navigate(Msg::ImportResultsNavigate)
         .on_render(Msg::ImportResultsSetViewportHeight)
         .build();
 
