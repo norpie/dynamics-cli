@@ -1856,8 +1856,16 @@ impl SettingsApp {
 
         // Build list of keybind items
         let mut keybind_items = Vec::new();
+        let registry = crate::options_registry();
         for action in &state.keybind_actions {
-            let display_name = keybinds::get_action_display_name(action);
+            // action is in "app.action" format, split it to get app and action name
+            let parts: Vec<&str> = action.split('.').collect();
+            let (app, action_name) = if parts.len() >= 2 {
+                (parts[0], parts[1])
+            } else {
+                ("", action.as_str())
+            };
+            let display_name = keybinds::get_action_display_name(&registry, app, action_name);
             let current_keybind = state.keybinds.get(action)
                 .map(|kb| kb.to_string())
                 .unwrap_or_else(|| "Not set".to_string());
@@ -1912,8 +1920,15 @@ impl SettingsApp {
         use crate::config::options::registrations::keybinds;
 
         if let Some(action) = &state.capturing_keybind {
-            let display_name = keybinds::get_action_display_name(action);
-            let description = keybinds::get_action_description(action);
+            let registry = crate::options_registry();
+            let parts: Vec<&str> = action.split('.').collect();
+            let (app, action_name) = if parts.len() >= 2 {
+                (parts[0], parts[1])
+            } else {
+                ("", action.as_str())
+            };
+            let display_name = keybinds::get_action_display_name(&registry, app, action_name);
+            let description = keybinds::get_action_description(&registry, app, action_name);
 
             let captured_display = if let Some(keybind) = &state.captured_key {
                 keybind.to_string()

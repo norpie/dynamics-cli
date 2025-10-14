@@ -82,6 +82,17 @@ impl OptionDefBuilder {
         self
     }
 
+    /// Define as a keybind type with a KeyBinding default
+    ///
+    /// Keybinds are stored as strings in the database but this method
+    /// accepts KeyBinding or KeyCode types for convenience.
+    pub fn keybind_type(mut self, default: impl Into<crate::tui::KeyBinding>) -> Self {
+        let keybind: crate::tui::KeyBinding = default.into();
+        self.ty = Some(OptionType::String { max_length: Some(32) });
+        self.default = Some(OptionValue::String(keybind.to_string()));
+        self
+    }
+
     /// Build the option definition
     ///
     /// Returns an error if required fields are missing

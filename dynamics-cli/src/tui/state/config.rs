@@ -24,28 +24,12 @@ pub struct RuntimeConfig {
 
 impl Default for RuntimeConfig {
     fn default() -> Self {
-        use std::str::FromStr;
-        use crate::config::options::registrations::keybinds;
-
-        // Load default keybinds (now namespaced by app)
-        let mut default_keybinds = HashMap::new();
-        default_keybinds.insert(
-            format!("{}.{}", keybinds::APP_GLOBAL, keybinds::ACTION_HELP),
-            KeyBinding::from_str("F1").unwrap(),
-        );
-        default_keybinds.insert(
-            format!("{}.{}", keybinds::APP_GLOBAL, keybinds::ACTION_APP_LAUNCHER),
-            KeyBinding::from_str("Ctrl+A").unwrap(),
-        );
-        default_keybinds.insert(
-            format!("{}.{}", keybinds::APP_GLOBAL, keybinds::ACTION_APP_OVERVIEW),
-            KeyBinding::from_str("Ctrl+O").unwrap(),
-        );
-
+        // Default runtime config with empty keybinds map
+        // Keybinds will be looked up from registry via get_keybind()
         Self {
             theme: Theme::new(ThemeVariant::default()),
             focus_mode: FocusMode::default(),
-            keybinds: default_keybinds,
+            keybinds: HashMap::new(),
         }
     }
 }
