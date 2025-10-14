@@ -139,6 +139,66 @@ impl std::fmt::Display for KeyBinding {
     }
 }
 
+impl std::str::FromStr for KeyBinding {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        use anyhow::Context;
+
+        let parts: Vec<&str> = s.split('+').collect();
+        if parts.is_empty() {
+            anyhow::bail!("Empty keybind string");
+        }
+
+        let mut modifiers = KeyModifiers::empty();
+        let key_str = parts.last().unwrap();
+
+        // Parse modifiers (all parts except the last)
+        for modifier in &parts[..parts.len() - 1] {
+            match modifier.to_lowercase().as_str() {
+                "ctrl" | "control" => modifiers |= KeyModifiers::CONTROL,
+                "alt" => modifiers |= KeyModifiers::ALT,
+                "shift" => modifiers |= KeyModifiers::SHIFT,
+                _ => anyhow::bail!("Unknown modifier: {}", modifier),
+            }
+        }
+
+        // Parse the key itself
+        let code = match *key_str {
+            // Special keys
+            "space" => KeyCode::Char(' '),
+            "enter" | "return" => KeyCode::Enter,
+            "esc" | "escape" => KeyCode::Esc,
+            "backspace" => KeyCode::Backspace,
+            "tab" => KeyCode::Tab,
+            "delete" | "del" => KeyCode::Delete,
+            "insert" | "ins" => KeyCode::Insert,
+            "home" => KeyCode::Home,
+            "end" => KeyCode::End,
+            "pageup" | "pgup" => KeyCode::PageUp,
+            "pagedown" | "pgdn" => KeyCode::PageDown,
+            "up" => KeyCode::Up,
+            "down" => KeyCode::Down,
+            "left" => KeyCode::Left,
+            "right" => KeyCode::Right,
+            // F keys
+            s if s.starts_with('f') || s.starts_with('F') => {
+                let num = s[1..].parse::<u8>()
+                    .context("Invalid F-key number")?;
+                KeyCode::F(num)
+            }
+            // Single character
+            s if s.len() == 1 => {
+                let c = s.chars().next().unwrap();
+                KeyCode::Char(c)
+            }
+            _ => anyhow::bail!("Unknown key: {}", key_str),
+        };
+
+        Ok(KeyBinding::with_modifiers(code, modifiers))
+    }
+}
+
 /// Convert KeyCode to KeyBinding for backward compatibility
 /// Automatically adds SHIFT modifier to uppercase letters
 /// because crossterm sends uppercase letters WITH the SHIFT modifier set

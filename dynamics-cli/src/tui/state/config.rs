@@ -1,7 +1,9 @@
 use super::{Theme, ThemeVariant, FocusMode};
 use crate::config::options::Options;
 use crate::tui::color::hex_to_color;
+use crate::tui::KeyBinding;
 use ratatui::style::Color;
+use std::collections::HashMap;
 
 /// Runtime configuration for TUI behavior and appearance
 ///
@@ -15,41 +17,70 @@ pub struct RuntimeConfig {
 
     /// How keyboard focus is acquired (click, hover, or hybrid)
     pub focus_mode: FocusMode,
+
+    /// Global keybinds mapping action names to key combinations
+    pub keybinds: HashMap<String, KeyBinding>,
 }
 
 impl Default for RuntimeConfig {
     fn default() -> Self {
+        use std::str::FromStr;
+        use crate::config::options::registrations::keybinds;
+
+        // Load default keybinds
+        let mut default_keybinds = HashMap::new();
+        default_keybinds.insert(
+            keybinds::ACTION_HELP.to_string(),
+            KeyBinding::from_str("F1").unwrap(),
+        );
+        default_keybinds.insert(
+            keybinds::ACTION_APP_LAUNCHER.to_string(),
+            KeyBinding::from_str("Ctrl+A").unwrap(),
+        );
+        default_keybinds.insert(
+            keybinds::ACTION_APP_OVERVIEW.to_string(),
+            KeyBinding::from_str("Ctrl+O").unwrap(),
+        );
+
         Self {
             theme: Theme::new(ThemeVariant::default()),
             focus_mode: FocusMode::default(),
+            keybinds: default_keybinds,
         }
     }
 }
 
 impl RuntimeConfig {
     /// Create a new config with explicit settings
-    pub fn new(theme: Theme, focus_mode: FocusMode) -> Self {
-        Self { theme, focus_mode }
+    pub fn new(theme: Theme, focus_mode: FocusMode, keybinds: HashMap<String, KeyBinding>) -> Self {
+        Self { theme, focus_mode, keybinds }
     }
 
     /// Create config with custom theme variant and default focus mode
     pub fn with_theme(variant: ThemeVariant) -> Self {
+        let default = Self::default();
         Self {
             theme: Theme::new(variant),
             focus_mode: FocusMode::default(),
+            keybinds: default.keybinds,
         }
     }
 
     /// Create config with custom focus mode and default theme
     pub fn with_focus_mode(mode: FocusMode) -> Self {
+        let default = Self::default();
         Self {
             theme: Theme::new(ThemeVariant::default()),
             focus_mode: mode,
+            keybinds: default.keybinds,
         }
     }
 
     /// Load runtime config from the options system
     pub async fn load_from_options() -> anyhow::Result<Self> {
+        use std::str::FromStr;
+        use crate::config::options::registrations::keybinds;
+
         let config = crate::global_config();
 
         // Load focus mode from options (defaults to Hover if not found)
@@ -74,9 +105,38 @@ impl RuntimeConfig {
                 Theme::mocha()
             });
 
+        // Load keybinds from options database
+        let mut keybinds = HashMap::new();
+        for action in keybinds::list_actions() {
+            let key = format!("keybind.{}", action);
+            let keybind_str = config.options.get_string(&key).await
+                .unwrap_or_else(|_| {
+                    // Fall back to default keybind if not found
+                    let default_config = Self::default();
+                    default_config.keybinds.get(&action)
+                        .map(|kb| kb.to_string())
+                        .unwrap_or_else(|| "F1".to_string())
+                });
+
+            match KeyBinding::from_str(&keybind_str) {
+                Ok(keybind) => {
+                    keybinds.insert(action.clone(), keybind);
+                }
+                Err(e) => {
+                    log::warn!("Failed to parse keybind '{}' for action '{}': {}. Using default.", keybind_str, action, e);
+                    // Use default keybind for this action
+                    let default_config = Self::default();
+                    if let Some(default_kb) = default_config.keybinds.get(&action) {
+                        keybinds.insert(action.clone(), *default_kb);
+                    }
+                }
+            }
+        }
+
         Ok(Self {
             theme,
             focus_mode,
+            keybinds,
         })
     }
 }
