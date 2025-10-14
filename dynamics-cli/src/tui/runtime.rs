@@ -50,6 +50,12 @@ pub trait AppRuntime {
     fn on_suspend(&mut self) -> Result<()>;
     fn on_resume(&mut self) -> Result<()>;
     fn on_destroy(&mut self) -> Result<()>;
+
+    /// Check if the app is capturing raw input (e.g., keybind capture mode)
+    /// When true, global keybinds should be bypassed to allow the app to handle all keys
+    fn is_capturing_raw_input(&self) -> bool {
+        false // Default: apps don't capture raw input
+    }
 }
 
 /// Tracks the state of a parallel task execution
@@ -1045,6 +1051,10 @@ where
         let command = A::on_destroy(&mut self.state);
         self.execute_command(command)?;
         Ok(())
+    }
+
+    fn is_capturing_raw_input(&self) -> bool {
+        A::is_capturing_raw_input(&self.state)
     }
 }
 

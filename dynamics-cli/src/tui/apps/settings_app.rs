@@ -1637,9 +1637,18 @@ impl App for SettingsApp {
             Span::raw("Configure application options")
         ]))
     }
+
+    fn is_capturing_raw_input(state: &State) -> bool {
+        state.capturing_keybind.is_some()
+    }
 }
 
 impl SettingsApp {
+    /// Check if currently capturing a keybind (to skip global keybind handling)
+    pub fn is_capturing_keybind(state: &State) -> bool {
+        state.capturing_keybind.is_some()
+    }
+
     /// Render the theme editor view (select dropdown of themes with actions)
     fn render_theme_editor(state: &mut State, theme: &crate::tui::Theme) -> (Element<Msg>, String) {
         use_constraints!();

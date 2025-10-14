@@ -317,6 +317,24 @@ impl MultiAppRuntime {
             return Ok(true);  // Consume all other keys (except Tab, handled above)
         }
 
+        // Priority 3.75: Check if app is capturing raw input (e.g., keybind capture mode)
+        // If so, skip global keybind handling and delegate directly to the app
+        let runtime = self.runtimes.get(&self.active_app)
+            .expect("Active app not found in runtimes");
+        if runtime.is_capturing_raw_input() {
+            log::debug!("App is capturing raw input, skipping global keybinds");
+            // Skip global keybinds - jump to Tab/Shift-Tab or app delegation
+            // Since Tab/Shift-Tab are handled earlier (priority 1), we can delegate to app here
+            let result = self.runtimes
+                .get_mut(&self.active_app)
+                .expect("Active app not found in runtimes")
+                .handle_key(key_event)?;
+            log::debug!("🔄 After delegating key to {:?} (capture mode), checking for side effects", self.active_app);
+            self.broadcast_events()?;
+            let _ = self.check_navigation()?;
+            return Ok(result);
+        }
+
         // Priority 4: Configurable help menu keybind
         let config = crate::global_runtime_config();
         if let Some(help_key) = config.keybinds.get("help") {

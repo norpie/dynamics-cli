@@ -94,4 +94,10 @@ pub trait App: Sized + Send + 'static {
     fn on_destroy(_state: &mut Self::State) -> Command<Self::Msg> {
         Command::None
     }
+
+    /// Check if the app is capturing raw input (e.g., keybind capture mode)
+    /// When true, global keybinds should be bypassed to allow the app to handle all keys
+    fn is_capturing_raw_input(_state: &Self::State) -> bool {
+        false // Default: apps don't capture raw input
+    }
 }
