@@ -106,6 +106,7 @@ pub fn handle_file_selected(_state: &mut State, path: PathBuf) -> Command<Msg> {
 /// Handle imported mappings loaded - update state and recompute matches
 pub fn handle_mappings_loaded(state: &mut State, mappings: HashMap<String, String>, filename: String) -> Command<Msg> {
     log::info!("Loading {} imported mappings from {}", mappings.len(), filename);
+    log::debug!("Old mappings count: {}", state.imported_mappings.len());
 
     // Compute results by comparing old vs new mappings
     let old_mappings = &state.imported_mappings;
@@ -130,6 +131,8 @@ pub fn handle_mappings_loaded(state: &mut State, mappings: HashMap<String, Strin
             removed.push((src.clone(), tgt.clone()));
         }
     }
+
+    log::info!("Import results: {} added, {} updated, {} removed", added.len(), updated.len(), removed.len());
 
     // Store results
     state.import_results = Some(super::super::app::ImportResults {

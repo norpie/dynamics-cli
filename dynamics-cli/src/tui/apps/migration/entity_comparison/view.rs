@@ -377,17 +377,18 @@ pub fn render_import_results_modal(state: &mut State) -> Element<Msg> {
 
     let results = state.import_results.as_ref().unwrap();
 
-    // Build list items
+    // Build list items - using String instead of Line to avoid lifetime issues
     #[derive(Clone)]
     struct ImportResultLine {
-        line: Line<'static>,
+        text: String,
+        style: Style,
     }
 
     impl ListItem for ImportResultLine {
         type Msg = Msg;
 
         fn to_element(&self, _is_selected: bool, _is_hovered: bool) -> Element<Self::Msg> {
-            Element::styled_text(self.line.clone()).build()
+            Element::styled_text(Line::from(Span::styled(self.text.clone(), self.style))).build()
         }
     }
 
@@ -395,79 +396,73 @@ pub fn render_import_results_modal(state: &mut State) -> Element<Msg> {
 
     // Header line
     list_items.push(ImportResultLine {
-        line: Line::from(vec![
-            Span::styled("Import Results: ", Style::default().fg(theme.text_primary).bold()),
-            Span::styled(results.filename.clone(), Style::default().fg(theme.accent_primary)),
-        ])
+        text: format!("Import Results: {}", results.filename),
+        style: Style::default().fg(theme.accent_primary).bold(),
     });
-    list_items.push(ImportResultLine { line: Line::from("") });
+    list_items.push(ImportResultLine {
+        text: String::new(),
+        style: Style::default(),
+    });
 
     // Added mappings
     if !results.added.is_empty() {
         list_items.push(ImportResultLine {
-            line: Line::from(vec![
-                Span::styled(format!("✓ Added {} mappings", results.added.len()), Style::default().fg(theme.accent_success).bold()),
-            ])
+            text: format!("✓ Added {} mappings", results.added.len()),
+            style: Style::default().fg(theme.accent_success).bold(),
         });
         for (src, tgt) in &results.added {
             list_items.push(ImportResultLine {
-                line: Line::from(vec![
-                    Span::styled("  ", Style::default()),
-                    Span::styled(src.clone(), Style::default().fg(theme.text_primary)),
-                    Span::styled(" → ", Style::default().fg(theme.border_primary)),
-                    Span::styled(tgt.clone(), Style::default().fg(theme.accent_secondary)),
-                ])
+                text: format!("  {} → {}", src, tgt),
+                style: Style::default().fg(theme.text_primary),
             });
         }
-        list_items.push(ImportResultLine { line: Line::from("") });
+        list_items.push(ImportResultLine {
+            text: String::new(),
+            style: Style::default(),
+        });
     }
 
     // Updated mappings
     if !results.updated.is_empty() {
         list_items.push(ImportResultLine {
-            line: Line::from(vec![
-                Span::styled(format!("⟳ Updated {} mappings", results.updated.len()), Style::default().fg(theme.accent_warning).bold()),
-            ])
+            text: format!("⟳ Updated {} mappings", results.updated.len()),
+            style: Style::default().fg(theme.accent_warning).bold(),
         });
         for (src, tgt) in &results.updated {
             list_items.push(ImportResultLine {
-                line: Line::from(vec![
-                    Span::styled("  ", Style::default()),
-                    Span::styled(src.clone(), Style::default().fg(theme.text_primary)),
-                    Span::styled(" → ", Style::default().fg(theme.border_primary)),
-                    Span::styled(tgt.clone(), Style::default().fg(theme.accent_secondary)),
-                ])
+                text: format!("  {} → {}", src, tgt),
+                style: Style::default().fg(theme.text_primary),
             });
         }
-        list_items.push(ImportResultLine { line: Line::from("") });
+        list_items.push(ImportResultLine {
+            text: String::new(),
+            style: Style::default(),
+        });
     }
 
     // Removed mappings
     if !results.removed.is_empty() {
         list_items.push(ImportResultLine {
-            line: Line::from(vec![
-                Span::styled(format!("✗ Removed {} mappings", results.removed.len()), Style::default().fg(theme.accent_error).bold()),
-            ])
+            text: format!("✗ Removed {} mappings", results.removed.len()),
+            style: Style::default().fg(theme.accent_error).bold(),
         });
         for (src, tgt) in &results.removed {
             list_items.push(ImportResultLine {
-                line: Line::from(vec![
-                    Span::styled("  ", Style::default()),
-                    Span::styled(src.clone(), Style::default().fg(theme.text_primary)),
-                    Span::styled(" → ", Style::default().fg(theme.border_primary)),
-                    Span::styled(tgt.clone(), Style::default().fg(theme.text_secondary)),
-                ])
+                text: format!("  {} → {}", src, tgt),
+                style: Style::default().fg(theme.text_secondary),
             });
         }
-        list_items.push(ImportResultLine { line: Line::from("") });
+        list_items.push(ImportResultLine {
+            text: String::new(),
+            style: Style::default(),
+        });
     }
 
     // Unparsed lines
     if !results.unparsed.is_empty() {
         list_items.push(ImportResultLine {
-            line: Line::from(vec![
-                Span::styled(format!("⚠ Couldn't parse {} lines", results.unparsed.len()), Style::default().fg(theme.accent_warning).bold()),
-            ])
+            text: format!("⚠ Couldn't parse {} lines", results.unparsed.len()),
+            style: Style::default().fg(theme.accent_warning).bold(),
         });
         for line in &results.unparsed {
             let truncated = if line.len() > 60 {
@@ -476,12 +471,18 @@ pub fn render_import_results_modal(state: &mut State) -> Element<Msg> {
                 line.clone()
             };
             list_items.push(ImportResultLine {
-                line: Line::from(vec![
-                    Span::styled("  ", Style::default()),
-                    Span::styled(truncated, Style::default().fg(theme.text_tertiary)),
-                ])
+                text: format!("  {}", truncated),
+                style: Style::default().fg(theme.text_tertiary),
             });
         }
+    }
+
+    // If no changes at all, show a message
+    if results.added.is_empty() && results.updated.is_empty() && results.removed.is_empty() && results.unparsed.is_empty() {
+        list_items.push(ImportResultLine {
+            text: "No changes detected".to_string(),
+            style: Style::default().fg(theme.text_tertiary).italic(),
+        });
     }
 
     // List
