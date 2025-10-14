@@ -487,6 +487,7 @@ pub fn render_import_results_modal(state: &mut State) -> Element<Msg> {
 
     // List
     let list = Element::list("import-results-list", &list_items, &state.import_results_list, theme)
+        .on_select(Msg::ImportResultsSelect)
         .on_navigate(Msg::ImportResultsNavigate)
         .on_render(Msg::ImportResultsSetViewportHeight)
         .build();
@@ -497,6 +498,7 @@ pub fn render_import_results_modal(state: &mut State) -> Element<Msg> {
 
     // Buttons
     let buttons = button_row![
+        ("import-results-clear", "Clear Imports (c)", Msg::ClearImportedMappings),
         ("import-results-close", "Close (Esc)", Msg::CloseImportResultsModal),
     ];
 

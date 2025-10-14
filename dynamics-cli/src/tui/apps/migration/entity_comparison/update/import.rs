@@ -199,6 +199,10 @@ pub fn handle_clear_imported(state: &mut State) -> Command<Msg> {
     state.imported_mappings.clear();
     state.import_source_file = None;
 
+    // Close results modal if it's open
+    state.show_import_results_modal = false;
+    state.import_results = None;
+
     // Recompute matches without imported mappings
     if let (Resource::Success(source_metadata), Resource::Success(target_metadata)) = (
         &state.source_metadata,
@@ -276,6 +280,12 @@ pub fn handle_results_navigate(state: &mut State, key: KeyCode) -> Command<Msg> 
         // Use approximate viewport height - the actual height is set by on_render
         state.import_results_list.handle_key(key, line_count, 20);
     }
+    Command::None
+}
+
+/// Handle selecting an item in import results list (no-op for read-only list)
+pub fn handle_results_select(state: &mut State, index: usize) -> Command<Msg> {
+    state.import_results_list.select(Some(index));
     Command::None
 }
 
