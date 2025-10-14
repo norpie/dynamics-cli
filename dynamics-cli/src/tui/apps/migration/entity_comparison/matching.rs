@@ -129,6 +129,12 @@ pub fn compute_field_matches(
         .map(|f| (f.logical_name.clone(), f))
         .collect();
 
+    // Build case-insensitive target lookup for imported mappings (C# uses PascalCase)
+    let target_lookup_lowercase: HashMap<String, &FieldMetadata> = target_fields
+        .iter()
+        .map(|f| (f.logical_name.to_lowercase(), f))
+        .collect();
+
     // Track already matched targets to prevent duplicate matches
     let mut already_matched = std::collections::HashSet::new();
 
@@ -152,17 +158,19 @@ pub fn compute_field_matches(
         }
 
         // 2. Check imported mappings (second highest priority)
-        if let Some(target_name) = imported_mappings.get(source_name) {
-            if target_lookup.contains_key(target_name) {
+        // Use case-insensitive lookup since C# code uses PascalCase but API returns lowercase
+        if let Some(target_name_cs) = imported_mappings.get(source_name) {
+            if let Some(target_field) = target_lookup_lowercase.get(&target_name_cs.to_lowercase()) {
+                let actual_target_name = &target_field.logical_name;
                 matches.insert(
                     source_name.clone(),
                     MatchInfo {
-                        target_field: target_name.clone(),
+                        target_field: actual_target_name.clone(),
                         match_type: MatchType::Import,
                         confidence: 1.0,
                     },
                 );
-                already_matched.insert(target_name.clone());
+                already_matched.insert(actual_target_name.clone());
                 continue;
             }
         }
@@ -370,10 +378,12 @@ pub fn match_container_names(
 
 /// Compute hierarchical field matches for Forms/Views tabs
 /// Uses full path matching: fields only match if their container paths also match
+/// Priority: Manual > Import > Exact > Prefix
 pub fn compute_hierarchical_field_matches(
     source_metadata: &crate::api::EntityMetadata,
     target_metadata: &crate::api::EntityMetadata,
     manual_mappings: &HashMap<String, String>,
+    imported_mappings: &HashMap<String, String>,
     prefix_mappings: &HashMap<String, String>,
     tab_type: &str, // "forms" or "views"
 ) -> HashMap<String, MatchInfo> {
@@ -474,6 +484,14 @@ pub fn compute_hierarchical_field_matches(
             })
             .collect();
 
+        // Build case-insensitive lookup for imported mappings (C# uses PascalCase)
+        let target_field_lookup_lowercase: HashMap<String, &PathInfo> = target_fields
+            .iter()
+            .filter_map(|p| {
+                p.path.rfind('/').map(|i| (p.path[i+1..].to_lowercase(), p))
+            })
+            .collect();
+
         // Match each source field
         for source_field in source_fields {
             let source_field_name = source_field.path.rfind('/').map(|i| &source_field.path[i+1..]).unwrap_or(&source_field.path);
@@ -491,7 +509,23 @@ pub fn compute_hierarchical_field_matches(
                 continue;
             }
 
-            // 2. Check exact name match
+            // 2. Check imported mapping (by field name only, not full path)
+            // Use case-insensitive lookup since C# code uses PascalCase but API returns lowercase
+            if let Some(target_name_cs) = imported_mappings.get(source_field_name as &str) {
+                if let Some(target_field) = target_field_lookup_lowercase.get(&target_name_cs.to_lowercase()) {
+                    matches.insert(
+                        source_field.path.clone(),
+                        MatchInfo {
+                            target_field: target_field.path.clone(),
+                            match_type: MatchType::Import,
+                            confidence: 1.0,
+                        },
+                    );
+                    continue;
+                }
+            }
+
+            // 3. Check exact name match
             if let Some(target_field) = target_field_lookup.get(source_field_name as &str) {
                 let types_match = source_field.field_type == target_field.field_type;
                 matches.insert(
@@ -509,7 +543,7 @@ pub fn compute_hierarchical_field_matches(
                 continue;
             }
 
-            // 3. Check prefix-transformed matches
+            // 4. Check prefix-transformed matches
             if let Some(transformed_name) = apply_prefix_transform(source_field_name, prefix_mappings) {
                 if let Some(target_field) = target_field_lookup.get(&transformed_name) {
                     let types_match = source_field.field_type == target_field.field_type;
@@ -669,6 +703,7 @@ pub fn recompute_all_matches(
         source_metadata,
         target_metadata,
         field_mappings,
+        imported_mappings,
         prefix_mappings,
         "forms",
     );
@@ -679,6 +714,7 @@ pub fn recompute_all_matches(
         source_metadata,
         target_metadata,
         field_mappings,
+        imported_mappings,
         prefix_mappings,
         "views",
     );
