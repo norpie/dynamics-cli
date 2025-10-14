@@ -96,13 +96,31 @@ pub async fn install_update(show_progress: bool) -> Result<String> {
 
     // Run blocking self_update calls in a blocking thread pool
     tokio::task::spawn_blocking(move || {
+        // On Windows, zip archives have flat structure (no subdirectory)
+        // Use .identifier(".zip") to prefer zip over msi
+        #[cfg(target_os = "windows")]
         let status = self_update::backends::github::Update::configure()
             .repo_owner(REPO_OWNER)
             .repo_name(REPO_NAME)
             .bin_name(BIN_NAME)
             .show_download_progress(show_progress)
             .current_version(current)
-            .bin_path_in_archive("{{ bin }}-{{ target }}/{{ bin }}")
+            .bin_path_in_archive("{{ bin }}")  // Windows: flat structure
+            .identifier(".zip")
+            .build()
+            .context("Failed to configure updater")?
+            .update()
+            .context("Failed to install update")?;
+
+        // On Unix, tar.gz archives have subdirectory structure
+        #[cfg(not(target_os = "windows"))]
+        let status = self_update::backends::github::Update::configure()
+            .repo_owner(REPO_OWNER)
+            .repo_name(REPO_NAME)
+            .bin_name(BIN_NAME)
+            .show_download_progress(show_progress)
+            .current_version(current)
+            .bin_path_in_archive("{{ bin }}-{{ target }}/{{ bin }}")  // Unix: has subdirectory
             .build()
             .context("Failed to configure updater")?
             .update()
@@ -128,6 +146,9 @@ pub async fn install_version(version: &str, show_progress: bool) -> Result<Strin
 
     // Run blocking self_update calls in a blocking thread pool
     tokio::task::spawn_blocking(move || {
+        // On Windows, zip archives have flat structure (no subdirectory)
+        // Use .identifier(".zip") to prefer zip over msi
+        #[cfg(target_os = "windows")]
         let status = self_update::backends::github::Update::configure()
             .repo_owner(REPO_OWNER)
             .repo_name(REPO_NAME)
@@ -135,7 +156,23 @@ pub async fn install_version(version: &str, show_progress: bool) -> Result<Strin
             .show_download_progress(show_progress)
             .current_version(current)
             .target_version_tag(&format!("v{}", version))
-            .bin_path_in_archive("{{ bin }}-{{ target }}/{{ bin }}")
+            .bin_path_in_archive("{{ bin }}")  // Windows: flat structure
+            .identifier(".zip")
+            .build()
+            .context("Failed to configure updater")?
+            .update()
+            .context("Failed to install version")?;
+
+        // On Unix, tar.gz archives have subdirectory structure
+        #[cfg(not(target_os = "windows"))]
+        let status = self_update::backends::github::Update::configure()
+            .repo_owner(REPO_OWNER)
+            .repo_name(REPO_NAME)
+            .bin_name(BIN_NAME)
+            .show_download_progress(show_progress)
+            .current_version(current)
+            .target_version_tag(&format!("v{}", version))
+            .bin_path_in_archive("{{ bin }}-{{ target }}/{{ bin }}")  // Unix: has subdirectory
             .build()
             .context("Failed to configure updater")?
             .update()
