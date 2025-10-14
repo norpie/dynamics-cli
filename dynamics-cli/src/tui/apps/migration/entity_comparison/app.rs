@@ -43,6 +43,8 @@ pub struct State {
     // Mapping state
     pub(super) field_mappings: HashMap<String, String>,  // source -> target (manual)
     pub(super) prefix_mappings: HashMap<String, String>, // source_prefix -> target_prefix
+    pub(super) imported_mappings: HashMap<String, String>, // source -> target (from C# file)
+    pub(super) import_source_file: Option<String>,       // filename of imported C# file
     pub(super) hide_matched: bool,
     pub(super) sort_mode: super::models::SortMode,
     pub(super) show_technical_names: bool, // true = logical names, false = display names
@@ -88,6 +90,10 @@ pub struct State {
     // Manual mappings modal state
     pub(super) show_manual_mappings_modal: bool,
     pub(super) manual_mappings_list_state: crate::tui::widgets::ListState,
+
+    // Import modal state
+    pub(super) show_import_modal: bool,
+    pub(super) import_file_browser: crate::tui::widgets::FileBrowserState,
 
     // Modal state
     pub(super) show_back_confirmation: bool,
@@ -156,6 +162,8 @@ impl App for EntityComparisonApp {
             target_metadata: Resource::Loading,
             field_mappings: HashMap::new(),
             prefix_mappings: HashMap::new(),
+            imported_mappings: HashMap::new(),
+            import_source_file: None,
             hide_matched: false,
             sort_mode: super::models::SortMode::default(),
             show_technical_names: true, // Default to showing logical/technical names
@@ -187,6 +195,10 @@ impl App for EntityComparisonApp {
             prefix_target_input: crate::tui::widgets::TextInputField::new(),
             show_manual_mappings_modal: false,
             manual_mappings_list_state: crate::tui::widgets::ListState::new(),
+            show_import_modal: false,
+            import_file_browser: crate::tui::widgets::FileBrowserState::new(
+                std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("/"))
+            ),
             show_back_confirmation: false,
         };
 

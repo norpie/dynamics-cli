@@ -44,6 +44,7 @@ pub fn handle_delete_manual_mapping(state: &mut State) -> Command<Msg> {
                         source,
                         target,
                         &state.field_mappings,
+                        &state.imported_mappings,
                         &state.prefix_mappings,
                         &state.examples,
                         &state.source_entity,

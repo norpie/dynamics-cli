@@ -195,6 +195,7 @@ pub fn handle_cycle_example_pair(state: &mut State) -> Command<Msg> {
                 source,
                 target,
                 &state.field_mappings,
+                &state.imported_mappings,
                 &state.prefix_mappings,
                 &state.examples,
                 &state.source_entity,

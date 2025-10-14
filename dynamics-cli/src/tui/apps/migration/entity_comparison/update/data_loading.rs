@@ -182,6 +182,7 @@ pub fn handle_parallel_data_loaded(
                             source,
                             target,
                             &state.field_mappings,
+                            &state.imported_mappings,
                             &state.prefix_mappings,
                             &state.examples,
                             &state.source_entity,

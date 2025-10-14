@@ -68,6 +68,15 @@ pub enum Msg {
 
     // Export
     ExportToExcel,
+
+    // Import from C# file
+    OpenImportModal,
+    CloseImportModal,
+    ImportFileSelected(std::path::PathBuf),
+    ImportMappingsLoaded(std::collections::HashMap<String, String>, String), // mappings, filename
+    ClearImportedMappings,
+    ImportNavigate(crossterm::event::KeyCode),
+    ImportSetViewportHeight(usize),
 }
 
 #[derive(Clone)]

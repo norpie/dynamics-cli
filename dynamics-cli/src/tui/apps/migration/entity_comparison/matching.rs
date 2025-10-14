@@ -110,10 +110,12 @@ fn find_example_value_match(
 
 /// Compute field matches between source and target
 /// Returns map of source_field_name -> MatchInfo
+/// Priority: Manual > Import > Exact > Prefix > Example
 pub fn compute_field_matches(
     source_fields: &[FieldMetadata],
     target_fields: &[FieldMetadata],
     manual_mappings: &HashMap<String, String>,
+    imported_mappings: &HashMap<String, String>,
     prefix_mappings: &HashMap<String, String>,
     examples: &super::ExamplesState,
     source_entity: &str,
@@ -149,7 +151,23 @@ pub fn compute_field_matches(
             }
         }
 
-        // 2. Check exact name match
+        // 2. Check imported mappings (second highest priority)
+        if let Some(target_name) = imported_mappings.get(source_name) {
+            if target_lookup.contains_key(target_name) {
+                matches.insert(
+                    source_name.clone(),
+                    MatchInfo {
+                        target_field: target_name.clone(),
+                        match_type: MatchType::Import,
+                        confidence: 1.0,
+                    },
+                );
+                already_matched.insert(target_name.clone());
+                continue;
+            }
+        }
+
+        // 3. Check exact name match
         if let Some(target_field) = target_lookup.get(source_name) {
             let types_match = source_field.field_type == target_field.field_type;
             matches.insert(
@@ -168,7 +186,7 @@ pub fn compute_field_matches(
             continue;
         }
 
-        // 3. Check prefix-transformed matches
+        // 4. Check prefix-transformed matches
         if let Some(transformed) = apply_prefix_transform(source_name, prefix_mappings) {
             if let Some(target_field) = target_lookup.get(&transformed) {
                 let types_match = source_field.field_type == target_field.field_type;
@@ -189,7 +207,7 @@ pub fn compute_field_matches(
             }
         }
 
-        // 4. Check example-based matching (only for unmatched fields)
+        // 5. Check example-based matching (only for unmatched fields)
         if let Some(target_name) = find_example_value_match(
             source_field,
             target_fields,
@@ -617,11 +635,12 @@ fn build_metadata_paths(metadata: &crate::api::EntityMetadata, tab_type: &str) -
 }
 
 /// Recompute field and relationship matches based on current mappings
-/// Call this after manual mappings or prefix mappings change
+/// Call this after manual mappings, imported mappings, or prefix mappings change
 pub fn recompute_all_matches(
     source_metadata: &crate::api::EntityMetadata,
     target_metadata: &crate::api::EntityMetadata,
     field_mappings: &HashMap<String, String>,
+    imported_mappings: &HashMap<String, String>,
     prefix_mappings: &HashMap<String, String>,
     examples: &super::ExamplesState,
     source_entity: &str,
@@ -638,6 +657,7 @@ pub fn recompute_all_matches(
         &source_metadata.fields,
         &target_metadata.fields,
         field_mappings,
+        imported_mappings,
         prefix_mappings,
         examples,
         source_entity,

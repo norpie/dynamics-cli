@@ -141,6 +141,7 @@ pub enum MatchType {
     TypeMismatch, // Name match but types differ
     Manual,       // User-created mapping (overrides type checking)
     ExampleValue, // Value-based match from example data
+    Import,       // Imported from C# mapping file
 }
 
 impl MatchType {
@@ -152,6 +153,7 @@ impl MatchType {
             MatchType::TypeMismatch => "[Type Mismatch]",
             MatchType::Manual => "[Manual]",
             MatchType::ExampleValue => "[Example]",
+            MatchType::Import => "[Import]",
         }
     }
 }
