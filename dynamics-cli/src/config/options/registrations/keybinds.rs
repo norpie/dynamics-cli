@@ -24,10 +24,9 @@ pub fn list_apps(registry: &OptionsRegistry) -> Vec<String> {
 
 /// Get all action names for a specific app
 pub fn list_actions_for_app(registry: &OptionsRegistry, app: &str) -> Vec<String> {
-    let prefix = format!("keybind.{}", app);
-    let opts = registry.list_namespace(&prefix);
+    let keybind_opts = registry.list_namespace("keybind");
 
-    opts.into_iter()
+    keybind_opts.into_iter()
         .filter_map(|opt_def| {
             let parts: Vec<&str> = opt_def.key.split('.').collect();
             if parts.len() >= 3 && parts[1] == app {
