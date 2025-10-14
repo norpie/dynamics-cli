@@ -1623,6 +1623,34 @@ impl App for SettingsApp {
                     Msg::CaptureKey(key_event),
                 ));
             }
+
+            // Subscribe to plain letters (a-z, A-Z)
+            for c in 'a'..='z' {
+                let key_event = crossterm::event::KeyEvent::new(KeyCode::Char(c), KeyModifiers::empty());
+                subs.push(Subscription::keyboard(
+                    KeyCode::Char(c),
+                    "",
+                    Msg::CaptureKey(key_event),
+                ));
+            }
+            for c in 'A'..='Z' {
+                let key_event = crossterm::event::KeyEvent::new(KeyCode::Char(c), KeyModifiers::SHIFT);
+                subs.push(Subscription::keyboard(
+                    KeyBinding::shift(KeyCode::Char(c.to_ascii_lowercase())),
+                    "",
+                    Msg::CaptureKey(key_event),
+                ));
+            }
+
+            // Subscribe to plain numbers (0-9)
+            for c in '0'..='9' {
+                let key_event = crossterm::event::KeyEvent::new(KeyCode::Char(c), KeyModifiers::empty());
+                subs.push(Subscription::keyboard(
+                    KeyCode::Char(c),
+                    "",
+                    Msg::CaptureKey(key_event),
+                ));
+            }
         }
 
         subs
