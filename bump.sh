@@ -67,8 +67,14 @@ sed -i "s/^version = \"$CURRENT_VERSION\"/version = \"$NEW_VERSION\"/" Cargo.tom
 
 echo -e "${YELLOW}Updated Cargo.toml${NC}"
 
+# Update Cargo.lock by running cargo check
+echo -e "${YELLOW}Updating Cargo.lock...${NC}"
+cargo check --quiet
+
+echo -e "${YELLOW}Updated Cargo.lock${NC}"
+
 # Commit changes
-git add Cargo.toml
+git add Cargo.toml Cargo.lock
 git commit -m "chore: bump version to v${NEW_VERSION}"
 
 echo -e "${GREEN}Committed version bump${NC}"
