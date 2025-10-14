@@ -1690,7 +1690,7 @@ impl App for SettingsApp {
             for c in 'A'..='Z' {
                 let key_event = crossterm::event::KeyEvent::new(KeyCode::Char(c), KeyModifiers::SHIFT);
                 subs.push(Subscription::keyboard(
-                    KeyBinding::shift(KeyCode::Char(c.to_ascii_lowercase())),
+                    KeyBinding::shift(KeyCode::Char(c)),
                     "",
                     Msg::CaptureKey(key_event),
                 ));
