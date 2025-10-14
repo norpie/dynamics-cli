@@ -55,6 +55,7 @@ pub fn create_source_entities_sheet(workbook: &mut Workbook, state: &State) -> R
                     let (mapping_type, format) = match match_info.match_type {
                         MatchType::Exact => ("Exact", &exact_match_format),
                         MatchType::Manual => ("Manual", &manual_mapping_format),
+                        MatchType::Import => ("Import", &manual_mapping_format),
                         MatchType::Prefix => ("Prefix", &prefix_match_format),
                         MatchType::ExampleValue => ("Example", &example_value_format),
                         MatchType::TypeMismatch => ("Type Mismatch", &unmapped_format),
@@ -142,6 +143,7 @@ pub fn create_target_entities_sheet(workbook: &mut Workbook, state: &State) -> R
                     let (mapping_type, format) = match match_info.match_type {
                         MatchType::Exact => ("Exact", &exact_match_format),
                         MatchType::Manual => ("Manual", &manual_mapping_format),
+                        MatchType::Import => ("Import", &manual_mapping_format),
                         MatchType::Prefix => ("Prefix", &prefix_match_format),
                         MatchType::ExampleValue => ("Example", &example_value_format),
                         MatchType::TypeMismatch => ("Type Mismatch", &unmapped_format),

@@ -5,6 +5,7 @@ pub mod examples;
 pub mod prefix_mappings;
 pub mod manual_mappings;
 pub mod data_loading;
+pub mod import;
 
 use crate::tui::command::Command;
 use super::Msg;
@@ -28,7 +29,7 @@ pub fn update(state: &mut State, msg: Msg) -> Command<Msg> {
 
         // Data loading
         Msg::ParallelDataLoaded(idx, result) => data_loading::handle_parallel_data_loaded(state, idx, result),
-        Msg::MappingsLoaded(fm, pm, ep) => data_loading::handle_mappings_loaded(state, fm, pm, ep),
+        Msg::MappingsLoaded(fm, pm, im, isf, ep) => data_loading::handle_mappings_loaded(state, fm, pm, im, isf, ep),
         Msg::Refresh => data_loading::handle_refresh(state),
 
         // Mappings
@@ -71,5 +72,14 @@ pub fn update(state: &mut State, msg: Msg) -> Command<Msg> {
 
         // Export
         Msg::ExportToExcel => mappings::handle_export_to_excel(state),
+
+        // Import from C# file
+        Msg::OpenImportModal => import::handle_open_modal(state),
+        Msg::CloseImportModal => import::handle_close_modal(state),
+        Msg::ImportFileSelected(path) => import::handle_file_selected(state, path),
+        Msg::ImportMappingsLoaded(mappings, file) => import::handle_mappings_loaded(state, mappings, file),
+        Msg::ClearImportedMappings => import::handle_clear_imported(state),
+        Msg::ImportNavigate(key) => import::handle_navigate(state, key),
+        Msg::ImportSetViewportHeight(h) => import::handle_set_viewport_height(state, h),
     }
 }

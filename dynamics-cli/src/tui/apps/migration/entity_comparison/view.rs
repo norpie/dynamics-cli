@@ -365,3 +365,68 @@ pub fn render_manual_mappings_modal(state: &State) -> Element<Msg> {
         .on_close(Msg::CloseManualMappingsModal)
         .build()
 }
+
+/// Render the C# mapping import modal with file browser
+pub fn render_import_modal(state: &mut State) -> Element<Msg> {
+    let theme = &crate::global_runtime_config().theme;
+    use crate::tui::element::LayoutConstraint::*;
+    use crate::{spacer, button_row};
+    use ratatui::text::{Line, Span};
+    use ratatui::style::{Style, Stylize};
+
+    // File browser
+    let browser = Element::file_browser("import-file-browser", &state.import_file_browser, theme)
+        .on_file_selected(Msg::ImportFileSelected)
+        .on_navigate(Msg::ImportNavigate)
+        .on_render(Msg::ImportSetViewportHeight)
+        .build();
+
+    let browser_panel = Element::panel(browser)
+        .title(format!("Select C# Mapping File - {}", state.import_file_browser.current_path().display()))
+        .build();
+
+    // Help text
+    let help_text = Element::styled_text(Line::from(vec![
+        Span::styled("Select a .cs file to import field mappings. ", Style::default().fg(theme.text_tertiary)),
+        Span::styled("Navigate with ", Style::default().fg(theme.text_tertiary)),
+        Span::styled("↑/↓", Style::default().fg(theme.accent_primary).bold()),
+        Span::styled(", press ", Style::default().fg(theme.text_tertiary)),
+        Span::styled("Enter", Style::default().fg(theme.accent_primary).bold()),
+        Span::styled(" to select.", Style::default().fg(theme.text_tertiary)),
+    ])).build();
+
+    // Info about current import
+    let import_info = if let Some(ref file) = state.import_source_file {
+        Element::styled_text(Line::from(vec![
+            Span::styled("Currently imported: ", Style::default().fg(theme.text_secondary)),
+            Span::styled(file.clone(), Style::default().fg(theme.accent_success).bold()),
+            Span::styled(format!(" ({} mappings)", state.imported_mappings.len()), Style::default().fg(theme.text_tertiary)),
+        ])).build()
+    } else {
+        Element::styled_text(Line::from(vec![
+            Span::styled("No mappings currently imported", Style::default().fg(theme.text_tertiary).italic()),
+        ])).build()
+    };
+
+    // Buttons
+    let buttons = button_row![
+        ("import-close", "Close (Esc)", Msg::CloseImportModal),
+    ];
+
+    // Layout
+    let content = col![
+        help_text => Length(1),
+        spacer!() => Length(1),
+        import_info => Length(1),
+        spacer!() => Length(1),
+        browser_panel => Fill(1),
+        spacer!() => Length(1),
+        buttons => Length(3),
+    ];
+
+    Element::panel(Element::container(content).padding(2).build())
+        .title("Import C# Field Mappings")
+        .width(90)
+        .height(35)
+        .build()
+}

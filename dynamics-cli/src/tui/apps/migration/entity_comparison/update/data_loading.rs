@@ -244,11 +244,15 @@ pub fn handle_mappings_loaded(
     state: &mut State,
     field_mappings: HashMap<String, String>,
     prefix_mappings: HashMap<String, String>,
+    imported_mappings: HashMap<String, String>,
+    import_source_file: Option<String>,
     example_pairs: Vec<ExamplePair>
 ) -> Command<Msg> {
     // Update state with loaded mappings and examples
     state.field_mappings = field_mappings;
     state.prefix_mappings = prefix_mappings;
+    state.imported_mappings = imported_mappings;
+    state.import_source_file = import_source_file;
     state.examples.pairs = example_pairs.clone();
 
     // Set first pair as active if any exist

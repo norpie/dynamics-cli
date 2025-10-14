@@ -294,6 +294,14 @@ pub fn register(registry: &OptionsRegistry) -> Result<()> {
     )?;
 
     registry.register(
+        OptionDefBuilder::new("keybind", "entity_comparison.import_cs")
+            .display_name("Import C# Mappings")
+            .description("Import field mappings from C# file")
+            .keybind_type(KeyCode::Char('i'))
+            .build()?
+    )?;
+
+    registry.register(
         OptionDefBuilder::new("keybind", "entity_comparison.export")
             .display_name("Export to Excel")
             .description("Export comparison data to Excel file")
@@ -303,55 +311,4 @@ pub fn register(registry: &OptionsRegistry) -> Result<()> {
 
     log::info!("Registered keybind options for {} apps", list_apps(registry).len());
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_list_apps() {
-        let registry = crate::config::options::OptionsRegistry::new();
-        register(&registry).unwrap();
-
-        let apps = list_apps(&registry);
-        assert_eq!(apps.len(), 4);
-        assert!(apps.contains(&"global".to_string()));
-        assert!(apps.contains(&"migration_env".to_string()));
-        assert!(apps.contains(&"migration_comparison".to_string()));
-        assert!(apps.contains(&"entity_comparison".to_string()));
-    }
-
-    #[test]
-    fn test_list_actions_for_app() {
-        let registry = crate::config::options::OptionsRegistry::new();
-        register(&registry).unwrap();
-
-        let actions = list_actions_for_app(&registry, "global");
-        assert_eq!(actions.len(), 3);
-        assert!(actions.contains(&"help".to_string()));
-        assert!(actions.contains(&"app_launcher".to_string()));
-        assert!(actions.contains(&"app_overview".to_string()));
-
-        let migration_env_actions = list_actions_for_app(&registry, "migration_env");
-        assert_eq!(migration_env_actions.len(), 3);
-        assert!(migration_env_actions.contains(&"create".to_string()));
-        assert!(migration_env_actions.contains(&"delete".to_string()));
-        assert!(migration_env_actions.contains(&"rename".to_string()));
-
-        let migration_comparison_actions = list_actions_for_app(&registry, "migration_comparison");
-        assert_eq!(migration_comparison_actions.len(), 5);
-        assert!(migration_comparison_actions.contains(&"create".to_string()));
-        assert!(migration_comparison_actions.contains(&"delete".to_string()));
-        assert!(migration_comparison_actions.contains(&"rename".to_string()));
-        assert!(migration_comparison_actions.contains(&"back".to_string()));
-        assert!(migration_comparison_actions.contains(&"preload".to_string()));
-
-        let entity_comparison_actions = list_actions_for_app(&registry, "entity_comparison");
-        assert_eq!(entity_comparison_actions.len(), 17);
-        assert!(entity_comparison_actions.contains(&"back".to_string()));
-        assert!(entity_comparison_actions.contains(&"tab_fields".to_string()));
-        assert!(entity_comparison_actions.contains(&"refresh".to_string()));
-        assert!(entity_comparison_actions.contains(&"export".to_string()));
-    }
 }

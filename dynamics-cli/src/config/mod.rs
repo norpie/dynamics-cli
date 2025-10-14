@@ -368,6 +368,18 @@ impl Config {
         repository::mappings::delete_prefix_mapping(&self.pool, source_entity, target_entity, source_prefix).await
     }
 
+    pub async fn get_imported_mappings(&self, source_entity: &str, target_entity: &str) -> Result<(std::collections::HashMap<String, String>, Option<String>)> {
+        repository::mappings::get_imported_mappings(&self.pool, source_entity, target_entity).await
+    }
+
+    pub async fn set_imported_mappings(&self, source_entity: &str, target_entity: &str, mappings: &std::collections::HashMap<String, String>, source_file: &str) -> Result<()> {
+        repository::mappings::set_imported_mappings(&self.pool, source_entity, target_entity, mappings, source_file).await
+    }
+
+    pub async fn clear_imported_mappings(&self, source_entity: &str, target_entity: &str) -> Result<()> {
+        repository::mappings::clear_imported_mappings(&self.pool, source_entity, target_entity).await
+    }
+
     /// Get example pairs for entity comparison
     pub async fn get_example_pairs(&self, source_entity: &str, target_entity: &str) -> Result<Vec<crate::tui::apps::migration::entity_comparison::ExamplePair>> {
         repository::examples::get_example_pairs(&self.pool, source_entity, target_entity).await

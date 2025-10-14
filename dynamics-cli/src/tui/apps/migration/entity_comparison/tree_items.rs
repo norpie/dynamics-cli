@@ -193,6 +193,7 @@ impl TreeItem for FieldNode {
                 MatchType::Exact => theme.accent_success,        // Exact name + type match
                 MatchType::Prefix => theme.accent_success,       // Prefix name + type match
                 MatchType::Manual => theme.accent_success,       // User override
+                MatchType::Import => theme.accent_success,       // Imported from C# file
                 MatchType::ExampleValue => theme.palette_4,   // Example value match
                 MatchType::TypeMismatch => theme.accent_warning, // Name match but type differs
             }
@@ -306,6 +307,7 @@ impl TreeItem for RelationshipNode {
                 MatchType::Exact => theme.accent_success,        // Exact name + type match
                 MatchType::Prefix => theme.accent_success,       // Prefix name + type match
                 MatchType::Manual => theme.accent_success,       // User override
+                MatchType::Import => theme.accent_success,       // Imported from C# file
                 MatchType::ExampleValue => theme.palette_4,   // Example value match
                 MatchType::TypeMismatch => theme.accent_warning, // Name match but type differs
             }
@@ -508,6 +510,7 @@ impl TreeItem for EntityNode {
                 MatchType::Exact => theme.accent_success,        // Exact name match
                 MatchType::Prefix => theme.accent_success,       // Prefix name match
                 MatchType::Manual => theme.accent_success,       // User override
+                MatchType::Import => theme.accent_success,       // Imported from C# file
                 MatchType::ExampleValue => theme.palette_4,   // Example value match
                 MatchType::TypeMismatch => theme.accent_warning, // Should not happen for entities
             }

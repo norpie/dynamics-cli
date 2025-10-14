@@ -1,7 +1,8 @@
 //! Import handlers for C# mapping file import
 
-use super::super::{State, Msg};
-use crate::tui::Command;
+use super::super::Msg;
+use super::super::app::State;
+use crate::tui::{Command, Resource};
 use crate::tui::widgets::{FileBrowserEvent, FileBrowserAction};
 use std::path::PathBuf;
 use std::collections::HashMap;
@@ -111,9 +112,9 @@ pub fn handle_mappings_loaded(state: &mut State, mappings: HashMap<String, Strin
     state.show_import_modal = false;
 
     // Recompute all matches with imported mappings
-    if let (Some(source_metadata), Some(target_metadata)) = (
-        state.source_metadata.as_ref(),
-        state.target_metadata.as_ref(),
+    if let (Resource::Success(source_metadata), Resource::Success(target_metadata)) = (
+        &state.source_metadata,
+        &state.target_metadata,
     ) {
         let (field_matches, relationship_matches, entity_matches, source_entities, target_entities) =
             super::super::matching::recompute_all_matches(
@@ -133,8 +134,6 @@ pub fn handle_mappings_loaded(state: &mut State, mappings: HashMap<String, Strin
         state.source_entities = source_entities;
         state.target_entities = target_entities;
 
-        // Rebuild all trees
-        super::super::tree_builder::rebuild_all_trees(state);
     }
 
     // Persist to config (async, don't wait)
@@ -146,8 +145,10 @@ pub fn handle_mappings_loaded(state: &mut State, mappings: HashMap<String, Strin
     Command::perform(
         async move {
             let config = crate::global_config();
-            if let Err(e) = config.save_imported_mappings(&source_entity, &target_entity, &imported, file.as_deref()).await {
-                log::error!("Failed to save imported mappings: {}", e);
+            if let Some(file) = file {
+                if let Err(e) = config.set_imported_mappings(&source_entity, &target_entity, &imported, &file).await {
+                    log::error!("Failed to save imported mappings: {}", e);
+                }
             }
         },
         |_| Msg::CloseImportModal  // Dummy message, already closed
@@ -162,9 +163,9 @@ pub fn handle_clear_imported(state: &mut State) -> Command<Msg> {
     state.import_source_file = None;
 
     // Recompute matches without imported mappings
-    if let (Some(source_metadata), Some(target_metadata)) = (
-        state.source_metadata.as_ref(),
-        state.target_metadata.as_ref(),
+    if let (Resource::Success(source_metadata), Resource::Success(target_metadata)) = (
+        &state.source_metadata,
+        &state.target_metadata,
     ) {
         let (field_matches, relationship_matches, entity_matches, source_entities, target_entities) =
             super::super::matching::recompute_all_matches(
@@ -184,8 +185,6 @@ pub fn handle_clear_imported(state: &mut State) -> Command<Msg> {
         state.source_entities = source_entities;
         state.target_entities = target_entities;
 
-        // Rebuild all trees
-        super::super::tree_builder::rebuild_all_trees(state);
     }
 
     // Persist cleared state to config
@@ -195,7 +194,7 @@ pub fn handle_clear_imported(state: &mut State) -> Command<Msg> {
     Command::perform(
         async move {
             let config = crate::global_config();
-            if let Err(e) = config.save_imported_mappings(&source_entity, &target_entity, &HashMap::new(), None).await {
+            if let Err(e) = config.clear_imported_mappings(&source_entity, &target_entity).await {
                 log::error!("Failed to clear imported mappings in config: {}", e);
             }
         },

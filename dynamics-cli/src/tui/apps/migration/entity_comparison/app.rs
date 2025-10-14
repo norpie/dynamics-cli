@@ -24,7 +24,7 @@ use super::view::{render_main_layout, render_back_confirmation_modal, render_exa
 
 pub struct EntityComparisonApp;
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct State {
     // Context
     pub(super) migration_name: String,
@@ -120,6 +120,61 @@ impl Default for EntityComparisonParams {
 }
 
 impl crate::tui::AppState for State {}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            migration_name: String::new(),
+            source_env: String::new(),
+            target_env: String::new(),
+            source_entity: String::new(),
+            target_entity: String::new(),
+            active_tab: ActiveTab::default(),
+            source_metadata: Resource::NotAsked,
+            target_metadata: Resource::NotAsked,
+            field_mappings: HashMap::new(),
+            prefix_mappings: HashMap::new(),
+            imported_mappings: HashMap::new(),
+            import_source_file: None,
+            hide_matched: false,
+            sort_mode: super::models::SortMode::default(),
+            show_technical_names: true,
+            field_matches: HashMap::new(),
+            relationship_matches: HashMap::new(),
+            entity_matches: HashMap::new(),
+            source_entities: Vec::new(),
+            target_entities: Vec::new(),
+            source_fields_tree: TreeState::with_selection(),
+            source_relationships_tree: TreeState::with_selection(),
+            source_views_tree: TreeState::with_selection(),
+            source_forms_tree: TreeState::with_selection(),
+            source_entities_tree: TreeState::with_selection(),
+            target_fields_tree: TreeState::with_selection(),
+            target_relationships_tree: TreeState::with_selection(),
+            target_views_tree: TreeState::with_selection(),
+            target_forms_tree: TreeState::with_selection(),
+            target_entities_tree: TreeState::with_selection(),
+            focused_side: Side::Source,
+            examples: ExamplesState::new(),
+            show_examples_modal: false,
+            examples_list_state: crate::tui::widgets::ListState::new(),
+            examples_source_input: crate::tui::widgets::TextInputField::new(),
+            examples_target_input: crate::tui::widgets::TextInputField::new(),
+            examples_label_input: crate::tui::widgets::TextInputField::new(),
+            show_prefix_mappings_modal: false,
+            prefix_mappings_list_state: crate::tui::widgets::ListState::new(),
+            prefix_source_input: crate::tui::widgets::TextInputField::new(),
+            prefix_target_input: crate::tui::widgets::TextInputField::new(),
+            show_manual_mappings_modal: false,
+            manual_mappings_list_state: crate::tui::widgets::ListState::new(),
+            show_import_modal: false,
+            import_file_browser: crate::tui::widgets::FileBrowserState::new(
+                std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("/"))
+            ),
+            show_back_confirmation: false,
+        }
+    }
+}
 
 impl State {
     /// Get the appropriate source tree state for the active tab
@@ -218,15 +273,20 @@ impl App for EntityComparisonApp {
                         log::error!("Failed to load prefix mappings: {}", e);
                         HashMap::new()
                     });
+                let (imported_mappings, import_source_file) = config.get_imported_mappings(&source_entity, &target_entity).await
+                    .unwrap_or_else(|e| {
+                        log::error!("Failed to load imported mappings: {}", e);
+                        (HashMap::new(), None)
+                    });
                 let example_pairs = config.get_example_pairs(&source_entity, &target_entity).await
                     .unwrap_or_else(|e| {
                         log::error!("Failed to load example pairs: {}", e);
                         Vec::new()
                     });
-                (field_mappings, prefix_mappings, example_pairs)
+                (field_mappings, prefix_mappings, imported_mappings, import_source_file, example_pairs)
             }
-        }, |(field_mappings, prefix_mappings, example_pairs)| {
-            Msg::MappingsLoaded(field_mappings, prefix_mappings, example_pairs)
+        }, |(field_mappings, prefix_mappings, imported_mappings, import_source_file, example_pairs)| {
+            Msg::MappingsLoaded(field_mappings, prefix_mappings, imported_mappings, import_source_file, example_pairs)
         });
 
         (state, init_cmd)
@@ -254,6 +314,10 @@ impl App for EntityComparisonApp {
 
         if state.show_manual_mappings_modal {
             view = view.with_app_modal(super::view::render_manual_mappings_modal(state), LayerAlignment::Center);
+        }
+
+        if state.show_import_modal {
+            view = view.with_app_modal(super::view::render_import_modal(state), LayerAlignment::Center);
         }
 
         view
@@ -300,6 +364,9 @@ impl App for EntityComparisonApp {
             // Manual mappings
             Subscription::keyboard(config.get_keybind("entity_comparison.open_manual_mappings"), "View manual mappings modal", Msg::OpenManualMappingsModal),
 
+            // Import from C# file
+            Subscription::keyboard(config.get_keybind("entity_comparison.import_cs"), "Import from C# file", Msg::OpenImportModal),
+
             // Export
             Subscription::keyboard(config.get_keybind("entity_comparison.export"), "Export to Excel", Msg::ExportToExcel),
         ];
@@ -334,6 +401,12 @@ impl App for EntityComparisonApp {
             subs.push(Subscription::keyboard(KeyCode::Char('d'), "Delete manual mapping", Msg::DeleteManualMappingFromModal));
             subs.push(Subscription::keyboard(KeyCode::Char('c'), "Close modal", Msg::CloseManualMappingsModal));
             subs.push(Subscription::keyboard(KeyCode::Esc, "Close modal", Msg::CloseManualMappingsModal));
+        }
+
+        // When showing import modal, add hotkeys
+        if state.show_import_modal {
+            subs.push(Subscription::keyboard(KeyCode::Char('c'), "Close modal", Msg::CloseImportModal));
+            subs.push(Subscription::keyboard(KeyCode::Esc, "Close modal", Msg::CloseImportModal));
         }
 
         subs
@@ -418,6 +491,20 @@ impl App for EntityComparisonApp {
                     ));
                 }
             }
+        }
+
+        // Import status
+        if let Some(ref file) = state.import_source_file {
+            // Extract just the filename from the path
+            let filename = std::path::Path::new(file)
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or(file);
+            spans.push(Span::styled(" | ", Style::default().fg(theme.border_primary)));
+            spans.push(Span::styled(
+                format!("Import: {} ({} mappings)", filename, state.imported_mappings.len()),
+                Style::default().fg(theme.palette_3),
+            ));
         }
 
         Some(Line::from(spans))
