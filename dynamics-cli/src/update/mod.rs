@@ -110,7 +110,10 @@ pub async fn install_update(show_progress: bool) -> Result<String> {
             .build()
             .context("Failed to configure updater")?
             .update()
-            .context("Failed to install update")?;
+            .map_err(|e| {
+                log::error!("self_update failed: {}", e);
+                anyhow::anyhow!("Failed to install update: {}", e)
+            })?;
 
         // On Unix, tar.gz archives have subdirectory structure
         #[cfg(not(target_os = "windows"))]
@@ -161,7 +164,10 @@ pub async fn install_version(version: &str, show_progress: bool) -> Result<Strin
             .build()
             .context("Failed to configure updater")?
             .update()
-            .context("Failed to install version")?;
+            .map_err(|e| {
+                log::error!("self_update failed: {}", e);
+                anyhow::anyhow!("Failed to install version: {}", e)
+            })?;
 
         // On Unix, tar.gz archives have subdirectory structure
         #[cfg(not(target_os = "windows"))]
