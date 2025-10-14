@@ -56,6 +56,9 @@ pub struct State {
     selected_keybind_idx: usize,
     capturing_keybind: Option<String>,  // Action name being edited
     captured_key: Option<crate::tui::KeyBinding>,  // Captured keybind
+    keybind_app_select_state: crate::tui::widgets::SelectState,
+    selected_keybind_app_idx: usize,
+    keybind_apps: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -133,6 +136,7 @@ pub enum Msg {
 
     // Keybind editor
     KeybindsLoaded(std::collections::HashMap<String, crate::tui::KeyBinding>),
+    KeybindAppSelectEvent(crate::tui::widgets::SelectEvent),
     EditKeybind(String),  // action name
     CaptureKey(crossterm::event::KeyEvent),
     SaveKeybind,
@@ -177,6 +181,9 @@ impl Default for State {
             selected_keybind_idx: 0,
             capturing_keybind: None,
             captured_key: None,
+            keybind_app_select_state: crate::tui::widgets::SelectState::new(),
+            selected_keybind_app_idx: 0,
+            keybind_apps: Vec::new(),
         }
     }
 }
@@ -1251,14 +1258,56 @@ impl App for SettingsApp {
 
             // Keybind editor messages
             Msg::KeybindsLoaded(keybinds) => {
+                use crate::config::options::registrations::keybinds;
+                let registry = crate::options_registry();
+
                 state.keybinds = keybinds;
-                state.keybind_actions = {
-                    use crate::config::options::registrations::keybinds;
-                    let registry = crate::options_registry();
-                    keybinds::list_all_actions(&registry)
-                };
+                state.keybind_actions = keybinds::list_all_actions(&registry);
                 state.selected_keybind_idx = 0;
+
+                // Populate app list for filtering (no "All" option)
+                state.keybind_apps = keybinds::list_apps(&registry);
+
+                // Default to "global" if it exists, otherwise first app
+                let default_idx = state.keybind_apps.iter().position(|app| app == "global").unwrap_or(0);
+                state.selected_keybind_app_idx = default_idx;
+                state.keybind_app_select_state = crate::tui::widgets::SelectState::with_selected(default_idx);
+
                 Command::None
+            }
+
+            Msg::KeybindAppSelectEvent(event) => {
+                use crate::tui::widgets::SelectEvent;
+                use crossterm::event::KeyCode;
+
+                // Update option count before handling event
+                state.keybind_app_select_state.update_option_count(state.keybind_apps.len());
+
+                match event {
+                    SelectEvent::Navigate(KeyCode::Enter) if !state.keybind_app_select_state.is_open() => {
+                        state.keybind_app_select_state.toggle();
+                        Command::None
+                    }
+                    SelectEvent::Navigate(KeyCode::Enter) if state.keybind_app_select_state.is_open() => {
+                        state.keybind_app_select_state.select_highlighted();
+                        state.selected_keybind_app_idx = state.keybind_app_select_state.selected();
+                        Command::None
+                    }
+                    SelectEvent::Navigate(KeyCode::Esc) => {
+                        if state.keybind_app_select_state.is_open() {
+                            state.keybind_app_select_state.close();
+                        }
+                        Command::None
+                    }
+                    SelectEvent::Select(idx) => {
+                        state.selected_keybind_app_idx = idx;
+                        Command::None
+                    }
+                    _ => {
+                        state.keybind_app_select_state.handle_event(event);
+                        Command::None
+                    }
+                }
             }
 
             Msg::EditKeybind(action) => {
@@ -1854,7 +1903,29 @@ impl SettingsApp {
         use_constraints!();
         use crate::config::options::registrations::keybinds;
 
-        // Build list of keybind items
+        // App selector dropdown
+        let app_select = if state.keybind_apps.is_empty() {
+            Element::styled_text(Line::from(vec![
+                Span::styled("No apps available", Style::default().fg(theme.text_tertiary))
+            ])).build()
+        } else {
+            Element::select(
+                FocusId::new("keybind-app-select"),
+                state.keybind_apps.clone(),
+                &mut state.keybind_app_select_state
+            )
+            .on_event(Msg::KeybindAppSelectEvent)
+            .build()
+        };
+
+        let app_select_panel = Element::panel(app_select)
+            .title("Filter by App")
+            .build();
+
+        // Determine which app to filter by
+        let filter_app = state.keybind_apps.get(state.selected_keybind_app_idx).map(|s| s.as_str());
+
+        // Build list of keybind items (filtered)
         let mut keybind_items = Vec::new();
         let registry = crate::options_registry();
         for action in &state.keybind_actions {
@@ -1865,10 +1936,21 @@ impl SettingsApp {
             } else {
                 ("", action.as_str())
             };
+
+            // Skip if filtering and app doesn't match
+            if let Some(filter) = filter_app {
+                if app != filter {
+                    continue;
+                }
+            }
+
             let display_name = keybinds::get_action_display_name(&registry, app, action_name);
             let current_keybind = state.keybinds.get(action)
                 .map(|kb| kb.to_string())
-                .unwrap_or_else(|| "Not set".to_string());
+                .unwrap_or_else(|| {
+                    // Fall back to default from registry
+                    crate::global_runtime_config().get_keybind(action).to_string()
+                });
 
             let item_id = Box::leak(format!("keybind-{}", action).into_boxed_str());
             let item = Element::button(
@@ -1901,6 +1983,8 @@ impl SettingsApp {
         .build();
 
         let content = col![
+            app_select_panel => Length(3),
+            spacer!() => Length(1),
             keybind_list => Fill(1),
             spacer!() => Length(1),
             reset_button => Length(3),
