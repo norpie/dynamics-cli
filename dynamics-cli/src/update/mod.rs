@@ -102,6 +102,7 @@ pub async fn install_update(show_progress: bool) -> Result<String> {
             .bin_name(BIN_NAME)
             .show_download_progress(show_progress)
             .current_version(current)
+            .bin_path_in_archive("{{ bin }}-{{ target }}/{{ bin }}")
             .build()
             .context("Failed to configure updater")?
             .update()
@@ -134,6 +135,7 @@ pub async fn install_version(version: &str, show_progress: bool) -> Result<Strin
             .show_download_progress(show_progress)
             .current_version(current)
             .target_version_tag(&format!("v{}", version))
+            .bin_path_in_archive("{{ bin }}-{{ target }}/{{ bin }}")
             .build()
             .context("Failed to configure updater")?
             .update()
