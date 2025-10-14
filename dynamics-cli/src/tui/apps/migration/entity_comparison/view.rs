@@ -366,6 +366,152 @@ pub fn render_manual_mappings_modal(state: &State) -> Element<Msg> {
         .build()
 }
 
+/// Render import results modal showing what was added/removed/couldn't be parsed
+pub fn render_import_results_modal(state: &mut State) -> Element<Msg> {
+    let theme = &crate::global_runtime_config().theme;
+    use crate::tui::element::LayoutConstraint::*;
+    use crate::{col, spacer, button_row};
+    use ratatui::text::{Line, Span};
+    use ratatui::style::{Style, Stylize};
+    use crate::tui::widgets::ListItem;
+
+    let results = state.import_results.as_ref().unwrap();
+
+    // Build list items
+    #[derive(Clone)]
+    struct ImportResultLine {
+        line: Line<'static>,
+    }
+
+    impl ListItem for ImportResultLine {
+        type Msg = Msg;
+
+        fn to_element(&self, _is_selected: bool, _is_hovered: bool) -> Element<Self::Msg> {
+            Element::styled_text(self.line.clone()).build()
+        }
+    }
+
+    let mut list_items: Vec<ImportResultLine> = vec![];
+
+    // Header line
+    list_items.push(ImportResultLine {
+        line: Line::from(vec![
+            Span::styled("Import Results: ", Style::default().fg(theme.text_primary).bold()),
+            Span::styled(results.filename.clone(), Style::default().fg(theme.accent_primary)),
+        ])
+    });
+    list_items.push(ImportResultLine { line: Line::from("") });
+
+    // Added mappings
+    if !results.added.is_empty() {
+        list_items.push(ImportResultLine {
+            line: Line::from(vec![
+                Span::styled(format!("✓ Added {} mappings", results.added.len()), Style::default().fg(theme.accent_success).bold()),
+            ])
+        });
+        for (src, tgt) in &results.added {
+            list_items.push(ImportResultLine {
+                line: Line::from(vec![
+                    Span::styled("  ", Style::default()),
+                    Span::styled(src.clone(), Style::default().fg(theme.text_primary)),
+                    Span::styled(" → ", Style::default().fg(theme.border_primary)),
+                    Span::styled(tgt.clone(), Style::default().fg(theme.accent_secondary)),
+                ])
+            });
+        }
+        list_items.push(ImportResultLine { line: Line::from("") });
+    }
+
+    // Updated mappings
+    if !results.updated.is_empty() {
+        list_items.push(ImportResultLine {
+            line: Line::from(vec![
+                Span::styled(format!("⟳ Updated {} mappings", results.updated.len()), Style::default().fg(theme.accent_warning).bold()),
+            ])
+        });
+        for (src, tgt) in &results.updated {
+            list_items.push(ImportResultLine {
+                line: Line::from(vec![
+                    Span::styled("  ", Style::default()),
+                    Span::styled(src.clone(), Style::default().fg(theme.text_primary)),
+                    Span::styled(" → ", Style::default().fg(theme.border_primary)),
+                    Span::styled(tgt.clone(), Style::default().fg(theme.accent_secondary)),
+                ])
+            });
+        }
+        list_items.push(ImportResultLine { line: Line::from("") });
+    }
+
+    // Removed mappings
+    if !results.removed.is_empty() {
+        list_items.push(ImportResultLine {
+            line: Line::from(vec![
+                Span::styled(format!("✗ Removed {} mappings", results.removed.len()), Style::default().fg(theme.accent_error).bold()),
+            ])
+        });
+        for (src, tgt) in &results.removed {
+            list_items.push(ImportResultLine {
+                line: Line::from(vec![
+                    Span::styled("  ", Style::default()),
+                    Span::styled(src.clone(), Style::default().fg(theme.text_primary)),
+                    Span::styled(" → ", Style::default().fg(theme.border_primary)),
+                    Span::styled(tgt.clone(), Style::default().fg(theme.text_secondary)),
+                ])
+            });
+        }
+        list_items.push(ImportResultLine { line: Line::from("") });
+    }
+
+    // Unparsed lines
+    if !results.unparsed.is_empty() {
+        list_items.push(ImportResultLine {
+            line: Line::from(vec![
+                Span::styled(format!("⚠ Couldn't parse {} lines", results.unparsed.len()), Style::default().fg(theme.accent_warning).bold()),
+            ])
+        });
+        for line in &results.unparsed {
+            let truncated = if line.len() > 60 {
+                format!("{}...", &line[..57])
+            } else {
+                line.clone()
+            };
+            list_items.push(ImportResultLine {
+                line: Line::from(vec![
+                    Span::styled("  ", Style::default()),
+                    Span::styled(truncated, Style::default().fg(theme.text_tertiary)),
+                ])
+            });
+        }
+    }
+
+    // List
+    let list = Element::list("import-results-list", &list_items, &state.import_results_list, theme)
+        .on_render(Msg::ImportResultsSetViewportHeight)
+        .build();
+
+    let list_panel = Element::panel(list)
+        .title("Results")
+        .build();
+
+    // Buttons
+    let buttons = button_row![
+        ("import-results-close", "Close (Esc)", Msg::CloseImportResultsModal),
+    ];
+
+    // Layout
+    let content = col![
+        list_panel => Fill(1),
+        spacer!() => Length(1),
+        buttons => Length(3),
+    ];
+
+    Element::panel(Element::container(content).padding(2).build())
+        .title("Import Results")
+        .width(90)
+        .height(35)
+        .build()
+}
+
 /// Render the C# mapping import modal with file browser
 pub fn render_import_modal(state: &mut State) -> Element<Msg> {
     let theme = &crate::global_runtime_config().theme;

@@ -24,6 +24,15 @@ use super::view::{render_main_layout, render_back_confirmation_modal, render_exa
 
 pub struct EntityComparisonApp;
 
+#[derive(Clone, Debug)]
+pub struct ImportResults {
+    pub filename: String,
+    pub added: Vec<(String, String)>,      // (source_field, target_field)
+    pub updated: Vec<(String, String)>,    // (source_field, target_field)
+    pub removed: Vec<(String, String)>,    // (source_field, target_field)
+    pub unparsed: Vec<String>,             // Lines that couldn't be parsed
+}
+
 #[derive(Clone)]
 pub struct State {
     // Context
@@ -94,6 +103,9 @@ pub struct State {
     // Import modal state
     pub(super) show_import_modal: bool,
     pub(super) import_file_browser: crate::tui::widgets::FileBrowserState,
+    pub(super) show_import_results_modal: bool,
+    pub(super) import_results: Option<ImportResults>,
+    pub(super) import_results_list: crate::tui::widgets::ListState,
 
     // Modal state
     pub(super) show_back_confirmation: bool,
@@ -171,6 +183,9 @@ impl Default for State {
             import_file_browser: crate::tui::widgets::FileBrowserState::new(
                 std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("/"))
             ),
+            show_import_results_modal: false,
+            import_results: None,
+            import_results_list: crate::tui::widgets::ListState::new(),
             show_back_confirmation: false,
         }
     }
@@ -254,6 +269,9 @@ impl App for EntityComparisonApp {
             import_file_browser: crate::tui::widgets::FileBrowserState::new(
                 std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("/"))
             ),
+            show_import_results_modal: false,
+            import_results: None,
+            import_results_list: crate::tui::widgets::ListState::new(),
             show_back_confirmation: false,
         };
 
@@ -318,6 +336,10 @@ impl App for EntityComparisonApp {
 
         if state.show_import_modal {
             view = view.with_app_modal(super::view::render_import_modal(state), LayerAlignment::Center);
+        }
+
+        if state.show_import_results_modal {
+            view = view.with_app_modal(super::view::render_import_results_modal(state), LayerAlignment::Center);
         }
 
         view
@@ -409,6 +431,12 @@ impl App for EntityComparisonApp {
             subs.push(Subscription::keyboard(KeyCode::Esc, "Close modal", Msg::CloseImportModal));
         }
 
+        // When showing import results modal, add hotkeys
+        if state.show_import_results_modal {
+            subs.push(Subscription::keyboard(KeyCode::Char('c'), "Close modal", Msg::CloseImportResultsModal));
+            subs.push(Subscription::keyboard(KeyCode::Esc, "Close modal", Msg::CloseImportResultsModal));
+        }
+
         subs
     }
 
@@ -491,20 +519,6 @@ impl App for EntityComparisonApp {
                     ));
                 }
             }
-        }
-
-        // Import status
-        if let Some(ref file) = state.import_source_file {
-            // Extract just the filename from the path
-            let filename = std::path::Path::new(file)
-                .file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or(file);
-            spans.push(Span::styled(" | ", Style::default().fg(theme.border_primary)));
-            spans.push(Span::styled(
-                format!("Import: {} ({} mappings)", filename, state.imported_mappings.len()),
-                Style::default().fg(theme.palette_3),
-            ));
         }
 
         Some(Line::from(spans))

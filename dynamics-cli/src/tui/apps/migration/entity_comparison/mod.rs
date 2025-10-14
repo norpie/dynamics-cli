@@ -77,6 +77,8 @@ pub enum Msg {
     ClearImportedMappings,
     ImportNavigate(crossterm::event::KeyCode),
     ImportSetViewportHeight(usize),
+    CloseImportResultsModal,
+    ImportResultsSetViewportHeight(usize),
 }
 
 #[derive(Clone)]

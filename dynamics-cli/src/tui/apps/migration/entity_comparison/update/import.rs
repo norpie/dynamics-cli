@@ -107,6 +107,40 @@ pub fn handle_file_selected(_state: &mut State, path: PathBuf) -> Command<Msg> {
 pub fn handle_mappings_loaded(state: &mut State, mappings: HashMap<String, String>, filename: String) -> Command<Msg> {
     log::info!("Loading {} imported mappings from {}", mappings.len(), filename);
 
+    // Compute results by comparing old vs new mappings
+    let old_mappings = &state.imported_mappings;
+    let mut added = Vec::new();
+    let mut updated = Vec::new();
+    let mut removed = Vec::new();
+
+    // Find added and updated mappings
+    for (src, tgt) in &mappings {
+        if let Some(old_tgt) = old_mappings.get(src) {
+            if old_tgt != tgt {
+                updated.push((src.clone(), tgt.clone()));
+            }
+        } else {
+            added.push((src.clone(), tgt.clone()));
+        }
+    }
+
+    // Find removed mappings
+    for (src, tgt) in old_mappings {
+        if !mappings.contains_key(src) {
+            removed.push((src.clone(), tgt.clone()));
+        }
+    }
+
+    // Store results
+    state.import_results = Some(super::super::app::ImportResults {
+        filename: filename.clone(),
+        added,
+        updated,
+        removed,
+        unparsed: vec![],  // TODO: capture unparsed lines from parser
+    });
+    state.show_import_results_modal = true;
+
     state.imported_mappings = mappings;
     state.import_source_file = Some(filename.clone());
     state.show_import_modal = false;
@@ -208,5 +242,36 @@ pub fn handle_set_viewport_height(state: &mut State, height: usize) -> Command<M
     let list_state = state.import_file_browser.list_state_mut();
     list_state.set_viewport_height(height);
     list_state.update_scroll(height, item_count);
+    Command::None
+}
+
+/// Close the import results modal
+pub fn handle_close_results_modal(state: &mut State) -> Command<Msg> {
+    state.show_import_results_modal = false;
+    Command::None
+}
+
+/// Update viewport height for results list scrolling
+pub fn handle_results_set_viewport_height(state: &mut State, height: usize) -> Command<Msg> {
+    if let Some(results) = &state.import_results {
+        // Calculate total number of lines
+        let mut line_count = 2; // header + blank line
+
+        if !results.added.is_empty() {
+            line_count += 1 + results.added.len() + 1; // header + items + blank
+        }
+        if !results.updated.is_empty() {
+            line_count += 1 + results.updated.len() + 1;
+        }
+        if !results.removed.is_empty() {
+            line_count += 1 + results.removed.len() + 1;
+        }
+        if !results.unparsed.is_empty() {
+            line_count += 1 + results.unparsed.len();
+        }
+
+        state.import_results_list.set_viewport_height(height);
+        state.import_results_list.update_scroll(height, line_count);
+    }
     Command::None
 }
