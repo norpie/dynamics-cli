@@ -831,9 +831,10 @@ impl App for MigrationComparisonSelectApp {
         let mut subs = vec![];
 
         if !state.show_create_modal && !state.show_delete_confirm && !state.show_rename_modal {
+            let config = crate::global_runtime_config();
+
             subs.push(Subscription::keyboard(KeyCode::Esc, "Back to migration list", Msg::Back));
-            subs.push(Subscription::keyboard(KeyCode::Char('b'), "Back to migration list", Msg::Back));
-            subs.push(Subscription::keyboard(KeyCode::Char('B'), "Back to migration list", Msg::Back));
+            subs.push(Subscription::keyboard(config.get_keybind("migration_comparison.back"), "Back to migration list", Msg::Back));
 
             if !state.comparisons.is_empty() {
                 subs.push(Subscription::keyboard(
@@ -843,41 +844,17 @@ impl App for MigrationComparisonSelectApp {
                 ));
             }
 
-            subs.push(Subscription::keyboard(
-                KeyCode::Char('n'),
-                "Create comparison",
-                Msg::CreateComparison,
-            ));
-            subs.push(Subscription::keyboard(
-                KeyCode::Char('N'),
-                "Create comparison",
-                Msg::CreateComparison,
-            ));
-            subs.push(Subscription::keyboard(
-                KeyCode::Char('d'),
-                "Delete comparison",
-                Msg::RequestDelete,
-            ));
-            subs.push(Subscription::keyboard(
-                KeyCode::Char('D'),
-                "Delete comparison",
-                Msg::RequestDelete,
-            ));
-            subs.push(Subscription::keyboard(
-                KeyCode::Char('r'),
-                "Rename comparison",
-                Msg::RequestRename,
-            ));
-            subs.push(Subscription::keyboard(
-                KeyCode::Char('R'),
-                "Rename comparison",
-                Msg::RequestRename,
-            ));
-            subs.push(Subscription::keyboard(
-                KeyCode::Char('P'),
-                "Preload all comparisons",
-                Msg::PreloadAllComparisons,
-            ));
+            let create_kb = config.get_keybind("migration_comparison.create");
+            subs.push(Subscription::keyboard(create_kb, "Create comparison", Msg::CreateComparison));
+
+            let delete_kb = config.get_keybind("migration_comparison.delete");
+            subs.push(Subscription::keyboard(delete_kb, "Delete comparison", Msg::RequestDelete));
+
+            let rename_kb = config.get_keybind("migration_comparison.rename");
+            subs.push(Subscription::keyboard(rename_kb, "Rename comparison", Msg::RequestRename));
+
+            let preload_kb = config.get_keybind("migration_comparison.preload");
+            subs.push(Subscription::keyboard(preload_kb, "Preload all comparisons", Msg::PreloadAllComparisons));
         } else if state.show_create_modal {
             subs.push(Subscription::keyboard(KeyCode::Esc, "Close modal", Msg::CreateFormCancel));
         } else if state.show_delete_confirm {

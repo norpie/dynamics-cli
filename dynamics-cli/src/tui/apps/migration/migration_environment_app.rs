@@ -577,9 +577,9 @@ impl App for MigrationEnvironmentApp {
         let mut subs = vec![];
 
         if !state.show_create_modal && !state.show_delete_confirm && !state.show_rename_modal {
-            subs.push(Subscription::keyboard(crate::global_runtime_config().get_keybind("migration.create"), "Create new migration", Msg::OpenCreateModal));
-            subs.push(Subscription::keyboard(crate::global_runtime_config().get_keybind("migration.delete"), "Delete migration", Msg::RequestDelete));
-            subs.push(Subscription::keyboard(crate::global_runtime_config().get_keybind("migration.rename"), "Rename migration", Msg::RequestRename));
+            subs.push(Subscription::keyboard(crate::global_runtime_config().get_keybind("migration_env.create"), "Create new migration", Msg::OpenCreateModal));
+            subs.push(Subscription::keyboard(crate::global_runtime_config().get_keybind("migration_env.delete"), "Delete migration", Msg::RequestDelete));
+            subs.push(Subscription::keyboard(crate::global_runtime_config().get_keybind("migration_env.rename"), "Rename migration", Msg::RequestRename));
         } else if state.show_create_modal {
             subs.push(Subscription::keyboard(KeyCode::Esc, "Close modal", Msg::CreateFormCancel));
         } else if state.show_delete_confirm {

@@ -98,9 +98,9 @@ pub fn register(registry: &OptionsRegistry) -> Result<()> {
             .build()?
     )?;
 
-    // Migration app keybinds
+    // Migration Environment app keybinds
     registry.register(
-        OptionDefBuilder::new("keybind", "migration.create")
+        OptionDefBuilder::new("keybind", "migration_env.create")
             .display_name("Create Migration")
             .description("Create a new migration environment")
             .keybind_type(KeyCode::Char('n'))
@@ -108,7 +108,7 @@ pub fn register(registry: &OptionsRegistry) -> Result<()> {
     )?;
 
     registry.register(
-        OptionDefBuilder::new("keybind", "migration.delete")
+        OptionDefBuilder::new("keybind", "migration_env.delete")
             .display_name("Delete Migration")
             .description("Delete the selected migration environment")
             .keybind_type(KeyCode::Char('d'))
@@ -116,10 +116,188 @@ pub fn register(registry: &OptionsRegistry) -> Result<()> {
     )?;
 
     registry.register(
-        OptionDefBuilder::new("keybind", "migration.rename")
+        OptionDefBuilder::new("keybind", "migration_env.rename")
             .display_name("Rename Migration")
             .description("Rename the selected migration environment")
             .keybind_type(KeyCode::Char('r'))
+            .build()?
+    )?;
+
+    // Migration Comparison Select app keybinds
+    registry.register(
+        OptionDefBuilder::new("keybind", "migration_comparison.create")
+            .display_name("Create Comparison")
+            .description("Create a new entity comparison")
+            .keybind_type(KeyCode::Char('n'))
+            .build()?
+    )?;
+
+    registry.register(
+        OptionDefBuilder::new("keybind", "migration_comparison.delete")
+            .display_name("Delete Comparison")
+            .description("Delete the selected comparison")
+            .keybind_type(KeyCode::Char('d'))
+            .build()?
+    )?;
+
+    registry.register(
+        OptionDefBuilder::new("keybind", "migration_comparison.rename")
+            .display_name("Rename Comparison")
+            .description("Rename the selected comparison")
+            .keybind_type(KeyCode::Char('r'))
+            .build()?
+    )?;
+
+    registry.register(
+        OptionDefBuilder::new("keybind", "migration_comparison.back")
+            .display_name("Back to Migrations")
+            .description("Return to migration environment list")
+            .keybind_type(KeyCode::Char('b'))
+            .build()?
+    )?;
+
+    registry.register(
+        OptionDefBuilder::new("keybind", "migration_comparison.preload")
+            .display_name("Preload All")
+            .description("Preload metadata for all comparisons")
+            .keybind_type(KeyCode::Char('P'))
+            .build()?
+    )?;
+
+    // Entity Comparison app keybinds
+    registry.register(
+        OptionDefBuilder::new("keybind", "entity_comparison.back")
+            .display_name("Back to Comparisons")
+            .description("Return to comparison list")
+            .keybind_type(KeyCode::Char('b'))
+            .build()?
+    )?;
+
+    registry.register(
+        OptionDefBuilder::new("keybind", "entity_comparison.tab_fields")
+            .display_name("Switch to Fields Tab")
+            .description("Switch to the Fields comparison tab")
+            .keybind_type(KeyCode::Char('1'))
+            .build()?
+    )?;
+
+    registry.register(
+        OptionDefBuilder::new("keybind", "entity_comparison.tab_relationships")
+            .display_name("Switch to Relationships Tab")
+            .description("Switch to the Relationships comparison tab")
+            .keybind_type(KeyCode::Char('2'))
+            .build()?
+    )?;
+
+    registry.register(
+        OptionDefBuilder::new("keybind", "entity_comparison.tab_views")
+            .display_name("Switch to Views Tab")
+            .description("Switch to the Views comparison tab")
+            .keybind_type(KeyCode::Char('3'))
+            .build()?
+    )?;
+
+    registry.register(
+        OptionDefBuilder::new("keybind", "entity_comparison.tab_forms")
+            .display_name("Switch to Forms Tab")
+            .description("Switch to the Forms comparison tab")
+            .keybind_type(KeyCode::Char('4'))
+            .build()?
+    )?;
+
+    registry.register(
+        OptionDefBuilder::new("keybind", "entity_comparison.tab_entities")
+            .display_name("Switch to Entities Tab")
+            .description("Switch to the Entities comparison tab")
+            .keybind_type(KeyCode::Char('5'))
+            .build()?
+    )?;
+
+    registry.register(
+        OptionDefBuilder::new("keybind", "entity_comparison.refresh")
+            .display_name("Refresh Metadata")
+            .description("Reload metadata from API")
+            .keybind_type(KeyCode::F(5))
+            .build()?
+    )?;
+
+    registry.register(
+        OptionDefBuilder::new("keybind", "entity_comparison.create_mapping")
+            .display_name("Create Manual Mapping")
+            .description("Create a manual field mapping")
+            .keybind_type(KeyCode::Char('m'))
+            .build()?
+    )?;
+
+    registry.register(
+        OptionDefBuilder::new("keybind", "entity_comparison.delete_mapping")
+            .display_name("Delete Manual Mapping")
+            .description("Delete a manual field mapping")
+            .keybind_type(KeyCode::Char('d'))
+            .build()?
+    )?;
+
+    registry.register(
+        OptionDefBuilder::new("keybind", "entity_comparison.toggle_hide_matched")
+            .display_name("Toggle Hide Matched")
+            .description("Show/hide already matched fields")
+            .keybind_type(KeyCode::Char('h'))
+            .build()?
+    )?;
+
+    registry.register(
+        OptionDefBuilder::new("keybind", "entity_comparison.toggle_sort")
+            .display_name("Toggle Sort Mode")
+            .description("Cycle through sort modes")
+            .keybind_type(KeyCode::Char('s'))
+            .build()?
+    )?;
+
+    registry.register(
+        OptionDefBuilder::new("keybind", "entity_comparison.toggle_technical_names")
+            .display_name("Toggle Technical Names")
+            .description("Switch between technical and display names")
+            .keybind_type(KeyCode::Char('t'))
+            .build()?
+    )?;
+
+    registry.register(
+        OptionDefBuilder::new("keybind", "entity_comparison.cycle_example")
+            .display_name("Cycle Example Pairs")
+            .description("Cycle through configured example data pairs")
+            .keybind_type(KeyCode::Char('e'))
+            .build()?
+    )?;
+
+    registry.register(
+        OptionDefBuilder::new("keybind", "entity_comparison.open_examples")
+            .display_name("Manage Examples")
+            .description("Open examples management modal")
+            .keybind_type(KeyCode::Char('x'))
+            .build()?
+    )?;
+
+    registry.register(
+        OptionDefBuilder::new("keybind", "entity_comparison.open_prefix_mappings")
+            .display_name("Manage Prefix Mappings")
+            .description("Open prefix mappings modal")
+            .keybind_type(KeyCode::Char('p'))
+            .build()?
+    )?;
+
+    registry.register(
+        OptionDefBuilder::new("keybind", "entity_comparison.open_manual_mappings")
+            .display_name("View Manual Mappings")
+            .description("Open manual mappings modal")
+            .keybind_type(KeyCode::Char('M'))
+            .build()?
+    )?;
+
+    registry.register(
+        OptionDefBuilder::new("keybind", "entity_comparison.export")
+            .display_name("Export to Excel")
+            .description("Export comparison data to Excel file")
+            .keybind_type(KeyCode::F(10))
             .build()?
     )?;
 
@@ -137,9 +315,11 @@ mod tests {
         register(&registry).unwrap();
 
         let apps = list_apps(&registry);
-        assert_eq!(apps.len(), 2);
+        assert_eq!(apps.len(), 4);
         assert!(apps.contains(&"global".to_string()));
-        assert!(apps.contains(&"migration".to_string()));
+        assert!(apps.contains(&"migration_env".to_string()));
+        assert!(apps.contains(&"migration_comparison".to_string()));
+        assert!(apps.contains(&"entity_comparison".to_string()));
     }
 
     #[test]
@@ -153,10 +333,25 @@ mod tests {
         assert!(actions.contains(&"app_launcher".to_string()));
         assert!(actions.contains(&"app_overview".to_string()));
 
-        let migration_actions = list_actions_for_app(&registry, "migration");
-        assert_eq!(migration_actions.len(), 3);
-        assert!(migration_actions.contains(&"create".to_string()));
-        assert!(migration_actions.contains(&"delete".to_string()));
-        assert!(migration_actions.contains(&"rename".to_string()));
+        let migration_env_actions = list_actions_for_app(&registry, "migration_env");
+        assert_eq!(migration_env_actions.len(), 3);
+        assert!(migration_env_actions.contains(&"create".to_string()));
+        assert!(migration_env_actions.contains(&"delete".to_string()));
+        assert!(migration_env_actions.contains(&"rename".to_string()));
+
+        let migration_comparison_actions = list_actions_for_app(&registry, "migration_comparison");
+        assert_eq!(migration_comparison_actions.len(), 5);
+        assert!(migration_comparison_actions.contains(&"create".to_string()));
+        assert!(migration_comparison_actions.contains(&"delete".to_string()));
+        assert!(migration_comparison_actions.contains(&"rename".to_string()));
+        assert!(migration_comparison_actions.contains(&"back".to_string()));
+        assert!(migration_comparison_actions.contains(&"preload".to_string()));
+
+        let entity_comparison_actions = list_actions_for_app(&registry, "entity_comparison");
+        assert_eq!(entity_comparison_actions.len(), 17);
+        assert!(entity_comparison_actions.contains(&"back".to_string()));
+        assert!(entity_comparison_actions.contains(&"tab_fields".to_string()));
+        assert!(entity_comparison_actions.contains(&"refresh".to_string()));
+        assert!(entity_comparison_actions.contains(&"export".to_string()));
     }
 }

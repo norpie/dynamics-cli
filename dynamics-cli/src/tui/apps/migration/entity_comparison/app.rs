@@ -248,58 +248,48 @@ impl App for EntityComparisonApp {
     }
 
     fn subscriptions(state: &Self::State) -> Vec<Subscription<Self::Msg>> {
+        let config = crate::global_runtime_config();
+
         let mut subs = vec![
             Subscription::keyboard(KeyCode::Esc, "Back to comparison list", Msg::Back),
-            Subscription::keyboard(KeyCode::Char('b'), "Back to comparison list", Msg::Back),
-            Subscription::keyboard(KeyCode::Char('B'), "Back to comparison list", Msg::Back),
+            Subscription::keyboard(config.get_keybind("entity_comparison.back"), "Back to comparison list", Msg::Back),
 
             // Tab switching
-            Subscription::keyboard(KeyCode::Char('1'), "Switch to Fields", Msg::SwitchTab(1)),
-            Subscription::keyboard(KeyCode::Char('2'), "Switch to Relationships", Msg::SwitchTab(2)),
-            Subscription::keyboard(KeyCode::Char('3'), "Switch to Views", Msg::SwitchTab(3)),
-            Subscription::keyboard(KeyCode::Char('4'), "Switch to Forms", Msg::SwitchTab(4)),
-            Subscription::keyboard(KeyCode::Char('5'), "Switch to Entities", Msg::SwitchTab(5)),
+            Subscription::keyboard(config.get_keybind("entity_comparison.tab_fields"), "Switch to Fields", Msg::SwitchTab(1)),
+            Subscription::keyboard(config.get_keybind("entity_comparison.tab_relationships"), "Switch to Relationships", Msg::SwitchTab(2)),
+            Subscription::keyboard(config.get_keybind("entity_comparison.tab_views"), "Switch to Views", Msg::SwitchTab(3)),
+            Subscription::keyboard(config.get_keybind("entity_comparison.tab_forms"), "Switch to Forms", Msg::SwitchTab(4)),
+            Subscription::keyboard(config.get_keybind("entity_comparison.tab_entities"), "Switch to Entities", Msg::SwitchTab(5)),
 
-            // AZERTY keyboard aliases
-            Subscription::keyboard(KeyCode::Char('&'), "Switch to Fields", Msg::SwitchTab(1)),
-            Subscription::keyboard(KeyCode::Char('é'), "Switch to Relationships", Msg::SwitchTab(2)),
-            Subscription::keyboard(KeyCode::Char('"'), "Switch to Views", Msg::SwitchTab(3)),
-            Subscription::keyboard(KeyCode::Char('\''), "Switch to Forms", Msg::SwitchTab(4)),
-            Subscription::keyboard(KeyCode::Char('('), "Switch to Entities", Msg::SwitchTab(5)),
 
             // Refresh metadata
-            Subscription::keyboard(KeyCode::F(5), "Refresh metadata", Msg::Refresh),
+            Subscription::keyboard(config.get_keybind("entity_comparison.refresh"), "Refresh metadata", Msg::Refresh),
 
             // Manual mapping actions
-            Subscription::keyboard(KeyCode::Char('m'), "Create manual mapping", Msg::CreateManualMapping),
-            Subscription::keyboard(KeyCode::Char('d'), "Delete manual mapping", Msg::DeleteManualMapping),
+            Subscription::keyboard(config.get_keybind("entity_comparison.create_mapping"), "Create manual mapping", Msg::CreateManualMapping),
+            Subscription::keyboard(config.get_keybind("entity_comparison.delete_mapping"), "Delete manual mapping", Msg::DeleteManualMapping),
 
             // Hide matched toggle
-            Subscription::keyboard(KeyCode::Char('h'), "Toggle hide matched", Msg::ToggleHideMatched),
-            Subscription::keyboard(KeyCode::Char('H'), "Toggle hide matched", Msg::ToggleHideMatched),
+            Subscription::keyboard(config.get_keybind("entity_comparison.toggle_hide_matched"), "Toggle hide matched", Msg::ToggleHideMatched),
 
             // Sort mode toggle
-            Subscription::keyboard(KeyCode::Char('s'), "Toggle sort mode", Msg::ToggleSortMode),
-            Subscription::keyboard(KeyCode::Char('S'), "Toggle sort mode", Msg::ToggleSortMode),
+            Subscription::keyboard(config.get_keybind("entity_comparison.toggle_sort"), "Toggle sort mode", Msg::ToggleSortMode),
 
             // Technical/display name toggle
-            Subscription::keyboard(KeyCode::Char('t'), "Toggle technical names", Msg::ToggleTechnicalNames),
-            Subscription::keyboard(KeyCode::Char('T'), "Toggle technical names", Msg::ToggleTechnicalNames),
+            Subscription::keyboard(config.get_keybind("entity_comparison.toggle_technical_names"), "Toggle technical names", Msg::ToggleTechnicalNames),
 
             // Examples management
-            Subscription::keyboard(KeyCode::Char('e'), "Cycle example pairs", Msg::CycleExamplePair),
-            Subscription::keyboard(KeyCode::Char('x'), "Open examples modal", Msg::OpenExamplesModal),
-            Subscription::keyboard(KeyCode::Char('X'), "Open examples modal", Msg::OpenExamplesModal),
+            Subscription::keyboard(config.get_keybind("entity_comparison.cycle_example"), "Cycle example pairs", Msg::CycleExamplePair),
+            Subscription::keyboard(config.get_keybind("entity_comparison.open_examples"), "Open examples modal", Msg::OpenExamplesModal),
 
             // Prefix mappings
-            Subscription::keyboard(KeyCode::Char('p'), "Open prefix mappings modal", Msg::OpenPrefixMappingsModal),
-            Subscription::keyboard(KeyCode::Char('P'), "Open prefix mappings modal", Msg::OpenPrefixMappingsModal),
+            Subscription::keyboard(config.get_keybind("entity_comparison.open_prefix_mappings"), "Open prefix mappings modal", Msg::OpenPrefixMappingsModal),
 
             // Manual mappings
-            Subscription::keyboard(KeyCode::Char('M'), "View manual mappings modal", Msg::OpenManualMappingsModal),
+            Subscription::keyboard(config.get_keybind("entity_comparison.open_manual_mappings"), "View manual mappings modal", Msg::OpenManualMappingsModal),
 
             // Export
-            Subscription::keyboard(KeyCode::F(10), "Export to Excel", Msg::ExportToExcel),
+            Subscription::keyboard(config.get_keybind("entity_comparison.export"), "Export to Excel", Msg::ExportToExcel),
         ];
 
         // When showing confirmation modal, add y/n hotkeys

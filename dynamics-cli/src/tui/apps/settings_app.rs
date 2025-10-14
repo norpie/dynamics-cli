@@ -1952,15 +1952,18 @@ impl SettingsApp {
                     crate::global_runtime_config().get_keybind(action).to_string()
                 });
 
+            // Format: "Display Name: [Keybind]"
+            let label = format!("{}: [{}]", display_name, current_keybind);
+
             let item_id = Box::leak(format!("keybind-{}", action).into_boxed_str());
             let item = Element::button(
                 FocusId::new(item_id),
-                format!("{:20} {}", display_name, current_keybind)
+                label
             )
             .on_press(Msg::EditKeybind(action.clone()))
             .build();
 
-            keybind_items.push((Length(3), item));
+            keybind_items.push(item);
         }
 
         let keybind_list = if keybind_items.is_empty() {
@@ -1968,10 +1971,21 @@ impl SettingsApp {
                 Span::styled("No keybinds available", Style::default().fg(theme.text_tertiary))
             ])).build()
         } else {
-            Element::Column {
-                items: keybind_items,
-                spacing: 0,
-            }
+            // Split into 3 columns
+            let per_col = (keybind_items.len() + 2) / 3;
+            let col1_items: Vec<_> = keybind_items.iter().take(per_col).cloned().map(|item| (Length(3), item)).collect();
+            let col2_items: Vec<_> = keybind_items.iter().skip(per_col).take(per_col).cloned().map(|item| (Length(3), item)).collect();
+            let col3_items: Vec<_> = keybind_items.iter().skip(per_col * 2).cloned().map(|item| (Length(3), item)).collect();
+
+            let col1 = Element::Column { items: col1_items, spacing: 0 };
+            let col2 = Element::Column { items: col2_items, spacing: 0 };
+            let col3 = Element::Column { items: col3_items, spacing: 0 };
+
+            row![
+                col1 => Fill(1),
+                col2 => Fill(1),
+                col3 => Fill(1),
+            ]
         };
 
         // Reset button
