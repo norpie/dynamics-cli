@@ -163,6 +163,16 @@ impl SelectState {
                 self.select(index);
                 Some(self.selected_index)
             }
+            SelectEvent::Blur => {
+                self.handle_blur();
+                None
+            }
         }
+    }
+
+    /// Handle blur event - close dropdown if open
+    /// Call this when the select loses focus
+    pub fn handle_blur(&mut self) {
+        self.close();
     }
 }

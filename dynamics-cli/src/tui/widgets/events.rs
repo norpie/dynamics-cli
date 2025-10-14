@@ -45,6 +45,8 @@ pub enum SelectEvent {
     Navigate(KeyCode),
     /// Option selected (Enter or click)
     Select(usize),
+    /// Widget lost focus (close dropdown)
+    Blur,
 }
 
 /// Event type for FileBrowser widget

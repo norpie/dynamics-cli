@@ -159,6 +159,10 @@ impl SelectField {
                     selection_made = Some(SelectEvent::Select(idx));
                 }
             }
+            SelectEvent::Blur => {
+                // Close dropdown when losing focus
+                self.state.handle_blur();
+            }
         }
         (Command::None, selection_made)
     }

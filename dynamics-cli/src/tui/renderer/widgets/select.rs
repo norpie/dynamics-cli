@@ -90,7 +90,7 @@ pub fn select_on_key_event<Msg: Clone + Send + 'static>(
 /// Render Select element
 pub fn render_select<Msg: Clone + Send + 'static>(
     frame: &mut Frame,
-    
+
     registry: &mut InteractionRegistry<Msg>,
     focus_registry: &mut FocusRegistry<Msg>,
     dropdown_registry: &mut DropdownRegistry<Msg>,
@@ -117,12 +117,25 @@ pub fn render_select<Msg: Clone + Send + 'static>(
         select_on_key(is_open, on_toggle.clone(), on_navigate.clone())
     };
 
+    // Wrap on_blur to also send SelectEvent::Blur when using event pattern
+    let on_blur_handler = if let Some(event_fn) = on_event {
+        // If using event pattern, send Blur event along with any custom on_blur
+        let blur_msg = event_fn(SelectEvent::Blur);
+        if let Some(custom_blur) = on_blur {
+            Some(blur_msg) // For now just use the Blur event, custom_blur would need batching
+        } else {
+            Some(blur_msg)
+        }
+    } else {
+        on_blur.clone()
+    };
+
     focus_registry.register_focusable(FocusableInfo {
         id: id.clone(),
         rect: area,
         on_key: on_key_handler,
         on_focus: on_focus.clone(),
-        on_blur: on_blur.clone(),
+        on_blur: on_blur_handler,
         inside_panel,
     });
 
