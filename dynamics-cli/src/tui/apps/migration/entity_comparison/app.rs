@@ -433,6 +433,8 @@ impl App for EntityComparisonApp {
 
         // When showing import results modal, add hotkeys
         if state.show_import_results_modal {
+            subs.push(Subscription::keyboard(KeyCode::Up, "Navigate up", Msg::ImportResultsNavigate(KeyCode::Up)));
+            subs.push(Subscription::keyboard(KeyCode::Down, "Navigate down", Msg::ImportResultsNavigate(KeyCode::Down)));
             subs.push(Subscription::keyboard(KeyCode::Char('c'), "Clear imports", Msg::ClearImportedMappings));
             subs.push(Subscription::keyboard(KeyCode::Esc, "Close modal", Msg::CloseImportResultsModal));
         }

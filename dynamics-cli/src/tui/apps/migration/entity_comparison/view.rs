@@ -486,6 +486,7 @@ pub fn render_import_results_modal(state: &mut State) -> Element<Msg> {
     }
 
     // List
+    log::debug!("Import results modal: {} list items", list_items.len());
     let list = Element::list("import-results-list", &list_items, &state.import_results_list, theme)
         .on_select(Msg::ImportResultsSelect)
         .on_navigate(Msg::ImportResultsNavigate)
