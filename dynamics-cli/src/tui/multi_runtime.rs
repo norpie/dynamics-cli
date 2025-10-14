@@ -196,9 +196,18 @@ impl MultiAppRuntime {
             }
             GlobalMsg::HelpScroll(key) => {
                 // Calculate content height (same as in render_help_menu)
+                // Use configured keybinds from global config
+                let config = crate::global_runtime_config();
+                let help_key = config.keybinds.get("help")
+                    .copied()
+                    .unwrap_or_else(|| KeyBinding::new(KeyCode::F(1)));
+                let launcher_key = config.keybinds.get("app_launcher")
+                    .copied()
+                    .unwrap_or_else(|| KeyBinding::ctrl(KeyCode::Char('a')));
+
                 let global_bindings = vec![
-                    (KeyBinding::new(KeyCode::F(1)), "Toggle help menu"),
-                    (KeyBinding::ctrl(KeyCode::Char(' ')), "Go to app launcher"),
+                    (help_key, "Toggle help menu"),
+                    (launcher_key, "Go to app launcher"),
                     (KeyBinding::new(KeyCode::Esc), "Close help menu"),
                 ];
 
@@ -562,7 +571,8 @@ impl MultiAppRuntime {
     }
 
     fn render_header(&self, frame: &mut Frame, area: ratatui::layout::Rect, title: &str, status: Option<Line<'static>>) {
-        let theme = &crate::global_runtime_config().theme;
+        let config = crate::global_runtime_config();
+        let theme = &config.theme;
         // Build title line with optional status
         let title_line = if let Some(status_line) = status {
             // Combine title and status with separator
@@ -578,8 +588,13 @@ impl MultiAppRuntime {
         };
 
         let header_left = Element::styled_text(title_line).build();
+
+        // Use configured help keybind
+        let help_key_str = config.keybinds.get("help")
+            .map(|kb| kb.to_string())
+            .unwrap_or_else(|| "F1".to_string());
         let header_right = Element::styled_text(Line::from(vec![
-            Span::styled("[?] F1 Help", Style::default().fg(theme.border_primary))
+            Span::styled(format!("[?] {} Help", help_key_str), Style::default().fg(theme.border_primary))
         ])).build();
 
         let header = Element::panel(
@@ -609,9 +624,18 @@ impl MultiAppRuntime {
         frame.render_widget(dim_overlay, area);
 
         // Build help content directly as Element<GlobalMsg>
+        // Use configured keybinds from global config
+        let config = crate::global_runtime_config();
+        let help_key = config.keybinds.get("help")
+            .copied()
+            .unwrap_or_else(|| KeyBinding::new(KeyCode::F(1)));
+        let launcher_key = config.keybinds.get("app_launcher")
+            .copied()
+            .unwrap_or_else(|| KeyBinding::ctrl(KeyCode::Char('a')));
+
         let global_bindings = vec![
-            (KeyBinding::new(KeyCode::F(1)), "Toggle help menu"),
-            (KeyBinding::ctrl(KeyCode::Char('a')), "Go to app launcher"),
+            (help_key, "Toggle help menu"),
+            (launcher_key, "Go to app launcher"),
             (KeyBinding::new(KeyCode::Esc), "Close help menu"),
         ];
 
