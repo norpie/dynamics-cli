@@ -1718,6 +1718,39 @@ impl App for SettingsApp {
                     Msg::CaptureKey(key_event),
                 ));
             }
+
+            // Subscribe to shifted numbers (symbols: !@#$%^&*())
+            let shifted_numbers = ['!', '@', '#', '$', '%', '^', '&', '*', '(', ')'];
+            for c in shifted_numbers {
+                let key_event = crossterm::event::KeyEvent::new(KeyCode::Char(c), KeyModifiers::SHIFT);
+                subs.push(Subscription::keyboard(
+                    KeyBinding::shift(KeyCode::Char(c)),
+                    "",
+                    Msg::CaptureKey(key_event),
+                ));
+            }
+
+            // Subscribe to common symbols (no modifiers needed)
+            let symbols = ['-', '=', '[', ']', '\\', ';', '\'', ',', '.', '/', '`', ' '];
+            for c in symbols {
+                let key_event = crossterm::event::KeyEvent::new(KeyCode::Char(c), KeyModifiers::empty());
+                subs.push(Subscription::keyboard(
+                    KeyCode::Char(c),
+                    "",
+                    Msg::CaptureKey(key_event),
+                ));
+            }
+
+            // Subscribe to shifted symbols
+            let shifted_symbols = ['_', '+', '{', '}', '|', ':', '"', '<', '>', '?', '~'];
+            for c in shifted_symbols {
+                let key_event = crossterm::event::KeyEvent::new(KeyCode::Char(c), KeyModifiers::SHIFT);
+                subs.push(Subscription::keyboard(
+                    KeyBinding::shift(KeyCode::Char(c)),
+                    "",
+                    Msg::CaptureKey(key_event),
+                ));
+            }
         }
 
         subs
