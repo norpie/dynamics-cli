@@ -308,18 +308,22 @@ impl MultiAppRuntime {
             return Ok(true);  // Consume all other keys (except Tab, handled above)
         }
 
-        // Priority 4: F1 toggles help menu
-        if key_event.code == KeyCode::F(1) {
-            self.help_modal.open_empty();
-            // Reset scroll state to top
-            self.help_scroll_state = ScrollableState::new();
-            self.global_focused_id = Some(FocusId::new("help-scroll")); // Auto-focus scrollable
-            return Ok(true);
+        // Priority 4: Configurable help menu keybind
+        let config = crate::global_runtime_config();
+        if let Some(help_key) = config.keybinds.get("help") {
+            if help_key.matches(&key_event) {
+                self.help_modal.open_empty();
+                // Reset scroll state to top
+                self.help_scroll_state = ScrollableState::new();
+                self.global_focused_id = Some(FocusId::new("help-scroll")); // Auto-focus scrollable
+                return Ok(true);
+            }
         }
 
-        // Priority 5: Ctrl+A navigates to app launcher
-        if KeyBinding::ctrl(KeyCode::Char('a')).matches(&key_event) {
-            log::info!("🚀 Ctrl+A pressed - navigating to AppLauncher from {:?}", self.active_app);
+        // Priority 5: Configurable app launcher keybind
+        if let Some(launcher_key) = config.keybinds.get("app_launcher") {
+            if launcher_key.matches(&key_event) {
+                log::info!("🚀 App launcher keybind pressed - navigating to AppLauncher from {:?}", self.active_app);
 
             // Clear any pending navigation that would go BACK to the current app (zombie navigations)
             // But preserve legitimate background operations going to other apps
@@ -405,13 +409,16 @@ impl MultiAppRuntime {
             self.last_active_time.insert(AppId::AppLauncher, Instant::now());
             log::info!("✅ AppLauncher is now active");
             return Ok(true);
+            }
         }
 
-        // Priority 6: Ctrl+O opens app overview modal
-        if KeyBinding::ctrl(KeyCode::Char('o')).matches(&key_event) {
-            self.app_overview_modal.open_empty();
-            self.global_focused_id = Some(FocusId::new("app-overview-close")); // Auto-focus close button
-            return Ok(true);
+        // Priority 6: Configurable app overview keybind
+        if let Some(overview_key) = config.keybinds.get("app_overview") {
+            if overview_key.matches(&key_event) {
+                self.app_overview_modal.open_empty();
+                self.global_focused_id = Some(FocusId::new("app-overview-close")); // Auto-focus close button
+                return Ok(true);
+            }
         }
 
         // When help menu is open, intercept keys for help control

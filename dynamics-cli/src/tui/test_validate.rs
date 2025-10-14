@@ -17,9 +17,12 @@ mod tests {
 
     #[test]
     fn test_validate_empty_name() {
+        let mut source = SelectField::default();
+        source.set_value(Some("test".to_string()));
+
         let form = TestForm {
             name: TextInputField { value: String::new(), state: Default::default() },
-            source: SelectField { selected_option: Some("test".to_string()), state: Default::default() },
+            source,
         };
 
         let result = form.validate();
@@ -29,9 +32,9 @@ mod tests {
 
     #[test]
     fn test_validate_missing_source() {
-        let mut form = TestForm {
+        let form = TestForm {
             name: TextInputField { value: "test".to_string(), state: Default::default() },
-            source: SelectField { selected_option: None, state: Default::default() },
+            source: SelectField::default(), // None by default
         };
 
         let result = form.validate();
@@ -41,9 +44,12 @@ mod tests {
 
     #[test]
     fn test_validate_success() {
+        let mut source = SelectField::default();
+        source.set_value(Some("source".to_string()));
+
         let form = TestForm {
             name: TextInputField { value: "test".to_string(), state: Default::default() },
-            source: SelectField { selected_option: Some("source".to_string()), state: Default::default() },
+            source,
         };
 
         let result = form.validate();

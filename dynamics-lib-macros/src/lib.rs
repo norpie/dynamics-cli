@@ -8,7 +8,7 @@ mod utils;
 /// Derive macro for validation framework
 ///
 /// # Example
-/// ```rust
+/// ```rust,no_run
 /// #[derive(Validate)]
 /// struct CreateForm {
 ///     #[validate(not_empty, message = "Name required")]
@@ -28,7 +28,7 @@ pub fn derive_validate(input: TokenStream) -> TokenStream {
 /// Generates helper methods for loading and handling Resource fields.
 ///
 /// # Example
-/// ```rust
+/// ```rust,no_run
 /// #[derive(ResourceHandlers)]
 /// struct State {
 ///     #[resource(loader = "fetch_data")]
@@ -49,7 +49,7 @@ pub fn derive_resource_handlers(input: TokenStream) -> TokenStream {
 /// Automatically implements AppState::dispatch_widget_event to route events to Field types.
 ///
 /// # Example
-/// ```rust
+/// ```rust,no_run
 /// #[derive(AppState)]
 /// struct State {
 ///     #[widget("name-input")]

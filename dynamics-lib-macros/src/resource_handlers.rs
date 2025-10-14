@@ -100,7 +100,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
                     fn #handle_method(&mut self, result: Result<#inner_type, String>) -> Command<Msg> {
                         self.#field_name = Resource::from_result(result);
                         if self.#field_name.is_success() {
-                            Command::from(Msg::#on_complete_ident)
+                            Command::Perform(Box::pin(async move { Msg::#on_complete_ident }))
                         } else {
                             Command::None
                         }
