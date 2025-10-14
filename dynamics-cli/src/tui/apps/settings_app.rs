@@ -314,9 +314,10 @@ impl App for SettingsApp {
                     async {
                         use crate::config::options::registrations::keybinds;
                         let config = crate::global_config();
+                        let registry = crate::options_registry();
                         let mut keybinds = std::collections::HashMap::new();
 
-                        for action in keybinds::list_actions() {
+                        for action in keybinds::list_all_actions(&registry) {
                             let key = format!("keybind.{}", action);
                             if let Ok(keybind_str) = config.options.get_string(&key).await {
                                 if let Ok(keybind) = keybind_str.parse() {
@@ -374,9 +375,10 @@ impl App for SettingsApp {
                             async {
                                 use crate::config::options::registrations::keybinds;
                                 let config = crate::global_config();
+                                let registry = crate::options_registry();
                                 let mut keybinds = std::collections::HashMap::new();
 
-                                for action in keybinds::list_actions() {
+                                for action in keybinds::list_all_actions(&registry) {
                                     let key = format!("keybind.{}", action);
                                     if let Ok(keybind_str) = config.options.get_string(&key).await {
                                         if let Ok(keybind) = keybind_str.parse() {
@@ -1252,7 +1254,8 @@ impl App for SettingsApp {
                 state.keybinds = keybinds;
                 state.keybind_actions = {
                     use crate::config::options::registrations::keybinds;
-                    keybinds::list_actions()
+                    let registry = crate::options_registry();
+                    keybinds::list_all_actions(&registry)
                 };
                 state.selected_keybind_idx = 0;
                 Command::None
@@ -1314,9 +1317,10 @@ impl App for SettingsApp {
                     async {
                         use crate::config::options::registrations::keybinds;
                         let config = crate::global_config();
+                        let registry = crate::options_registry();
                         let mut keybinds = std::collections::HashMap::new();
 
-                        for action in keybinds::list_actions() {
+                        for action in keybinds::list_all_actions(&registry) {
                             let key = format!("keybind.{}", action);
                             if let Ok(keybind_str) = config.options.get_string(&key).await {
                                 if let Ok(keybind) = keybind_str.parse() {
@@ -1343,12 +1347,12 @@ impl App for SettingsApp {
                         use std::str::FromStr;
                         let config = crate::global_config();
 
-                        // Reset to defaults
-                        config.options.set_string("keybind.help", "F1".to_string()).await
+                        // Reset to defaults (now app-scoped)
+                        config.options.set_string("keybind.global.help", "F1".to_string()).await
                             .map_err(|e| e.to_string())?;
-                        config.options.set_string("keybind.app_launcher", "Ctrl+A".to_string()).await
+                        config.options.set_string("keybind.global.app_launcher", "Ctrl+A".to_string()).await
                             .map_err(|e| e.to_string())?;
-                        config.options.set_string("keybind.app_overview", "Ctrl+O".to_string()).await
+                        config.options.set_string("keybind.global.app_overview", "Ctrl+O".to_string()).await
                             .map_err(|e| e.to_string())?;
 
                         // Reload runtime config
@@ -1368,9 +1372,10 @@ impl App for SettingsApp {
                     async {
                         use crate::config::options::registrations::keybinds;
                         let config = crate::global_config();
+                        let registry = crate::options_registry();
                         let mut keybinds = std::collections::HashMap::new();
 
-                        for action in keybinds::list_actions() {
+                        for action in keybinds::list_all_actions(&registry) {
                             let key = format!("keybind.{}", action);
                             if let Ok(keybind_str) = config.options.get_string(&key).await {
                                 if let Ok(keybind) = keybind_str.parse() {

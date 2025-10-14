@@ -198,12 +198,8 @@ impl MultiAppRuntime {
                 // Calculate content height (same as in render_help_menu)
                 // Use configured keybinds from global config
                 let config = crate::global_runtime_config();
-                let help_key = config.keybinds.get("help")
-                    .copied()
-                    .unwrap_or_else(|| KeyBinding::new(KeyCode::F(1)));
-                let launcher_key = config.keybinds.get("app_launcher")
-                    .copied()
-                    .unwrap_or_else(|| KeyBinding::ctrl(KeyCode::Char('a')));
+                let help_key = config.get_keybind("global.help");
+                let launcher_key = config.get_keybind("global.app_launcher");
 
                 let global_bindings = vec![
                     (help_key, "Toggle help menu"),
@@ -337,19 +333,18 @@ impl MultiAppRuntime {
 
         // Priority 4: Configurable help menu keybind
         let config = crate::global_runtime_config();
-        if let Some(help_key) = config.keybinds.get("help") {
-            if help_key.matches(&key_event) {
-                self.help_modal.open_empty();
-                // Reset scroll state to top
-                self.help_scroll_state = ScrollableState::new();
-                self.global_focused_id = Some(FocusId::new("help-scroll")); // Auto-focus scrollable
-                return Ok(true);
-            }
+        let help_key = config.get_keybind("global.help");
+        if help_key.matches(&key_event) {
+            self.help_modal.open_empty();
+            // Reset scroll state to top
+            self.help_scroll_state = ScrollableState::new();
+            self.global_focused_id = Some(FocusId::new("help-scroll")); // Auto-focus scrollable
+            return Ok(true);
         }
 
         // Priority 5: Configurable app launcher keybind
-        if let Some(launcher_key) = config.keybinds.get("app_launcher") {
-            if launcher_key.matches(&key_event) {
+        let launcher_key = config.get_keybind("global.app_launcher");
+        if launcher_key.matches(&key_event) {
                 log::info!("🚀 App launcher keybind pressed - navigating to AppLauncher from {:?}", self.active_app);
 
             // Clear any pending navigation that would go BACK to the current app (zombie navigations)
@@ -436,16 +431,14 @@ impl MultiAppRuntime {
             self.last_active_time.insert(AppId::AppLauncher, Instant::now());
             log::info!("✅ AppLauncher is now active");
             return Ok(true);
-            }
         }
 
         // Priority 6: Configurable app overview keybind
-        if let Some(overview_key) = config.keybinds.get("app_overview") {
-            if overview_key.matches(&key_event) {
-                self.app_overview_modal.open_empty();
-                self.global_focused_id = Some(FocusId::new("app-overview-close")); // Auto-focus close button
-                return Ok(true);
-            }
+        let overview_key = config.get_keybind("global.app_overview");
+        if overview_key.matches(&key_event) {
+            self.app_overview_modal.open_empty();
+            self.global_focused_id = Some(FocusId::new("app-overview-close")); // Auto-focus close button
+            return Ok(true);
         }
 
         // When help menu is open, intercept keys for help control
@@ -608,9 +601,7 @@ impl MultiAppRuntime {
         let header_left = Element::styled_text(title_line).build();
 
         // Use configured help keybind
-        let help_key_str = config.keybinds.get("help")
-            .map(|kb| kb.to_string())
-            .unwrap_or_else(|| "F1".to_string());
+        let help_key_str = config.get_keybind("global.help").to_string();
         let header_right = Element::styled_text(Line::from(vec![
             Span::styled(format!("[?] {} Help", help_key_str), Style::default().fg(theme.border_primary))
         ])).build();
@@ -644,12 +635,8 @@ impl MultiAppRuntime {
         // Build help content directly as Element<GlobalMsg>
         // Use configured keybinds from global config
         let config = crate::global_runtime_config();
-        let help_key = config.keybinds.get("help")
-            .copied()
-            .unwrap_or_else(|| KeyBinding::new(KeyCode::F(1)));
-        let launcher_key = config.keybinds.get("app_launcher")
-            .copied()
-            .unwrap_or_else(|| KeyBinding::ctrl(KeyCode::Char('a')));
+        let help_key = config.get_keybind("global.help");
+        let launcher_key = config.get_keybind("global.app_launcher");
 
         let global_bindings = vec![
             (help_key, "Toggle help menu"),

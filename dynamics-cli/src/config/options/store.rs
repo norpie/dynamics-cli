@@ -18,6 +18,11 @@ impl Options {
         Self { pool, registry }
     }
 
+    /// Get a reference to the options registry
+    pub fn registry(&self) -> &OptionsRegistry {
+        &self.registry
+    }
+
     /// Get option value with type checking and default fallback
     pub async fn get(&self, key: &str) -> Result<OptionValue> {
         // Get definition from registry

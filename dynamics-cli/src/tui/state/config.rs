@@ -27,18 +27,18 @@ impl Default for RuntimeConfig {
         use std::str::FromStr;
         use crate::config::options::registrations::keybinds;
 
-        // Load default keybinds
+        // Load default keybinds (now namespaced by app)
         let mut default_keybinds = HashMap::new();
         default_keybinds.insert(
-            keybinds::ACTION_HELP.to_string(),
+            format!("{}.{}", keybinds::APP_GLOBAL, keybinds::ACTION_HELP),
             KeyBinding::from_str("F1").unwrap(),
         );
         default_keybinds.insert(
-            keybinds::ACTION_APP_LAUNCHER.to_string(),
+            format!("{}.{}", keybinds::APP_GLOBAL, keybinds::ACTION_APP_LAUNCHER),
             KeyBinding::from_str("Ctrl+A").unwrap(),
         );
         default_keybinds.insert(
-            keybinds::ACTION_APP_OVERVIEW.to_string(),
+            format!("{}.{}", keybinds::APP_GLOBAL, keybinds::ACTION_APP_OVERVIEW),
             KeyBinding::from_str("Ctrl+O").unwrap(),
         );
 
@@ -76,6 +76,42 @@ impl RuntimeConfig {
         }
     }
 
+    /// Get a keybind by its full key (app.action format).
+    ///
+    /// Always returns a keybind - either the configured value or the default from the registry.
+    /// If no default is registered, returns F24 in release mode and panics in debug mode.
+    pub fn get_keybind(&self, key: &str) -> KeyBinding {
+        use std::str::FromStr;
+
+        // Try to get from configured keybinds
+        if let Some(kb) = self.keybinds.get(key) {
+            return *kb;
+        }
+
+        // Fall back to default from registry
+        let registry = crate::options_registry();
+        let option_key = format!("keybind.{}", key);
+
+        if let Some(def) = registry.get(&option_key) {
+            // Parse default value
+            if let Ok(default_str) = def.default.as_string() {
+                if let Ok(kb) = KeyBinding::from_str(&default_str) {
+                    return kb;
+                }
+            }
+        }
+
+        // No default registered - panic in debug, return F24 in release
+        #[cfg(debug_assertions)]
+        panic!("No keybind registered for '{}' - please register it in keybinds.rs", key);
+
+        #[cfg(not(debug_assertions))]
+        {
+            log::error!("No keybind registered for '{}' - using F24 fallback", key);
+            KeyBinding::from_str("F24").unwrap()
+        }
+    }
+
     /// Load runtime config from the options system
     pub async fn load_from_options() -> anyhow::Result<Self> {
         use std::str::FromStr;
@@ -105,29 +141,37 @@ impl RuntimeConfig {
                 Theme::mocha()
             });
 
-        // Load keybinds from options database
+        // Load keybinds from options database (now app-scoped)
         let mut keybinds = HashMap::new();
-        for action in keybinds::list_actions() {
-            let key = format!("keybind.{}", action);
-            let keybind_str = config.options.get_string(&key).await
-                .unwrap_or_else(|_| {
-                    // Fall back to default keybind if not found
-                    let default_config = Self::default();
-                    default_config.keybinds.get(&action)
-                        .map(|kb| kb.to_string())
-                        .unwrap_or_else(|| "F1".to_string())
-                });
+        let apps = keybinds::list_apps(&config.options.registry());
 
-            match KeyBinding::from_str(&keybind_str) {
-                Ok(keybind) => {
-                    keybinds.insert(action.clone(), keybind);
-                }
-                Err(e) => {
-                    log::warn!("Failed to parse keybind '{}' for action '{}': {}. Using default.", keybind_str, action, e);
-                    // Use default keybind for this action
-                    let default_config = Self::default();
-                    if let Some(default_kb) = default_config.keybinds.get(&action) {
-                        keybinds.insert(action.clone(), *default_kb);
+        for app in apps {
+            let actions = keybinds::list_actions_for_app(&config.options.registry(), &app);
+
+            for action in actions {
+                let full_key = format!("{}.{}", app, action);
+                let option_key = format!("keybind.{}.{}", app, action);
+
+                let keybind_str = config.options.get_string(&option_key).await
+                    .unwrap_or_else(|_| {
+                        // Fall back to default keybind if not found
+                        let default_config = Self::default();
+                        default_config.keybinds.get(&full_key)
+                            .map(|kb| kb.to_string())
+                            .unwrap_or_else(|| "F1".to_string())
+                    });
+
+                match KeyBinding::from_str(&keybind_str) {
+                    Ok(keybind) => {
+                        keybinds.insert(full_key.clone(), keybind);
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to parse keybind '{}' for action '{}': {}. Using default.", keybind_str, full_key, e);
+                        // Use default keybind for this action
+                        let default_config = Self::default();
+                        if let Some(default_kb) = default_config.keybinds.get(&full_key) {
+                            keybinds.insert(full_key.clone(), *default_kb);
+                        }
                     }
                 }
             }
