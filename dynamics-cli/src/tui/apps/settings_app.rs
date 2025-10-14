@@ -1266,10 +1266,23 @@ impl App for SettingsApp {
                 state.selected_keybind_idx = 0;
 
                 // Populate app list for filtering (no "All" option)
+                let old_apps = std::mem::take(&mut state.keybind_apps);
                 state.keybind_apps = keybinds::list_apps(&registry);
 
-                // Default to "global" if it exists, otherwise first app
-                let default_idx = state.keybind_apps.iter().position(|app| app == "global").unwrap_or(0);
+                // Preserve the selected app if it still exists, otherwise default to "global" or first app
+                let preserved_app = old_apps.get(state.selected_keybind_app_idx);
+                let default_idx = if let Some(app) = preserved_app {
+                    // Try to find the previously selected app in the new list
+                    state.keybind_apps.iter().position(|a| a == app)
+                        .unwrap_or_else(|| {
+                            // Fall back to "global" or first app
+                            state.keybind_apps.iter().position(|a| a == "global").unwrap_or(0)
+                        })
+                } else {
+                    // First load - default to "global" if it exists, otherwise first app
+                    state.keybind_apps.iter().position(|app| app == "global").unwrap_or(0)
+                };
+
                 state.selected_keybind_app_idx = default_idx;
                 state.keybind_app_select_state = crate::tui::widgets::SelectState::with_selected(default_idx);
 
