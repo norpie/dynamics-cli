@@ -10,8 +10,7 @@ TODO.md
 dynamics-cli.log
 continue.md
 AGENTS.md
-*_to_*_*.xlsx
-Deadlines.xlsx
+*.xlsx
 config-bak.toml
 claude.*.md
 dynamics-cli/src/tui/apps/cleanup/todo.md
