@@ -34,7 +34,7 @@ impl TreeItem for QueueTreeNode {
 
     fn has_children(&self) -> bool {
         match self {
-            Self::Parent(item) => item.operations.len() > 1,
+            Self::Parent(item) => !item.operations.is_empty(),
             Self::Child { .. } => false,
         }
     }
@@ -43,16 +43,19 @@ impl TreeItem for QueueTreeNode {
         match self {
             Self::Parent(item) => {
                 // Convert operations to child nodes
-                // First operation is shown in the parent, rest are children
+                // For single operations, show the operation as child for inspection
+                // For batches (2+), first operation is shown in parent, rest are children
+                let skip_count = if item.operations.len() == 1 { 0 } else { 1 };
+
                 item.operations
                     .operations()
                     .iter()
-                    .skip(1) // Skip first operation (shown in parent)
+                    .skip(skip_count)
                     .enumerate()
                     .map(|(idx, op)| Self::Child {
                         operation: op.clone(),
                         parent_id: item.id.clone(),
-                        index: idx + 1, // +1 because we skipped first
+                        index: idx + skip_count, // Correct index based on skip count
                     })
                     .collect()
             }
