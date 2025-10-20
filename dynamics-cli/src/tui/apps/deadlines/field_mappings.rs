@@ -175,7 +175,16 @@ pub fn get_cgk_mappings() -> Vec<FieldMapping> {
 /// Get field mappings for nrq_deadlines entity
 pub fn get_nrq_mappings() -> Vec<FieldMapping> {
     vec![
-        // Domain (prefer "Pillar" over "Domein*")
+        // Domain - try "Domein*" first, fallback to "Pillar"
+        FieldMapping {
+            excel_column: "Domein*".to_string(),
+            dynamics_field: "nrq_DomainId".to_string(),
+            field_type: FieldType::Lookup {
+                target_entity: "nrq_domain".to_string(),
+            },
+            required: false,
+        },
+        // Domain fallback - "Pillar" if "Domein*" not found
         FieldMapping {
             excel_column: "Pillar".to_string(),
             dynamics_field: "nrq_DomainId".to_string(),
@@ -333,6 +342,6 @@ mod tests {
     #[test]
     fn test_nrq_mappings_count() {
         let mappings = get_nrq_mappings();
-        assert_eq!(mappings.len(), 9); // 9 non-checkbox fields (removed commission date/time)
+        assert_eq!(mappings.len(), 10); // 10 non-checkbox fields (includes Domein* and Pillar fallback)
     }
 }

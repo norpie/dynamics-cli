@@ -641,6 +641,11 @@ fn process_row(
 
                 match &mapping.field_type {
                     field_mappings::FieldType::Lookup { target_entity } => {
+                        // Skip if this field was already populated (for fallback mappings)
+                        if transformed.lookup_fields.contains_key(&mapping.dynamics_field) {
+                            continue;
+                        }
+
                         // Resolve lookup to its GUID
                         if let Some(id) = resolve_lookup(
                             &state.entity_data_cache,
