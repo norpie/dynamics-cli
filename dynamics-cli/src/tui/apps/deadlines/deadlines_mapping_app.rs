@@ -371,6 +371,14 @@ fn parse_board_meeting_date(date_str: &str) -> Result<chrono::NaiveDate, String>
     Err(format!("Could not parse board meeting date: {}", date_str))
 }
 
+/// Check if a row is effectively empty (all cells are empty or whitespace)
+fn is_row_empty(row: &[calamine::Data]) -> bool {
+    row.iter().all(|cell| {
+        let cell_str = cell.to_string();
+        cell_str.trim().is_empty()
+    })
+}
+
 /// Process Excel file: find header row, identify checkbox columns, transform rows
 fn process_excel_file(state: &mut State) -> Command<Msg> {
     state.excel_processed = true;
@@ -522,6 +530,13 @@ fn process_excel_file(state: &mut State) -> Command<Msg> {
 
     for (row_num, row) in data_rows.enumerate() {
         let excel_row_number = header_row_idx + 2 + row_num; // +2 because: +1 for header, +1 for 1-based indexing
+
+        // Skip rows that are effectively empty (all cells empty or whitespace)
+        if is_row_empty(row) {
+            log::debug!("Skipping empty row {}", excel_row_number);
+            continue;
+        }
+
         let transformed = process_row(state, &headers, row, excel_row_number, &entity_type_owned);
 
         // Add row-level warnings to global warnings list
