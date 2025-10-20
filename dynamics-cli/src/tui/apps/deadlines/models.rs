@@ -43,6 +43,9 @@ pub struct TransformedDeadline {
     /// Parsed commission time - combined with commission_date
     pub commission_time: Option<chrono::NaiveTime>,
 
+    /// OPM column notes (if any)
+    pub notes: Option<String>,
+
     /// Warnings for this specific row (unresolved lookups, validation errors)
     pub warnings: Vec<String>,
 }
@@ -58,6 +61,7 @@ impl TransformedDeadline {
             deadline_time: None,
             commission_date: None,
             commission_time: None,
+            notes: None,
             warnings: Vec::new(),
         }
     }

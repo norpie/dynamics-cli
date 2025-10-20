@@ -385,6 +385,7 @@ fn process_excel_file(state: &mut State) -> Command<Msg> {
     state.excel_processed = true;
     state.warnings.clear();
     state.transformed_records.clear();
+    state.ignored_rows.clear();
 
     let file_path = state.file_path.clone();
     let sheet_name = state.sheet_name.clone();
@@ -548,12 +549,13 @@ fn process_excel_file(state: &mut State) -> Command<Msg> {
             continue;
         }
 
-        // Skip rows marked to be ignored
+        // Track rows marked to be ignored
         if let Some(ignore_idx) = ignore_col_idx {
             if let Some(cell) = row.get(ignore_idx) {
                 let cell_value = cell.to_string().trim().to_string();
                 if !cell_value.is_empty() {
-                    log::debug!("Skipping row {} due to IGNORE column: '{}'", excel_row_number, cell_value);
+                    log::debug!("Ignoring row {} due to IGNORE column: '{}'", excel_row_number, cell_value);
+                    state.ignored_rows.push((excel_row_number, cell_value));
                     continue;
                 }
             }
@@ -561,12 +563,22 @@ fn process_excel_file(state: &mut State) -> Command<Msg> {
 
         let transformed = process_row(state, &headers, row, excel_row_number, &entity_type_owned);
 
+        // Add OPM notes to warnings list
+        if let Some(ref notes) = transformed.notes {
+            state.warnings.push(Warning(format!("Row {} [OPM]: {}", excel_row_number, notes)));
+        }
+
         // Add row-level warnings to global warnings list
         for warning in &transformed.warnings {
             state.warnings.push(Warning(format!("Row {}: {}", excel_row_number, warning)));
         }
 
         state.transformed_records.push(transformed);
+    }
+
+    // Add ignored rows to warnings list
+    for (row_num, reason) in &state.ignored_rows {
+        state.warnings.push(Warning(format!("Row {} [IGNORED]: {}", row_num, reason)));
     }
 
     // Update summary stats
@@ -590,6 +602,16 @@ fn process_row(
     entity_type: &str,
 ) -> TransformedDeadline {
     let mut transformed = TransformedDeadline::new(row_number);
+
+    // Capture OPM column notes if present
+    if let Some(opm_idx) = headers.iter().position(|h| h.to_uppercase() == "OPM") {
+        if let Some(cell) = row.get(opm_idx) {
+            let opm_value = cell.to_string().trim().to_string();
+            if !opm_value.is_empty() {
+                transformed.notes = Some(opm_value);
+            }
+        }
+    }
 
     // Get field mappings for this entity type
     let mappings = field_mappings::get_mappings_for_entity(entity_type);
@@ -865,8 +887,17 @@ impl crate::tui::widgets::ListItem for Warning {
             (theme.text_primary, None)
         };
 
+        // Determine icon and color based on message type
+        let (icon, icon_color) = if self.0.contains("[OPM]:") {
+            ("ℹ ", theme.accent_info) // Info icon for OPM notes
+        } else if self.0.contains("[IGNORED]:") {
+            ("✖ ", theme.text_tertiary) // X icon for ignored rows
+        } else {
+            ("⚠ ", theme.accent_warning) // Warning icon for actual warnings
+        };
+
         let mut builder = Element::styled_text(Line::from(vec![
-            Span::styled("⚠ ", Style::default().fg(theme.accent_warning)),
+            Span::styled(icon, Style::default().fg(icon_color)),
             Span::styled(self.0.clone(), Style::default().fg(fg_color)),
         ]));
 
@@ -896,6 +927,7 @@ pub struct State {
     board_meeting_date_lookup: HashMap<chrono::NaiveDate, (String, String)>, // date -> (id, name)
     excel_processed: bool,
     transformed_records: Vec<TransformedDeadline>,
+    ignored_rows: Vec<(usize, String)>, // (row_number, ignore_reason)
     total_rows: usize,
     rows_with_warnings: usize,
 }
@@ -919,6 +951,7 @@ impl State {
             board_meeting_date_lookup: HashMap::new(),
             excel_processed: false,
             transformed_records: Vec::new(),
+            ignored_rows: Vec::new(),
             total_rows: 0,
             rows_with_warnings: 0,
         }
@@ -1282,8 +1315,14 @@ impl App for DeadlinesMappingApp {
                     let warnings_list = Element::list("warnings-list", &state.warnings, &state.warnings_list_state, theme)
                         .build();
 
+                    let panel_title = if state.ignored_rows.is_empty() {
+                        "Warnings & Notes".to_string()
+                    } else {
+                        format!("Warnings & Notes ({} rows ignored)", state.ignored_rows.len())
+                    };
+
                     let warnings_panel = Element::panel(warnings_list)
-                        .title("Mapping Warnings")
+                        .title(&panel_title)
                         .build();
 
                     builder = builder.add(warnings_panel, Fill(1));
