@@ -313,7 +313,7 @@ pub fn get_constant_fields(entity_name: &str) -> HashMap<String, serde_json::Val
         "cgk_deadline" => {
             let mut fields = HashMap::new();
             fields.insert("cgk_vafvalidated".to_string(), json!(true));
-            fields.insert("cgk_vaf_applications_opened".to_string(), json!(false));
+            fields.insert("vaf_applications_opened".to_string(), json!(false));
             fields
         }
         "nrq_deadline" => {
