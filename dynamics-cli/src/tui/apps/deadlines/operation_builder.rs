@@ -12,6 +12,7 @@
 use crate::api::operations::Operation;
 use crate::api::pluralization::pluralize_entity_name;
 use super::models::TransformedDeadline;
+use super::field_mappings::get_constant_fields;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
@@ -32,6 +33,11 @@ impl TransformedDeadline {
     /// Build the JSON payload for creating the main deadline entity
     fn build_create_payload(&self, entity_type: &str) -> Value {
         let mut payload = json!({});
+
+        // 0. Constant fields (entity-specific defaults)
+        for (field, value) in get_constant_fields(entity_type) {
+            payload[field] = value;
+        }
 
         // 1. Direct fields (name, info, etc.)
         for (field, value) in &self.direct_fields {

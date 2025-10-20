@@ -288,6 +288,26 @@ pub fn get_mappings_for_entity(entity_name: &str) -> Vec<FieldMapping> {
     }
 }
 
+/// Get constant fields to add to each record based on entity type
+/// These fields are automatically added to every operation created
+pub fn get_constant_fields(entity_name: &str) -> HashMap<String, serde_json::Value> {
+    use serde_json::json;
+
+    match entity_name {
+        "cgk_deadline" => {
+            let mut fields = HashMap::new();
+            fields.insert("cgk_vafvalidated".to_string(), json!(true));
+            fields.insert("cgk_vaf_applications_opened".to_string(), json!(false));
+            fields
+        }
+        "nrq_deadline" => {
+            // No constant fields for NRQ deadlines
+            HashMap::new()
+        }
+        _ => unreachable!("Unknown entity type: {}", entity_name),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
