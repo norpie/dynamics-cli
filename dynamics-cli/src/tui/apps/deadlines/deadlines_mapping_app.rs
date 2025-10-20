@@ -156,8 +156,9 @@ fn resolve_checkboxes(
 
     // Process columns after RvB
     for (col_idx, header) in headers.iter().enumerate().skip(rvb_idx + 1) {
-        // Skip empty headers and OPM column
-        if header.is_empty() || header.to_uppercase() == "OPM" {
+        // Skip empty headers, OPM column, and IGNORE column
+        let header_upper = header.to_uppercase();
+        if header.is_empty() || header_upper == "OPM" || header_upper == "IGNORE" {
             continue;
         }
 
@@ -441,10 +442,13 @@ fn process_excel_file(state: &mut State) -> Command<Msg> {
     let rvb_idx = rvb_idx.unwrap();
     log::debug!("Found 'Raad van Bestuur' at column index {}", rvb_idx);
 
-    // All columns after RvB are checkbox columns, except "OPM"
+    // All columns after RvB are checkbox columns, except "OPM" and "IGNORE"
     let checkbox_columns: Vec<String> = headers.iter()
         .skip(rvb_idx + 1)
-        .filter(|h| !h.is_empty() && h.to_uppercase() != "OPM")
+        .filter(|h| {
+            let h_upper = h.to_uppercase();
+            !h.is_empty() && h_upper != "OPM" && h_upper != "IGNORE"
+        })
         .map(|h| h.to_string())
         .collect();
 
@@ -525,6 +529,13 @@ fn process_excel_file(state: &mut State) -> Command<Msg> {
     // Build board meeting lookup for efficient row processing
     build_board_meeting_lookup(state, &entity_type_owned);
 
+    // Find IGNORE column index if it exists
+    let ignore_col_idx = headers.iter().position(|h| h.to_uppercase() == "IGNORE");
+
+    if let Some(idx) = ignore_col_idx {
+        log::debug!("Found IGNORE column at index {}", idx);
+    }
+
     // Now process data rows and build transformed records
     let data_rows = range.rows().skip(header_row_idx + 1);
 
@@ -535,6 +546,17 @@ fn process_excel_file(state: &mut State) -> Command<Msg> {
         if is_row_empty(row) {
             log::debug!("Skipping empty row {}", excel_row_number);
             continue;
+        }
+
+        // Skip rows marked to be ignored
+        if let Some(ignore_idx) = ignore_col_idx {
+            if let Some(cell) = row.get(ignore_idx) {
+                let cell_value = cell.to_string().trim().to_string();
+                if !cell_value.is_empty() {
+                    log::debug!("Skipping row {} due to IGNORE column: '{}'", excel_row_number, cell_value);
+                    continue;
+                }
+            }
         }
 
         let transformed = process_row(state, &headers, row, excel_row_number, &entity_type_owned);
