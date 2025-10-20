@@ -384,6 +384,7 @@ impl App for OperationQueueApp {
 
             Msg::DeleteItem(id) => {
                 state.queue_items.retain(|item| item.id != id);
+                state.tree_state.invalidate_cache();
 
                 Command::perform(
                     async move {
@@ -618,11 +619,13 @@ impl App for OperationQueueApp {
 
             Msg::SetFilter(filter) => {
                 state.filter = filter;
+                state.tree_state.invalidate_cache();
                 save_settings_command(state)
             }
 
             Msg::SetSortMode(sort_mode) => {
                 state.sort_mode = sort_mode;
+                state.tree_state.invalidate_cache();
                 save_settings_command(state)
             }
 
@@ -669,6 +672,8 @@ impl App for OperationQueueApp {
                     let item_id = id.clone();
                     state.queue_items.retain(|item| &item.id != id);
                     state.selected_item_id = None; // Clear selection after delete
+                    state.tree_state.select(None);
+                    state.tree_state.invalidate_cache();
 
                     return Command::perform(
                         async move {
@@ -751,6 +756,7 @@ impl App for OperationQueueApp {
 
                 let mut items = items;
                 state.queue_items.append(&mut items);
+                state.tree_state.invalidate_cache();
 
                 // If queue was empty and we just added items, select the first one
                 if was_empty && !state.queue_items.is_empty() && state.selected_item_id.is_none() {
@@ -776,6 +782,8 @@ impl App for OperationQueueApp {
                 state.clear_confirm_modal.close();
                 state.queue_items.clear();
                 state.selected_item_id = None;
+                state.tree_state.select(None);
+                state.tree_state.invalidate_cache();
 
                 Command::perform(
                     async move {

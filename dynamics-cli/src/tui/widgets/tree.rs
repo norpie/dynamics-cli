@@ -199,6 +199,12 @@ impl TreeState {
                         }
                     }
                 }
+            } else {
+                // Current selection not in visible order (stale state), select first
+                if !self.visible_order.is_empty() {
+                    self.selected = Some(self.visible_order[0].clone());
+                    self.scroll_offset = 0;
+                }
             }
         } else if !self.visible_order.is_empty() {
             // No selection, select first
@@ -216,6 +222,12 @@ impl TreeState {
                     if (pos as isize - self.scroll_offset as isize) <= self.scroll_off as isize {
                         self.scroll_offset = self.scroll_offset.saturating_sub(1);
                     }
+                }
+            } else {
+                // Current selection not in visible order (stale state), select first
+                if !self.visible_order.is_empty() {
+                    self.selected = Some(self.visible_order[0].clone());
+                    self.scroll_offset = 0;
                 }
             }
         } else if !self.visible_order.is_empty() {
@@ -333,6 +345,14 @@ impl TreeState {
         }
 
         self.cache_valid = true;
+
+        // Validate current selection - clear if it no longer exists
+        if let Some(selected) = &self.selected {
+            if !self.visible_order.contains(selected) {
+                // Selected item no longer exists in tree, clear selection
+                self.selected = None;
+            }
+        }
 
         // If no selection and there are items, select first
         if self.selected.is_none() && !self.visible_order.is_empty() {
