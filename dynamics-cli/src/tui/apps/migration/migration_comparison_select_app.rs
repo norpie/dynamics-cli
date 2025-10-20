@@ -251,8 +251,18 @@ impl App for MigrationComparisonSelectApp {
             Msg::ParallelDataLoaded(task_idx, result) => {
                 // Store result in appropriate Resource
                 match task_idx {
-                    0 => state.source_entities = Resource::from_result(result),
-                    1 => state.target_entities = Resource::from_result(result),
+                    0 => {
+                        if let Err(ref e) = result {
+                            log::error!("Failed to load source entities: {}", e);
+                        }
+                        state.source_entities = Resource::from_result(result);
+                    }
+                    1 => {
+                        if let Err(ref e) = result {
+                            log::error!("Failed to load target entities: {}", e);
+                        }
+                        state.target_entities = Resource::from_result(result);
+                    }
                     _ => {}
                 }
 
