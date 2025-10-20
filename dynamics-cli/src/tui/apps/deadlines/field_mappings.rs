@@ -23,15 +23,15 @@ pub const LOOKUP_ENTITIES_CGK: &[&str] = &[
 ];
 
 pub const LOOKUP_ENTITIES_NRQ: &[&str] = &[
-    "nrq_domain",       // Lookup: Pillar/Domain (called domain in NRQ)
-    "nrq_fund",         // Lookup: Fund
-    "nrq_commission",   // Lookup: Commission
-    "systemuser",       // Lookup: Project manager (no prefix)
-    "nrq_support",      // Checkbox: Support
-    "nrq_category",     // Checkbox: Category
-    "nrq_subcategory",  // Checkbox: Subcategory
-    "nrq_flemishshare", // Checkbox: Flemish share
-    "nrq_boardmeeting", // Lookup: Board meeting (separate entity)
+    "nrq_domain",                  // Lookup: Pillar/Domain (called domain in NRQ)
+    "nrq_fund",                    // Lookup: Fund
+    "nrq_commission",              // Lookup: Commission
+    "systemuser",                  // Lookup: Project manager (no prefix)
+    "nrq_support",                 // Checkbox: Support
+    "nrq_category",                // Checkbox: Category
+    "nrq_subcategory",             // Checkbox: Subcategory
+    "nrq_flemishshare",            // Checkbox: Flemish share
+    "nrq_boardofdirectorsmeeting", // Lookup: Board meeting (separate entity)
 ];
 
 /// Get the list of entities to cache based on detected deadline entity type
@@ -178,7 +178,7 @@ pub fn get_nrq_mappings() -> Vec<FieldMapping> {
         // Domain (prefer "Pillar" over "Domein*")
         FieldMapping {
             excel_column: "Pillar".to_string(),
-            dynamics_field: "nrq_domainid".to_string(),
+            dynamics_field: "nrq_DomainId".to_string(),
             field_type: FieldType::Lookup {
                 target_entity: "nrq_domain".to_string(),
             },
@@ -188,7 +188,7 @@ pub fn get_nrq_mappings() -> Vec<FieldMapping> {
         // Fund
         FieldMapping {
             excel_column: "Fonds*".to_string(),
-            dynamics_field: "nrq_fundid".to_string(),
+            dynamics_field: "nrq_FundId".to_string(),
             field_type: FieldType::Lookup {
                 target_entity: "nrq_fund".to_string(),
             },
@@ -203,10 +203,10 @@ pub fn get_nrq_mappings() -> Vec<FieldMapping> {
             required: false,
         },
 
-        // Project manager - use email column (non-naam version)
+        // Project manager
         FieldMapping {
             excel_column: "Projectbeheerder".to_string(),
-            dynamics_field: "ownerid".to_string(),
+            dynamics_field: "nrq_projectmanagerid".to_string(),
             field_type: FieldType::Lookup {
                 target_entity: "systemuser".to_string(),
             },
@@ -216,7 +216,7 @@ pub fn get_nrq_mappings() -> Vec<FieldMapping> {
         // Info field
         FieldMapping {
             excel_column: "Info".to_string(),
-            dynamics_field: "nrq_info".to_string(),
+            dynamics_field: "nrq_description".to_string(),
             field_type: FieldType::Direct,
             required: false,
         },
@@ -224,15 +224,15 @@ pub fn get_nrq_mappings() -> Vec<FieldMapping> {
         // Deadline date
         FieldMapping {
             excel_column: "Datum Deadline".to_string(),
-            dynamics_field: "nrq_date".to_string(),
+            dynamics_field: "nrq_deadlinedate".to_string(),
             field_type: FieldType::Date,
             required: false,
         },
 
-        // Deadline time (combined into nrq_date)
+        // Deadline time (combined into nrq_deadlinedate)
         FieldMapping {
             excel_column: "Uur".to_string(),
-            dynamics_field: "nrq_date".to_string(),
+            dynamics_field: "nrq_deadlinedate".to_string(),
             field_type: FieldType::Time,
             required: false,
         },
@@ -240,35 +240,19 @@ pub fn get_nrq_mappings() -> Vec<FieldMapping> {
         // Commission
         FieldMapping {
             excel_column: "Commissie".to_string(),
-            dynamics_field: "nrq_commissionid".to_string(),
+            dynamics_field: "nrq_CommissionId".to_string(),
             field_type: FieldType::Lookup {
                 target_entity: "nrq_commission".to_string(),
             },
             required: false,
         },
 
-        // Commission meeting date
-        FieldMapping {
-            excel_column: "Datum Commissievergadering".to_string(),
-            dynamics_field: "nrq_commissiondate".to_string(),
-            field_type: FieldType::Date,
-            required: false,
-        },
-
-        // Commission meeting time (combined into nrq_commissiondate)
-        FieldMapping {
-            excel_column: "Uur Commissie".to_string(),
-            dynamics_field: "nrq_commissiondate".to_string(),
-            field_type: FieldType::Time,
-            required: false,
-        },
-
         // Board meeting (Raad van Bestuur) - separate entity for NRQ
         FieldMapping {
             excel_column: "Raad van Bestuur".to_string(),
-            dynamics_field: "nrq_boardmeetingid".to_string(),
+            dynamics_field: "nrq_BoardOfDirectorsMeetingId".to_string(),
             field_type: FieldType::Lookup {
-                target_entity: "nrq_boardmeeting".to_string(),
+                target_entity: "nrq_boardofdirectorsmeeting".to_string(),
             },
             required: false,
         },
@@ -349,6 +333,6 @@ mod tests {
     #[test]
     fn test_nrq_mappings_count() {
         let mappings = get_nrq_mappings();
-        assert_eq!(mappings.len(), 11); // 11 non-checkbox fields (added Uur Commissie)
+        assert_eq!(mappings.len(), 9); // 9 non-checkbox fields (removed commission date/time)
     }
 }

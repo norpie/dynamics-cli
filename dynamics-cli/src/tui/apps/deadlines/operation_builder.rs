@@ -73,7 +73,7 @@ impl TransformedDeadline {
 
         // 3. Deadline date/time (combined if both present)
         if let Some(date) = self.deadline_date {
-            let date_field = if entity_type == "cgk_deadline" { "cgk_date" } else { "nrq_date" };
+            let date_field = if entity_type == "cgk_deadline" { "cgk_date" } else { "nrq_deadlinedate" };
 
             if let Some(time) = self.deadline_time {
                 // Combine date + time, convert Brussels → UTC
@@ -88,23 +88,21 @@ impl TransformedDeadline {
             }
         }
 
-        // 4. Commission date/time (combined if both present)
-        if let Some(date) = self.commission_date {
-            let commission_field = if entity_type == "cgk_deadline" {
-                "cgk_datumcommissievergadering"
-            } else {
-                "nrq_commissiondate"
-            };
+        // 4. Commission date/time (only for CGK deadlines)
+        if entity_type == "cgk_deadline" {
+            if let Some(date) = self.commission_date {
+                let commission_field = "cgk_datumcommissievergadering";
 
-            if let Some(time) = self.commission_time {
-                // Combine date + time, convert Brussels → UTC
-                if let Ok(datetime_str) = combine_brussels_datetime_to_iso(date, Some(time)) {
-                    payload[commission_field] = json!(datetime_str);
-                }
-            } else {
-                // Date-only (no time) - use 12:00 Brussels as default
-                if let Ok(datetime_str) = combine_brussels_datetime_to_iso(date, None) {
-                    payload[commission_field] = json!(datetime_str);
+                if let Some(time) = self.commission_time {
+                    // Combine date + time, convert Brussels → UTC
+                    if let Ok(datetime_str) = combine_brussels_datetime_to_iso(date, Some(time)) {
+                        payload[commission_field] = json!(datetime_str);
+                    }
+                } else {
+                    // Date-only (no time) - use 12:00 Brussels as default
+                    if let Ok(datetime_str) = combine_brussels_datetime_to_iso(date, None) {
+                        payload[commission_field] = json!(datetime_str);
+                    }
                 }
             }
         }
@@ -127,6 +125,7 @@ impl TransformedDeadline {
 /// # NRQ Pattern (different!)
 /// - nrq_deadline_nrq_support → nrq_Deadline_nrq_Support_nrq_Support
 /// - nrq_deadline_nrq_category → nrq_Deadline_nrq_Category_nrq_Category
+/// - nrq_deadline_nrq_flemishshare → nrq_Deadline_nrq_Flemishshare_nrq_Flemish
 pub fn get_junction_entity_name(entity_type: &str, relationship_name: &str) -> String {
     if entity_type == "cgk_deadline" {
         // CGK: Pattern varies by entity
@@ -141,12 +140,12 @@ pub fn get_junction_entity_name(entity_type: &str, relationship_name: &str) -> S
             }
         }
     } else if entity_type == "nrq_deadline" {
-        // NRQ: Complex pattern with capitalization - nrq_Deadline_nrq_{Entity}_nrq_{Entity}
+        // NRQ: Complex pattern with capitalization - nrq_Deadline_nrq_{Entity}_nrq_{FinalEntity}
         match relationship_name {
             "nrq_deadline_nrq_support" => "nrq_Deadline_nrq_Support_nrq_Support".to_string(),
             "nrq_deadline_nrq_category" => "nrq_Deadline_nrq_Category_nrq_Category".to_string(),
             "nrq_deadline_nrq_subcategory" => "nrq_Deadline_nrq_Subcategory_nrq_Subcategory".to_string(),
-            "nrq_deadline_nrq_flemishshare" => "nrq_Deadline_nrq_Flemishshare_nrq_Flemishshare".to_string(),
+            "nrq_deadline_nrq_flemishshare" => "nrq_Deadline_nrq_Flemishshare_nrq_Flemish".to_string(),
             _ => {
                 log::warn!("Unknown NRQ relationship '{}', using fallback pattern", relationship_name);
                 // Extract entity name and capitalize

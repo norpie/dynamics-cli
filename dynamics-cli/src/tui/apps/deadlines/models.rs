@@ -37,10 +37,10 @@ pub struct TransformedDeadline {
     /// Parsed deadline time - combined with deadline_date
     pub deadline_time: Option<chrono::NaiveTime>,
 
-    /// Parsed commission date (cgk_datumcommissievergadering or nrq_commissiondate)
+    /// Parsed commission date (cgk_datumcommissievergadering - CGK only)
     pub commission_date: Option<chrono::NaiveDate>,
 
-    /// Parsed commission time - combined with commission_date
+    /// Parsed commission time - combined with commission_date (CGK only)
     pub commission_time: Option<chrono::NaiveTime>,
 
     /// OPM column notes (if any)

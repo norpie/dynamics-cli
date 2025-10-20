@@ -260,7 +260,7 @@ fn build_board_meeting_lookup(state: &mut State, entity_type: &str) {
     let board_entity = if entity_type == "cgk_deadline" {
         "cgk_deadline" // Self-referencing for CGK
     } else {
-        "nrq_boardmeeting" // Separate entity for NRQ (logical name, not full entity name)
+        "nrq_boardofdirectorsmeeting" // Separate entity for NRQ
     };
 
     if let Some(records) = state.entity_data_cache.get(board_entity) {
@@ -319,7 +319,7 @@ fn build_board_meeting_lookup(state: &mut State, entity_type: &str) {
                     let id_fields = if entity_type == "cgk_deadline" {
                         vec!["cgk_deadlineid"]
                     } else {
-                        vec!["nrq_boardmeetingid", "nrq_boardofdirectorsmeetingid"]
+                        vec!["nrq_boardofdirectorsmeetingid"]
                     };
 
                     let mut found_id = None;
@@ -617,8 +617,8 @@ fn process_row(
     let mappings = field_mappings::get_mappings_for_entity(entity_type);
 
     // Determine field name prefixes
-    let date_field = if entity_type == "cgk_deadline" { "cgk_date" } else { "nrq_date" };
-    let commission_date_field = if entity_type == "cgk_deadline" { "cgk_datumcommissievergadering" } else { "nrq_commissiondate" };
+    let date_field = if entity_type == "cgk_deadline" { "cgk_date" } else { "nrq_deadlinedate" };
+    let commission_date_field = "cgk_datumcommissievergadering"; // Only used for CGK
 
     // Process each mapped field
     for mapping in mappings {
