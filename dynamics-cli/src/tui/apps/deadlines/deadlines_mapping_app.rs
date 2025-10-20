@@ -574,7 +574,6 @@ fn process_row(
 
     // Determine field name prefixes
     let date_field = if entity_type == "cgk_deadline" { "cgk_date" } else { "nrq_date" };
-    let time_field = if entity_type == "cgk_deadline" { "cgk_date" } else { "nrq_time" };
     let commission_date_field = if entity_type == "cgk_deadline" { "cgk_datumcommissievergadering" } else { "nrq_commissiondate" };
 
     // Process each mapped field
@@ -634,10 +633,16 @@ fn process_row(
                         }
                     }
                     field_mappings::FieldType::Time => {
-                        // Parse time (to be combined with deadline date)
+                        // Parse time - determine if it's deadline time or commission time based on field
                         match parse_time(&cell_value) {
                             Ok(time) => {
-                                transformed.deadline_time = Some(time);
+                                if mapping.dynamics_field == date_field {
+                                    // Deadline time
+                                    transformed.deadline_time = Some(time);
+                                } else if mapping.dynamics_field == commission_date_field {
+                                    // Commission time
+                                    transformed.commission_time = Some(time);
+                                }
                             }
                             Err(e) => {
                                 transformed.warnings.push(format!(

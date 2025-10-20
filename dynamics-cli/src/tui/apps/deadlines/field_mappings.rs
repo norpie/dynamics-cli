@@ -152,6 +152,14 @@ pub fn get_cgk_mappings() -> Vec<FieldMapping> {
             required: false,
         },
 
+        // Commission meeting time (combined into cgk_datumcommissievergadering)
+        FieldMapping {
+            excel_column: "Uur Commissie".to_string(),
+            dynamics_field: "cgk_datumcommissievergadering".to_string(),
+            field_type: FieldType::Time,
+            required: false,
+        },
+
         // Board meeting (Raad van Bestuur) - hidden field only visible in $metadata
         FieldMapping {
             excel_column: "Raad van Bestuur".to_string(),
@@ -221,10 +229,10 @@ pub fn get_nrq_mappings() -> Vec<FieldMapping> {
             required: false,
         },
 
-        // Commission meeting time (machine-readable time field)
+        // Deadline time (combined into nrq_date)
         FieldMapping {
             excel_column: "Uur".to_string(),
-            dynamics_field: "nrq_time".to_string(),
+            dynamics_field: "nrq_date".to_string(),
             field_type: FieldType::Time,
             required: false,
         },
@@ -244,6 +252,14 @@ pub fn get_nrq_mappings() -> Vec<FieldMapping> {
             excel_column: "Datum Commissievergadering".to_string(),
             dynamics_field: "nrq_commissiondate".to_string(),
             field_type: FieldType::Date,
+            required: false,
+        },
+
+        // Commission meeting time (combined into nrq_commissiondate)
+        FieldMapping {
+            excel_column: "Uur Commissie".to_string(),
+            dynamics_field: "nrq_commissiondate".to_string(),
+            field_type: FieldType::Time,
             required: false,
         },
 
@@ -327,12 +343,12 @@ mod tests {
     #[test]
     fn test_cgk_mappings_count() {
         let mappings = get_cgk_mappings();
-        assert_eq!(mappings.len(), 10); // 10 non-checkbox fields
+        assert_eq!(mappings.len(), 11); // 11 non-checkbox fields (added Uur Commissie)
     }
 
     #[test]
     fn test_nrq_mappings_count() {
         let mappings = get_nrq_mappings();
-        assert_eq!(mappings.len(), 10); // 10 non-checkbox fields
+        assert_eq!(mappings.len(), 11); // 11 non-checkbox fields (added Uur Commissie)
     }
 }

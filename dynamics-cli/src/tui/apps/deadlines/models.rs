@@ -34,11 +34,14 @@ pub struct TransformedDeadline {
     /// Parsed deadline date (cgk_date or nrq_date)
     pub deadline_date: Option<chrono::NaiveDate>,
 
-    /// Parsed deadline time (cgk_time or nrq_time) - combined with deadline_date
+    /// Parsed deadline time - combined with deadline_date
     pub deadline_time: Option<chrono::NaiveTime>,
 
-    /// Parsed commission date (cgk_commissiondate or nrq_commissiondate)
+    /// Parsed commission date (cgk_datumcommissievergadering or nrq_commissiondate)
     pub commission_date: Option<chrono::NaiveDate>,
+
+    /// Parsed commission time - combined with commission_date
+    pub commission_time: Option<chrono::NaiveTime>,
 
     /// Warnings for this specific row (unresolved lookups, validation errors)
     pub warnings: Vec<String>,
@@ -54,6 +57,7 @@ impl TransformedDeadline {
             deadline_date: None,
             deadline_time: None,
             commission_date: None,
+            commission_time: None,
             warnings: Vec::new(),
         }
     }

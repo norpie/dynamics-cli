@@ -88,14 +88,25 @@ impl TransformedDeadline {
             }
         }
 
-        // 4. Commission date (date-only, no time conversion)
+        // 4. Commission date/time (combined if both present)
         if let Some(date) = self.commission_date {
             let commission_field = if entity_type == "cgk_deadline" {
                 "cgk_datumcommissievergadering"
             } else {
                 "nrq_commissiondate"
             };
-            payload[commission_field] = json!(date.format("%Y-%m-%d").to_string());
+
+            if let Some(time) = self.commission_time {
+                // Combine date + time, convert Brussels → UTC
+                if let Ok(datetime_str) = combine_brussels_datetime_to_iso(date, Some(time)) {
+                    payload[commission_field] = json!(datetime_str);
+                }
+            } else {
+                // Date-only (no time) - use 12:00 Brussels as default
+                if let Ok(datetime_str) = combine_brussels_datetime_to_iso(date, None) {
+                    payload[commission_field] = json!(datetime_str);
+                }
+            }
         }
 
         // N:N relationships are handled separately via AssociateRef operations after deadline creation
