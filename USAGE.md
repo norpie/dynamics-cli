@@ -183,8 +183,8 @@ FQL uses **explicit join syntax** to eliminate ambiguity about which entity fiel
 #### Complex Expressions
 ```fql
 # Nested conditions
-.opportunity 
-  | (.estimatedvalue > 100000 and 
+.opportunity
+  | (.estimatedvalue > 100000 and
      (.statecode == 0 or .closeprobability > 80))
 
 # Subquery-like patterns using joins
@@ -194,41 +194,82 @@ FQL uses **explicit join syntax** to eliminate ambiguity about which entity fiel
   | distinct
 ```
 
+## Query Command Syntax
+
+### Basic Command Structure
+```bash
+dynamics-cli query [QUERY] [OPTIONS]
+```
+
+### Arguments
+- `QUERY` - FQL query string (optional if using `--file`)
+
+### Options
+- `--file <PATH>` or `-f <PATH>` - Execute FQL query from a file instead of command line
+- `--format <FORMAT>` - Output format (default: `json`)
+  - `json` - JSON format (default)
+  - `xml` - XML format
+  - `csv` - CSV format
+  - `fetchxml` - Raw FetchXML (for debugging, only with `--dry`)
+- `--pretty` or `-p` - Pretty print the output
+- `--dry` - Show generated FetchXML without executing the query
+- `--output <PATH>` or `-o <PATH>` - Save query results to file
+- `--stats` - Show query execution time and statistics
+
+### Usage Notes
+- Either provide a query string OR use `--file`, but not both
+- The `--dry` flag is useful for debugging query translation to FetchXML
+- The `--stats` flag shows parse time, execution time, and total time
+- CSV format is ideal for importing into spreadsheets or data analysis tools
+- All queries automatically include a default result limit (100 records) unless explicitly overridden with `limit()`
+
 ## CLI Integration Examples
 
 ```bash
 # Basic query execution
-dynamics-cli query run '.account | .name, .revenue | limit(10)'
+dynamics-cli query '.account | .name, .revenue | limit(10)'
 
 # With output format options
-dynamics-cli query run '.account | limit(5)' --format json
-dynamics-cli query run '.account | limit(5)' --format xml
-dynamics-cli query run '.account | limit(5)' --format table
+dynamics-cli query '.account | limit(5)' --format json
+dynamics-cli query '.account | limit(5)' --format xml
+dynamics-cli query '.account | limit(5)' --format csv
 
 # Pretty printing
-dynamics-cli query run '.account | limit(5)' --format json --pretty
+dynamics-cli query '.account | limit(5)' --format json --pretty
 
 # Execute query from file
 echo '.account | .revenue > 1000000' > big_accounts.fql
-dynamics-cli query file big_accounts.fql
+dynamics-cli query --file big_accounts.fql
 
 # Execute query from file with formatting
-dynamics-cli query file big_accounts.fql --format table --pretty
+dynamics-cli query --file big_accounts.fql --format csv --pretty
+
+# Show generated FetchXML without executing (dry run)
+dynamics-cli query '.account | limit(5)' --dry
+dynamics-cli query '.account | limit(5)' --dry --pretty  # Pretty-printed FetchXML
+
+# Save results to file
+dynamics-cli query '.account | limit(100)' --format csv --output accounts.csv
+dynamics-cli query --file query.fql --output results.json
+
+# Show execution statistics (timing information)
+dynamics-cli query '.account | limit(5)' --stats
+dynamics-cli query '.contact | limit(100)' --format json --stats
 
 # Pipe to other tools (using JSON format for processing)
-dynamics-cli query run '.contact | .emailaddress1' --format json | jq -r '.value[].emailaddress1' | grep '@contoso.com'
+dynamics-cli query '.contact | .emailaddress1' --format json | jq -r '.value[].emailaddress1' | grep '@contoso.com'
 
-# Extract data for CSV processing
-dynamics-cli query run '.opportunity | .name, .estimatedvalue' --format json | jq -r '.value[] | [.name, .estimatedvalue] | @csv' > opportunities.csv
+# Extract data directly to CSV
+dynamics-cli query '.opportunity | .name, .estimatedvalue' --format csv --output opportunities.csv
 
 # Using default result limits (automatically limited to configured default)
-dynamics-cli query run '.account'  # Returns default limit (100 records)
+dynamics-cli query '.account'  # Returns default limit (100 records)
 
 # Override default limits
-dynamics-cli query run '.account | limit(500)'  # Returns 500 records
+dynamics-cli query '.account | limit(500)'  # Returns 500 records
 
 # Complex query with multiple output options
-dynamics-cli query run '.opportunity as o | .estimatedvalue > 100000 | join(.account as a on a.accountid -> o.customerid | .name) | order(.estimatedvalue desc)' --format table --pretty
+dynamics-cli query '.opportunity as o | .estimatedvalue > 100000 | join(.account as a on a.accountid -> o.customerid | .name) | order(.estimatedvalue desc)' --format csv --pretty
 
 # Authentication and environment management
 dynamics-cli auth setup --name production  # Setup authentication for production
