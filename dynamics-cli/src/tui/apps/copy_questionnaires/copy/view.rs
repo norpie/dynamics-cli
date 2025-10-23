@@ -1,25 +1,23 @@
-use super::models::{State, QuestionnaireSnapshot};
+use super::models::State;
+use super::tree_builder::build_snapshot_tree;
 use crate::tui::{Element, Resource, renderer::LayeredView};
 use ratatui::{
     text::{Line, Span},
     style::Style,
     prelude::Stylize,
 };
+use crate::{col, use_constraints};
 
-pub fn render_view(state: &State) -> LayeredView<super::models::Msg> {
+pub fn render_view(state: &mut State) -> LayeredView<super::models::Msg> {
     let theme = &crate::global_runtime_config().theme;
 
-    let content = match &state.snapshot {
-        Resource::Success(snapshot) => {
-            render_snapshot_summary(state, snapshot, theme)
-        }
-        Resource::Failure(err) => {
-            render_error(err, theme)
-        }
-        _ => {
-            // Loading or NotAsked - LoadingScreen handles this
-            Element::text("")
-        }
+    let content = if matches!(state.questionnaire, Resource::Success(_)) {
+        render_snapshot_summary(state, theme)
+    } else if let Resource::Failure(err) = &state.questionnaire {
+        render_error(err, theme)
+    } else {
+        // Loading or NotAsked - LoadingScreen handles this
+        Element::text("")
     };
 
     let panel = Element::panel(content)
@@ -30,60 +28,46 @@ pub fn render_view(state: &State) -> LayeredView<super::models::Msg> {
 }
 
 fn render_snapshot_summary(
-    state: &State,
-    snapshot: &QuestionnaireSnapshot,
+    state: &mut State,
     theme: &crate::tui::Theme,
 ) -> Element<super::models::Msg> {
-    Element::column(vec![
+    use_constraints!();
+
+    // Extract questionnaire data (we already checked it's Success in the caller)
+    let questionnaire = if let Resource::Success(ref q) = state.questionnaire {
+        q
+    } else {
+        return Element::text(""); // Should never happen
+    };
+
+    // Build tree items from questionnaire
+    let tree_items = build_snapshot_tree(questionnaire);
+
+    col![
         // Header
         Element::styled_text(Line::from(vec![
             Span::styled("Questionnaire: ", Style::default().fg(theme.text_secondary)),
             Span::styled(state.questionnaire_name.clone(), Style::default().fg(theme.text_primary).bold()),
-        ])).build(),
-        Element::text(""),
-
-        // Core entities section
-        Element::styled_text(Line::from(vec![
-            Span::styled("Snapshot Summary", Style::default().fg(theme.accent_primary).bold()),
-        ])).build(),
-        Element::text(format!("  Pages: {}", snapshot.pages.len())),
-        Element::text(format!("  Page Lines: {}", snapshot.page_lines.len())),
-        Element::text(format!("  Groups: {}", snapshot.groups.len())),
-        Element::text(format!("  Group Lines: {}", snapshot.group_lines.len())),
-        Element::text(format!("  Questions: {}", snapshot.questions.len())),
-        Element::text(format!("  Template Lines: {}", snapshot.template_lines.len())),
-        Element::text(format!("  Conditions: {}", snapshot.conditions.len())),
-        Element::text(format!("  Condition Actions: {}", snapshot.condition_actions.len())),
-        Element::text(""),
-
-        // Classifications section
-        Element::styled_text(Line::from(vec![
-            Span::styled("Classifications", Style::default().fg(theme.accent_primary).bold()),
-        ])).build(),
-        Element::text(format!("  Categories: {}", snapshot.categories.len())),
-        Element::text(format!("  Domains: {}", snapshot.domains.len())),
-        Element::text(format!("  Funds: {}", snapshot.funds.len())),
-        Element::text(format!("  Supports: {}", snapshot.supports.len())),
-        Element::text(format!("  Types: {}", snapshot.types.len())),
-        Element::text(format!("  Subcategories: {}", snapshot.subcategories.len())),
-        Element::text(format!("  Flemish Shares: {}", snapshot.flemish_shares.len())),
-        Element::text(""),
+        ])).build() => Length(1),
+        Element::text("") => Length(1),
 
         // Total
         Element::styled_text(Line::from(vec![
-            Span::styled(format!("Total: {} entities", snapshot.total_entities()), Style::default().fg(theme.accent_success).bold()),
-        ])).build(),
-        Element::text(""),
+            Span::styled(format!("Total: {} entities", questionnaire.total_entities()), Style::default().fg(theme.accent_success).bold()),
+        ])).build() => Length(1),
+        Element::text("") => Length(1),
 
-        // Footer message
-        Element::styled_text(Line::from(vec![
-            Span::styled(
-                "Copy functionality will be implemented next.",
-                Style::default().fg(theme.text_secondary).italic(),
-            ),
-        ])).build(),
-    ])
-    .build()
+        // Tree widget wrapped in panel
+        Element::panel(
+            Element::tree("snapshot_tree", &tree_items, &mut state.tree_state, theme)
+                .on_event(super::Msg::TreeEvent)
+                .on_select(super::Msg::TreeNodeClicked)
+                .on_render(super::Msg::ViewportHeight)
+                .build()
+        )
+        .title("Questionnaire Structure")
+        .build() => Fill(1),
+    ]
 }
 
 fn render_error(err: &str, theme: &crate::tui::Theme) -> Element<super::models::Msg> {
@@ -99,11 +83,11 @@ fn render_error(err: &str, theme: &crate::tui::Theme) -> Element<super::models::
 pub fn render_status(state: &State) -> Option<Line<'static>> {
     let theme = &crate::global_runtime_config().theme;
 
-    match &state.snapshot {
-        Resource::Success(snapshot) => {
+    match &state.questionnaire {
+        Resource::Success(questionnaire) => {
             Some(Line::from(vec![
                 Span::styled(
-                    format!("{} ({} entities)", state.questionnaire_name, snapshot.total_entities()),
+                    format!("{} ({} entities)", state.questionnaire_name, questionnaire.total_entities()),
                     Style::default().fg(theme.text_primary),
                 ),
             ]))

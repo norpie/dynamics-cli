@@ -136,6 +136,7 @@ impl DynamicsClient {
                 .bearer_auth(&self.access_token)
                 .header("Accept", headers::CONTENT_TYPE_JSON)
                 .header("OData-Version", headers::ODATA_VERSION)
+                .header("Prefer", "odata.include-annotations=\"OData.Community.Display.V1.FormattedValue\"")
                 .query(&params)
                 .send()
                 .await

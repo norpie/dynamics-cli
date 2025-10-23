@@ -1,5 +1,5 @@
 use super::models::*;
-use super::data_loading::load_full_snapshot;
+use super::data_loading::{load_full_snapshot, build_domain_model};
 use super::view;
 use crate::tui::{
     app::App,
@@ -24,23 +24,25 @@ impl App for CopyQuestionnaireApp {
         let mut state = State {
             questionnaire_id: params.questionnaire_id.clone(),
             questionnaire_name: params.questionnaire_name,
-            snapshot: Resource::Loading,
+            questionnaire: Resource::Loading,
+            tree_state: crate::tui::widgets::TreeState::with_selection(),
         };
 
         // Load complete questionnaire snapshot - single task that loads everything sequentially
         let questionnaire_id = params.questionnaire_id.clone();
         let cmd = Command::perform_parallel()
             .add_task(
-                "Loading questionnaire snapshot",
+                "Loading questionnaire structure",
                 async move {
-                    load_full_snapshot(&questionnaire_id).await
+                    let snapshot = load_full_snapshot(&questionnaire_id).await?;
+                    build_domain_model(snapshot)
                 }
             )
             .with_title("Loading Questionnaire Data")
             .on_complete(AppId::CopyQuestionnaire)
             .build(|_task_idx, result| {
-                let data = result.downcast::<Result<QuestionnaireSnapshot, String>>().unwrap();
-                Msg::SnapshotLoaded(*data)
+                let data = result.downcast::<Result<super::domain::Questionnaire, String>>().unwrap();
+                Msg::QuestionnaireLoaded(*data)
             });
 
         (state, cmd)
@@ -48,17 +50,32 @@ impl App for CopyQuestionnaireApp {
 
     fn update(state: &mut Self::State, msg: Self::Msg) -> Command<Self::Msg> {
         match msg {
-            Msg::SnapshotLoaded(result) => {
+            Msg::QuestionnaireLoaded(result) => {
                 match result {
-                    Ok(snapshot) => {
-                        log::info!("Successfully loaded questionnaire snapshot with {} total entities", snapshot.total_entities());
-                        state.snapshot = Resource::Success(snapshot);
+                    Ok(questionnaire) => {
+                        log::info!("Successfully loaded questionnaire with {} total entities", questionnaire.total_entities());
+                        state.questionnaire = Resource::Success(questionnaire);
                     }
                     Err(e) => {
-                        log::error!("Failed to load questionnaire snapshot: {}", e);
-                        state.snapshot = Resource::Failure(e);
+                        log::error!("Failed to load questionnaire: {}", e);
+                        state.questionnaire = Resource::Failure(e);
                     }
                 }
+                Command::None
+            }
+            Msg::TreeEvent(event) => {
+                state.tree_state.handle_event(event);
+                Command::None
+            }
+            Msg::TreeNodeClicked(node_id) => {
+                // Handle tree node clicks (e.g., select node, expand/collapse)
+                log::debug!("Tree node clicked: {}", node_id);
+                // TODO: Add specific behavior when nodes are clicked
+                Command::None
+            }
+            Msg::ViewportHeight(height) => {
+                // Renderer provides viewport height for proper scrolling
+                state.tree_state.set_viewport_height(height);
                 Command::None
             }
             Msg::Back => {

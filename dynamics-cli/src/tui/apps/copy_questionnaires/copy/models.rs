@@ -1,11 +1,13 @@
 use serde_json::Value;
-use crate::tui::Resource;
+use crate::tui::{Resource, widgets::TreeState};
+use super::domain::Questionnaire;
 
 #[derive(Clone)]
 pub struct State {
     pub questionnaire_id: String,
     pub questionnaire_name: String,
-    pub snapshot: Resource<QuestionnaireSnapshot>,
+    pub questionnaire: Resource<Questionnaire>,
+    pub tree_state: TreeState,
 }
 
 impl Default for State {
@@ -13,7 +15,8 @@ impl Default for State {
         Self {
             questionnaire_id: String::new(),
             questionnaire_name: String::new(),
-            snapshot: Resource::NotAsked,
+            questionnaire: Resource::NotAsked,
+            tree_state: TreeState::with_selection(),
         }
     }
 }
@@ -34,14 +37,14 @@ pub struct QuestionnaireSnapshot {
     pub conditions: Vec<Value>,
     pub condition_actions: Vec<Value>,
 
-    // N:N relationship IDs (store the related entity IDs, not junction records)
-    pub categories: Vec<String>,
-    pub domains: Vec<String>,
-    pub funds: Vec<String>,
-    pub supports: Vec<String>,
-    pub types: Vec<String>,
-    pub subcategories: Vec<String>,
-    pub flemish_shares: Vec<String>,
+    // N:N relationship entities (full entity records with names)
+    pub categories: Vec<Value>,
+    pub domains: Vec<Value>,
+    pub funds: Vec<Value>,
+    pub supports: Vec<Value>,
+    pub types: Vec<Value>,
+    pub subcategories: Vec<Value>,
+    pub flemish_shares: Vec<Value>,
 }
 
 impl QuestionnaireSnapshot {
@@ -68,7 +71,10 @@ impl QuestionnaireSnapshot {
 
 #[derive(Clone)]
 pub enum Msg {
-    SnapshotLoaded(Result<QuestionnaireSnapshot, String>),
+    QuestionnaireLoaded(Result<Questionnaire, String>),
+    TreeEvent(crate::tui::widgets::TreeEvent),
+    TreeNodeClicked(String), // Node clicked in tree
+    ViewportHeight(usize),   // Called by renderer with actual area.height
     Back,
     StartCopy, // Placeholder for future functionality
 }

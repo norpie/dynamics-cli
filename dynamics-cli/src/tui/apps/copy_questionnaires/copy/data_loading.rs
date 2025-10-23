@@ -1,6 +1,8 @@
 use super::models::QuestionnaireSnapshot;
+use super::domain::{Questionnaire, Page, Group, Question, Reference, TemplateLine, Condition, ConditionAction, Classifications};
 use serde_json::Value;
 use crate::api::query::{Query, Filter, FilterValue};
+use std::collections::HashMap;
 
 /// Load complete questionnaire snapshot with all related entities
 /// This performs multiple sequential queries to fetch all data
@@ -84,15 +86,42 @@ pub async fn load_full_snapshot(questionnaire_id: &str) -> Result<QuestionnaireS
         vec![]
     };
 
-    // 10. Load N:N relationships (7 junction tables)
+    // 10. Load N:N relationships (7 junction tables) and fetch the actual entities
     log::debug!("Loading N:N relationships");
-    let categories = load_n_n_relationship(&client, "nrq_questionnaire_nrq_category", questionnaire_id, "nrq_categoryid").await?;
-    let domains = load_n_n_relationship(&client, "nrq_questionnaire_nrq_domain", questionnaire_id, "nrq_domainid").await?;
-    let funds = load_n_n_relationship(&client, "nrq_questionnaire_nrq_fund", questionnaire_id, "nrq_fundid").await?;
-    let supports = load_n_n_relationship(&client, "nrq_questionnaire_nrq_support", questionnaire_id, "nrq_supportid").await?;
-    let types = load_n_n_relationship(&client, "nrq_questionnaire_nrq_type", questionnaire_id, "nrq_typeid").await?;
-    let subcategories = load_n_n_relationship(&client, "nrq_questionnaire_nrq_subcategory", questionnaire_id, "nrq_subcategoryid").await?;
-    let flemish_shares = load_n_n_relationship(&client, "nrq_questionnaire_nrq_flemishshare", questionnaire_id, "nrq_flemishshareid").await?;
+    let category_ids = load_n_n_relationship(&client, "nrq_questionnaire_nrq_category", questionnaire_id, "nrq_categoryid").await?;
+    let domain_ids = load_n_n_relationship(&client, "nrq_questionnaire_nrq_domain", questionnaire_id, "nrq_domainid").await?;
+    let fund_ids = load_n_n_relationship(&client, "nrq_questionnaire_nrq_fund", questionnaire_id, "nrq_fundid").await?;
+    let support_ids = load_n_n_relationship(&client, "nrq_questionnaire_nrq_support", questionnaire_id, "nrq_supportid").await?;
+    let type_ids = load_n_n_relationship(&client, "nrq_questionnaire_nrq_type", questionnaire_id, "nrq_typeid").await?;
+    let subcategory_ids = load_n_n_relationship(&client, "nrq_questionnaire_nrq_subcategory", questionnaire_id, "nrq_subcategoryid").await?;
+    let flemish_share_ids = load_n_n_relationship(&client, "nrq_questionnaire_nrq_flemishshare", questionnaire_id, "nrq_flemishshareid").await?;
+
+    // 11. Fetch the actual classification entity records
+    log::debug!("Loading classification entities:");
+    log::debug!("  Category IDs: {:?}", category_ids);
+    log::debug!("  Domain IDs: {:?}", domain_ids);
+    log::debug!("  Fund IDs: {:?}", fund_ids);
+    log::debug!("  Support IDs: {:?}", support_ids);
+    log::debug!("  Type IDs: {:?}", type_ids);
+    log::debug!("  Subcategory IDs: {:?}", subcategory_ids);
+    log::debug!("  Flemish Share IDs: {:?}", flemish_share_ids);
+
+    let categories = if !category_ids.is_empty() { load_entities_by_ids(&client, "nrq_categories", "nrq_categoryid", &category_ids).await? } else { vec![] };
+    let domains = if !domain_ids.is_empty() { load_entities_by_ids(&client, "nrq_domains", "nrq_domainid", &domain_ids).await? } else { vec![] };
+    let funds = if !fund_ids.is_empty() { load_entities_by_ids(&client, "nrq_funds", "nrq_fundid", &fund_ids).await? } else { vec![] };
+    let supports = if !support_ids.is_empty() { load_entities_by_ids(&client, "nrq_supports", "nrq_supportid", &support_ids).await? } else { vec![] };
+    let types = if !type_ids.is_empty() { load_entities_by_ids(&client, "nrq_types", "nrq_typeid", &type_ids).await? } else { vec![] };
+    let subcategories = if !subcategory_ids.is_empty() { load_entities_by_ids(&client, "nrq_subcategories", "nrq_subcategoryid", &subcategory_ids).await? } else { vec![] };
+    let flemish_shares = if !flemish_share_ids.is_empty() { load_entities_by_ids(&client, "nrq_flemishshares", "nrq_flemishshareid", &flemish_share_ids).await? } else { vec![] };
+
+    log::debug!("Loaded classification records:");
+    log::debug!("  Categories: {}", categories.len());
+    log::debug!("  Domains: {}", domains.len());
+    log::debug!("  Funds: {}", funds.len());
+    log::debug!("  Supports: {}", supports.len());
+    log::debug!("  Types: {}", types.len());
+    log::debug!("  Subcategories: {}", subcategories.len());
+    log::debug!("  Flemish Shares: {}", flemish_shares.len());
 
     log::info!("Successfully loaded complete snapshot with {} total entities",
         1 + pages.len() + page_lines.len() + groups.len() + group_lines.len() +
@@ -348,6 +377,27 @@ fn extract_ids(records: &[Value], id_field: &str) -> Vec<String> {
         .collect()
 }
 
+/// Load entities by their IDs (for classification entities)
+async fn load_entities_by_ids(
+    client: &crate::api::DynamicsClient,
+    entity_name: &str,
+    id_field: &str,
+    ids: &[String],
+) -> Result<Vec<Value>, String> {
+    if ids.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let mut query = Query::new(entity_name);
+    query.filter = Some(build_or_filter(id_field, ids));
+
+    let result = client.execute_query(&query)
+        .await
+        .map_err(|e| format!("Failed to load {} entities: {}", entity_name, e))?;
+
+    Ok(result.data.map(|d| d.value).unwrap_or_default())
+}
+
 /// Build an OR filter for matching multiple IDs
 /// Example: field eq id1 or field eq id2 or field eq id3
 fn build_or_filter(field: &str, ids: &[String]) -> Filter {
@@ -356,4 +406,170 @@ fn build_or_filter(field: &str, ids: &[String]) -> Filter {
         .collect();
 
     Filter::or(filters)
+}
+
+/// Convert raw snapshot into structured domain model
+pub fn build_domain_model(snapshot: QuestionnaireSnapshot) -> Result<Questionnaire, String> {
+    // Build lookup maps
+    let mut page_groups: HashMap<String, Vec<&Value>> = HashMap::new();
+    for group_line in &snapshot.group_lines {
+        if let Some(page_id) = group_line.get("_nrq_questionnairepageid_value").and_then(|v| v.as_str()) {
+            if let Some(group_id) = group_line.get("_nrq_questiongroupid_value").and_then(|v| v.as_str()) {
+                if let Some(group) = snapshot.groups.iter().find(|g|
+                    g.get("nrq_questiongroupid").and_then(|v| v.as_str()) == Some(group_id)
+                ) {
+                    page_groups.entry(page_id.to_string()).or_insert_with(Vec::new).push(group);
+                }
+            }
+        }
+    }
+
+    let mut group_questions: HashMap<String, Vec<&Value>> = HashMap::new();
+    for question in &snapshot.questions {
+        if let Some(group_id) = question.get("_nrq_questiongroupid_value").and_then(|v| v.as_str()) {
+            group_questions.entry(group_id.to_string()).or_insert_with(Vec::new).push(question);
+        }
+    }
+
+    let mut condition_actions_map: HashMap<String, Vec<&Value>> = HashMap::new();
+    for action in &snapshot.condition_actions {
+        if let Some(condition_id) = action.get("_nrq_questionconditionid_value").and_then(|v| v.as_str()) {
+            condition_actions_map.entry(condition_id.to_string()).or_insert_with(Vec::new).push(action);
+        }
+    }
+
+    // Build pages with groups and questions
+    let pages: Vec<Page> = snapshot.pages.iter().map(|page_val| {
+        let page_id = page_val.get("nrq_questionnairepageid").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let page_name = page_val.get("nrq_name").and_then(|v| v.as_str()).unwrap_or("Unnamed Page").to_string();
+
+        let groups = page_groups.get(&page_id).map(|gs| gs.as_slice()).unwrap_or(&[]).iter().map(|group_val| {
+            let group_id = group_val.get("nrq_questiongroupid").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let group_name = group_val.get("nrq_name").and_then(|v| v.as_str()).unwrap_or("Unnamed Group").to_string();
+
+            let questions = group_questions.get(&group_id).map(|qs| qs.as_slice()).unwrap_or(&[]).iter().map(|question_val| {
+                let question_id = question_val.get("nrq_questionid").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let question_name = question_val.get("nrq_name").and_then(|v| v.as_str()).unwrap_or("Unnamed Question").to_string();
+
+                let tag = question_val.get("_nrq_questiontagid_value").and_then(|v| v.as_str()).map(|id| Reference {
+                    id: id.to_string(),
+                    name: None,
+                });
+
+                let template = question_val.get("_nrq_questiontemplateid_value").and_then(|v| v.as_str()).map(|id| Reference {
+                    id: id.to_string(),
+                    name: None,
+                });
+
+                Question {
+                    id: question_id,
+                    name: question_name,
+                    raw: (*question_val).clone(),
+                    tag,
+                    template,
+                }
+            }).collect();
+
+            Group {
+                id: group_id,
+                name: group_name,
+                order: None,
+                raw: (*group_val).clone(),
+                questions,
+            }
+        }).collect();
+
+        Page {
+            id: page_id,
+            name: page_name,
+            order: None,
+            raw: page_val.clone(),
+            groups,
+        }
+    }).collect();
+
+    // Build template lines
+    let template_lines: Vec<TemplateLine> = snapshot.template_lines.iter().map(|line_val| {
+        let id = line_val.get("nrq_questiontemplatelineid").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let template_id = line_val.get("_nrq_questiontemplateid_value").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let group_id = line_val.get("_nrq_questiongroupid_value").and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+        TemplateLine {
+            id,
+            raw: line_val.clone(),
+            template: Reference { id: template_id, name: None },
+            group_id,
+        }
+    }).collect();
+
+    // Build conditions with actions
+    let conditions: Vec<Condition> = snapshot.conditions.iter().map(|condition_val| {
+        let condition_id = condition_val.get("nrq_questionconditionid").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let condition_name = condition_val.get("nrq_name").and_then(|v| v.as_str()).unwrap_or("Unnamed Condition").to_string();
+
+        let actions = condition_actions_map.get(&condition_id).map(|as_ref| as_ref.as_slice()).unwrap_or(&[]).iter().map(|action_val| {
+            let action_id = action_val.get("nrq_questionconditionactionid").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let action_name = action_val.get("nrq_name").and_then(|v| v.as_str()).unwrap_or("Unnamed Action").to_string();
+
+            ConditionAction {
+                id: action_id,
+                name: action_name,
+                raw: (*action_val).clone(),
+            }
+        }).collect();
+
+        Condition {
+            id: condition_id,
+            name: condition_name,
+            raw: condition_val.clone(),
+            actions,
+        }
+    }).collect();
+
+    // Build classifications - extract ID and name from entity records
+    let classifications = Classifications {
+        categories: snapshot.categories.iter().map(|record| Reference {
+            id: record.get("nrq_categoryid").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            name: record.get("nrq_name").and_then(|v| v.as_str()).map(String::from),
+        }).collect(),
+        domains: snapshot.domains.iter().map(|record| Reference {
+            id: record.get("nrq_domainid").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            name: record.get("nrq_name").and_then(|v| v.as_str()).map(String::from),
+        }).collect(),
+        funds: snapshot.funds.iter().map(|record| Reference {
+            id: record.get("nrq_fundid").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            name: record.get("nrq_name").and_then(|v| v.as_str()).map(String::from),
+        }).collect(),
+        supports: snapshot.supports.iter().map(|record| Reference {
+            id: record.get("nrq_supportid").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            name: record.get("nrq_name").and_then(|v| v.as_str()).map(String::from),
+        }).collect(),
+        types: snapshot.types.iter().map(|record| Reference {
+            id: record.get("nrq_typeid").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            name: record.get("nrq_name").and_then(|v| v.as_str()).map(String::from),
+        }).collect(),
+        subcategories: snapshot.subcategories.iter().map(|record| Reference {
+            id: record.get("nrq_subcategoryid").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            name: record.get("nrq_name").and_then(|v| v.as_str()).map(String::from),
+        }).collect(),
+        flemish_shares: snapshot.flemish_shares.iter().map(|record| Reference {
+            id: record.get("nrq_flemishshareid").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            name: record.get("nrq_name").and_then(|v| v.as_str()).map(String::from),
+        }).collect(),
+    };
+
+    let questionnaire_id = snapshot.questionnaire.get("nrq_questionnaireid").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let questionnaire_name = snapshot.questionnaire.get("nrq_name").and_then(|v| v.as_str()).unwrap_or("Unnamed Questionnaire").to_string();
+
+    Ok(Questionnaire {
+        id: questionnaire_id,
+        name: questionnaire_name,
+        raw: snapshot.questionnaire,
+        pages,
+        page_lines: snapshot.page_lines,
+        group_lines: snapshot.group_lines,
+        template_lines,
+        conditions,
+        classifications,
+    })
 }
