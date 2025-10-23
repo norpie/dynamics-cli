@@ -19,7 +19,6 @@ pub struct SelectQuestionnaireApp;
 
 #[derive(Clone)]
 pub struct State {
-    environment: Option<String>,
     questionnaires: Resource<Vec<QuestionnaireItem>>,
     list_state: ListState,
 }
@@ -27,7 +26,6 @@ pub struct State {
 impl Default for State {
     fn default() -> Self {
         Self {
-            environment: None,
             questionnaires: Resource::NotAsked,
             list_state: ListState::with_selection(),
         }
@@ -89,22 +87,60 @@ impl App for SelectQuestionnaireApp {
         let mut state = State::default();
         state.questionnaires = Resource::Loading;
 
-        let cmd = Command::perform(
-            async {
-                // Get current environment
-                let manager = crate::client_manager();
-                let env_name = manager.get_current_environment_name().await
-                    .ok()
-                    .flatten()
-                    .ok_or_else(|| "No environment selected".to_string())?;
+        // Use LoadingScreen with parallel task execution
+        let cmd = Command::perform_parallel()
+            .add_task(
+                "Loading questionnaires",
+                async {
+                    // Get current environment
+                    let manager = crate::client_manager();
+                    let env_name = manager.get_current_environment_name().await
+                        .ok()
+                        .flatten()
+                        .ok_or_else(|| "No environment selected".to_string())?;
 
-                // Try to get from cache first (12 hours)
-                let config = crate::global_config();
-                let entity_name = "nrq_questionnaire";
+                    // Try to get from cache first (12 hours)
+                    let config = crate::global_config();
+                    let entity_name = "nrq_questionnaire";
 
-                if let Ok(Some(cached_data)) = config.get_entity_data_cache(&env_name, entity_name, 12).await {
-                    // Parse cached data back to QuestionnaireItem vec
-                    let questionnaires: Vec<QuestionnaireItem> = cached_data.iter()
+                    if let Ok(Some(cached_data)) = config.get_entity_data_cache(&env_name, entity_name, 12).await {
+                        // Parse cached data back to QuestionnaireItem vec
+                        let questionnaires: Vec<QuestionnaireItem> = cached_data.iter()
+                            .filter_map(|item| {
+                                let id = item.get("nrq_questionnaireid")?.as_str()?.to_string();
+                                let name = item.get("nrq_name")?.as_str()?.to_string();
+                                let code = item.get("nrq_code").and_then(|v| v.as_str()).map(String::from);
+                                Some(QuestionnaireItem { id, name, code })
+                            })
+                            .collect();
+                        log::info!("Loaded {} questionnaires from cache", questionnaires.len());
+                        return Ok::<Vec<QuestionnaireItem>, String>(questionnaires);
+                    }
+
+                    // Fetch from API
+                    log::info!("Fetching questionnaires from Dynamics 365");
+                    let client = manager.get_client(&env_name).await
+                        .map_err(|e| e.to_string())?;
+
+                    // Build query for questionnaires
+                    use crate::api::query::{Query, OrderBy};
+                    let mut query = Query::new("nrq_questionnaires");
+                    query.select = Some(vec![
+                        "nrq_questionnaireid".to_string(),
+                        "nrq_name".to_string(),
+                        "nrq_code".to_string(),
+                    ]);
+                    query.orderby = query.orderby.add(OrderBy::asc("nrq_name"));
+
+                    let result = client.execute_query(&query).await
+                        .map_err(|e| e.to_string())?;
+
+                    let data_response = result.data
+                        .ok_or_else(|| "No data in response".to_string())?;
+
+                    let value_vec = data_response.value;
+
+                    let questionnaires: Vec<QuestionnaireItem> = value_vec.iter()
                         .filter_map(|item| {
                             let id = item.get("nrq_questionnaireid")?.as_str()?.to_string();
                             let name = item.get("nrq_name")?.as_str()?.to_string();
@@ -112,51 +148,21 @@ impl App for SelectQuestionnaireApp {
                             Some(QuestionnaireItem { id, name, code })
                         })
                         .collect();
-                    log::info!("Loaded {} questionnaires from cache", questionnaires.len());
-                    return Ok(questionnaires);
+
+                    log::info!("Loaded {} questionnaires from API", questionnaires.len());
+
+                    // Cache the results
+                    let _ = config.set_entity_data_cache(&env_name, entity_name, &value_vec).await;
+
+                    Ok::<Vec<QuestionnaireItem>, String>(questionnaires)
                 }
-
-                // Fetch from API
-                log::info!("Fetching questionnaires from Dynamics 365");
-                let client = manager.get_client(&env_name).await
-                    .map_err(|e| e.to_string())?;
-
-                // Build query for questionnaires
-                use crate::api::query::{Query, OrderBy};
-                let mut query = Query::new("nrq_questionnaires");
-                query.select = Some(vec![
-                    "nrq_questionnaireid".to_string(),
-                    "nrq_name".to_string(),
-                    "nrq_code".to_string(),
-                ]);
-                query.orderby = query.orderby.add(OrderBy::asc("nrq_name"));
-
-                let result = client.execute_query(&query).await
-                    .map_err(|e| e.to_string())?;
-
-                let data_response = result.data
-                    .ok_or_else(|| "No data in response".to_string())?;
-
-                let value_vec = data_response.value;
-
-                let questionnaires: Vec<QuestionnaireItem> = value_vec.iter()
-                    .filter_map(|item| {
-                        let id = item.get("nrq_questionnaireid")?.as_str()?.to_string();
-                        let name = item.get("nrq_name")?.as_str()?.to_string();
-                        let code = item.get("nrq_code").and_then(|v| v.as_str()).map(String::from);
-                        Some(QuestionnaireItem { id, name, code })
-                    })
-                    .collect();
-
-                log::info!("Loaded {} questionnaires from API", questionnaires.len());
-
-                // Cache the results
-                let _ = config.set_entity_data_cache(&env_name, entity_name, &value_vec).await;
-
-                Ok::<Vec<QuestionnaireItem>, String>(questionnaires)
-            },
-            Msg::QuestionnairesLoaded,
-        );
+            )
+            .with_title("Loading Questionnaires")
+            .on_complete(AppId::SelectQuestionnaire)
+            .build(|_task_idx, result| {
+                let data = result.downcast::<Result<Vec<QuestionnaireItem>, String>>().unwrap();
+                Msg::QuestionnairesLoaded(*data)
+            });
 
         (state, cmd)
     }
@@ -221,9 +227,6 @@ impl App for SelectQuestionnaireApp {
         let theme = &crate::global_runtime_config().theme;
 
         let content = match &state.questionnaires {
-            Resource::Loading => {
-                Element::text("Loading questionnaires...")
-            }
             Resource::Success(questionnaires) if questionnaires.is_empty() => {
                 Element::text("No questionnaires found in this environment")
             }
@@ -242,7 +245,8 @@ impl App for SelectQuestionnaireApp {
             Resource::Failure(err) => {
                 Element::text(format!("Error loading questionnaires: {}", err))
             }
-            Resource::NotAsked => {
+            _ => {
+                // Loading or NotAsked states - LoadingScreen handles this
                 Element::text("")
             }
         };
@@ -287,11 +291,6 @@ impl App for SelectQuestionnaireApp {
                         format!("{} questionnaires", questionnaires.len()),
                         Style::default().fg(theme.text_primary),
                     ),
-                ]))
-            }
-            Resource::Loading => {
-                Some(Line::from(vec![
-                    Span::styled("Loading...", Style::default().fg(theme.text_secondary))
                 ]))
             }
             _ => None,
