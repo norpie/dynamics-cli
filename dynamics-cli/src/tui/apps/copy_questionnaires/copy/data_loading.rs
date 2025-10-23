@@ -269,32 +269,72 @@ async fn load_condition_actions(client: &crate::api::DynamicsClient, condition_i
     Ok(result.data.map(|d| d.value).unwrap_or_default())
 }
 
-/// Load N:N relationship IDs from junction table
+/// Load N:N relationship IDs using navigation properties
 /// Returns the IDs of the related entities (e.g., category IDs)
+///
+/// For N:N relationships in Dynamics 365, we use the navigation property pattern:
+/// nrq_questionnaires(<id>)/nrq_questionnaire_nrq_Category_nrq_Category
+///
+/// The navigation property format is: {relationship_name}_nrq_{PascalCaseEntity}_nrq_{PascalCaseEntity}
 async fn load_n_n_relationship(
     client: &crate::api::DynamicsClient,
-    junction_table: &str,
+    relationship_name: &str,
     questionnaire_id: &str,
     related_id_field: &str,
 ) -> Result<Vec<String>, String> {
-    let mut query = Query::new(junction_table);
-    query.filter = Some(Filter::eq("nrq_questionnaireid", FilterValue::Guid(questionnaire_id.to_string())));
-    query.select = Some(vec![related_id_field.to_string()]);
+    // Convert relationship name to navigation property
+    // Example: "nrq_questionnaire_nrq_category" -> "nrq_questionnaire_nrq_Category_nrq_Category"
+    let entity_name = relationship_name.strip_prefix("nrq_questionnaire_nrq_")
+        .ok_or_else(|| format!("Invalid relationship name: {}", relationship_name))?;
 
-    let result = client.execute_query(&query)
-        .await
-        .map_err(|e| format!("Failed to load {} relationship: {}", junction_table, e))?;
+    // Map lowercase entity names to PascalCase (handles compound words like FlemishShare)
+    let pascal_case = match entity_name {
+        "category" => "Category",
+        "domain" => "Domain",
+        "fund" => "Fund",
+        "support" => "Support",
+        "type" => "Type",
+        "subcategory" => "Subcategory",
+        "flemishshare" => "FlemishShare",
+        _ => {
+            // Fallback: just capitalize first letter
+            return Err(format!("Unknown entity name in relationship: {}", entity_name));
+        }
+    };
 
-    let records = result.data.map(|d| d.value).unwrap_or_default();
+    let navigation_property = format!("nrq_questionnaire_nrq_{}_nrq_{}", pascal_case, pascal_case);
 
-    // Extract the related entity IDs from the junction records
-    Ok(records.iter()
+    log::debug!("Loading N:N relationship via navigation property: {}", navigation_property);
+
+    // Use the new execute_navigation_property method
+    let result = client.execute_navigation_property(
+        "nrq_questionnaires",
+        questionnaire_id,
+        &navigation_property,
+        Some(vec![related_id_field.to_string()])
+    )
+    .await
+    .map_err(|e| format!("Failed to load N:N relationship: {}", e))?;
+
+    let records = result.get("value")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.clone())
+        .unwrap_or_default();
+
+    log::debug!("{} returned {} records", navigation_property, records.len());
+
+    // Extract the related entity IDs
+    let ids: Vec<String> = records.iter()
         .filter_map(|record| {
             record.get(related_id_field)
                 .and_then(|v| v.as_str())
                 .map(String::from)
         })
-        .collect())
+        .collect();
+
+    log::debug!("{} extracted {} IDs from field '{}'", navigation_property, ids.len(), related_id_field);
+
+    Ok(ids)
 }
 
 /// Extract IDs from a Vec<Value> given a field name

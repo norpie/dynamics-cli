@@ -184,6 +184,52 @@ impl DynamicsClient {
         }
     }
 
+    /// Execute a request to a navigation property (for N:N relationships)
+    /// Example: nrq_questionnaires(<id>)/nrq_questionnaire_nrq_Category_nrq_Category
+    pub async fn execute_navigation_property(
+        &self,
+        entity_collection: &str,
+        entity_id: &str,
+        navigation_property: &str,
+        select_fields: Option<Vec<String>>,
+    ) -> anyhow::Result<Value> {
+        self.apply_rate_limiting().await?;
+
+        let mut url = format!("{}{}/{}({})/{}",
+            self.base_url,
+            constants::api_path(),
+            entity_collection,
+            entity_id,
+            navigation_property
+        );
+
+        if let Some(fields) = select_fields {
+            url.push_str(&format!("?$select={}", fields.join(",")));
+        }
+
+        let response = self.retry_policy.execute(|| async {
+            self.http_client
+                .get(&url)
+                .bearer_auth(&self.access_token)
+                .header("Accept", headers::CONTENT_TYPE_JSON)
+                .header("OData-Version", headers::ODATA_VERSION)
+                .header("OData-MaxVersion", headers::ODATA_VERSION)
+                .header("Prefer", headers::PREFER_INCLUDE_ANNOTATIONS)
+                .send()
+                .await
+        }).await?;
+
+        let query_result = self.parse_query_response(response).await?;
+        match query_result.data {
+            Some(query_response) => {
+                Ok(serde_json::json!({
+                    "value": query_response.value
+                }))
+            },
+            None => Ok(serde_json::json!({"value": []}))
+        }
+    }
+
     /// Execute the next page of results using @odata.nextLink
     pub async fn execute_next_page(&self, next_link: &str) -> anyhow::Result<QueryResult> {
         let response = self.retry_policy.execute(|| async {
