@@ -16,3 +16,5 @@ claude.*.md
 dynamics-cli/src/tui/apps/cleanup/todo.md
 Mappings.zip
 Mappings
+.env.dynamics
+.token_cache
