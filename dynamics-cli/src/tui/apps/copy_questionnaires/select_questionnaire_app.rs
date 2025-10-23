@@ -199,8 +199,8 @@ impl App for SelectQuestionnaireApp {
                         if let Some(questionnaire) = questionnaires.get(selected_idx) {
                             log::info!("Selected questionnaire: {} ({})", questionnaire.name, questionnaire.id);
 
-                            // Navigate to copy app (will implement later)
-                            let params = super::copy_questionnaire_app::CopyQuestionnaireParams {
+                            // Navigate to copy app
+                            let params = super::copy::CopyQuestionnaireParams {
                                 questionnaire_id: questionnaire.id.clone(),
                                 questionnaire_name: questionnaire.name.clone(),
                             };
