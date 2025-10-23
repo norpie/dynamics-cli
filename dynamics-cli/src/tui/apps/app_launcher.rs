@@ -41,6 +41,11 @@ impl Default for State {
                     description: "Process Excel deadlines for migration".to_string(),
                 },
                 AppInfo {
+                    id: AppId::SelectQuestionnaire,
+                    name: "Copy Questionnaire".to_string(),
+                    description: "Copy Dynamics 365 questionnaires with all related entities".to_string(),
+                },
+                AppInfo {
                     id: AppId::OperationQueue,
                     name: "Operation Queue".to_string(),
                     description: "Manage and execute API operation batches".to_string(),

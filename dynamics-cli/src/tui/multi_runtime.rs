@@ -7,7 +7,7 @@ use anyhow::Result;
 use std::collections::HashMap;
 use std::time::Instant;
 
-use crate::tui::{AppId, Runtime, AppRuntime, apps::{AppLauncher, LoadingScreen, ErrorScreen, SettingsApp, UpdateApp, EnvironmentSelectorApp, migration::{MigrationEnvironmentApp, MigrationComparisonSelectApp, EntityComparisonApp}, DeadlinesFileSelectApp, DeadlinesMappingApp, DeadlinesInspectionApp, OperationQueueApp}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App, ModalState, KeyBinding, AppLifecycle};
+use crate::tui::{AppId, Runtime, AppRuntime, apps::{AppLauncher, LoadingScreen, ErrorScreen, SettingsApp, UpdateApp, EnvironmentSelectorApp, migration::{MigrationEnvironmentApp, MigrationComparisonSelectApp, EntityComparisonApp}, DeadlinesFileSelectApp, DeadlinesMappingApp, DeadlinesInspectionApp, OperationQueueApp, SelectQuestionnaireApp, CopyQuestionnaireApp}, Element, LayoutConstraint, Layer, Theme, ThemeVariant, App, ModalState, KeyBinding, AppLifecycle};
 use crate::tui::runtime::AppFactory;
 use crate::tui::element::{ColumnBuilder, RowBuilder, FocusId};
 use crate::tui::widgets::ScrollableState;
@@ -100,6 +100,8 @@ impl MultiAppRuntime {
         factories.insert(AppId::DeadlinesMapping, Box::new(std::marker::PhantomData::<DeadlinesMappingApp>));
         factories.insert(AppId::DeadlinesInspection, Box::new(std::marker::PhantomData::<DeadlinesInspectionApp>));
         factories.insert(AppId::OperationQueue, Box::new(std::marker::PhantomData::<OperationQueueApp>));
+        factories.insert(AppId::SelectQuestionnaire, Box::new(std::marker::PhantomData::<SelectQuestionnaireApp>));
+        factories.insert(AppId::CopyQuestionnaire, Box::new(std::marker::PhantomData::<CopyQuestionnaireApp>));
 
         // Mark all apps as NotCreated initially
         for app_id in factories.keys() {

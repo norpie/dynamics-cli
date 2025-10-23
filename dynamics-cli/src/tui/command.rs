@@ -114,6 +114,8 @@ pub enum AppId {
     DeadlinesMapping,
     DeadlinesInspection,
     OperationQueue,
+    SelectQuestionnaire,
+    CopyQuestionnaire,
 }
 
 impl<Msg> Command<Msg> {
