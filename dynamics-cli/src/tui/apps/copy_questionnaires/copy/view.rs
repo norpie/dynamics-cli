@@ -44,12 +44,22 @@ fn render_snapshot_summary(
     let tree_items = build_snapshot_tree(questionnaire);
 
     col![
+        // Copy name input wrapped in panel
+        Element::panel(
+            Element::text_input("copy_name_input", state.copy_name_input.value(), &state.copy_name_input.state)
+                .on_event(super::Msg::CopyNameInputEvent)
+                .placeholder("Enter name for copy...")
+                .build()
+        )
+        .title("New Questionnaire Name")
+        .build() => Length(3),
+        Element::text("") => Length(1),
+
         // Header
         Element::styled_text(Line::from(vec![
-            Span::styled("Questionnaire: ", Style::default().fg(theme.text_secondary)),
+            Span::styled("Source: ", Style::default().fg(theme.text_secondary)),
             Span::styled(state.questionnaire_name.clone(), Style::default().fg(theme.text_primary).bold()),
         ])).build() => Length(1),
-        Element::text("") => Length(1),
 
         // Total
         Element::styled_text(Line::from(vec![
@@ -67,6 +77,13 @@ fn render_snapshot_summary(
         )
         .title("Questionnaire Structure")
         .build() => Fill(1),
+
+        Element::text("") => Length(1),
+
+        // Continue button
+        Element::button("continue_button", "Continue")
+            .on_press(super::Msg::Continue)
+            .build() => Length(3),
     ]
 }
 

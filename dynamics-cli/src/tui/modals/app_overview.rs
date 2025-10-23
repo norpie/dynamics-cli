@@ -76,6 +76,7 @@ impl<Msg: Clone> AppOverviewModal<Msg> {
             AppId::OperationQueue => "Operation Queue",
             AppId::SelectQuestionnaire => "Select Questionnaire",
             AppId::CopyQuestionnaire => "Copy Questionnaire",
+            AppId::PushQuestionnaire => "Push Questionnaire",
         }
     }
 

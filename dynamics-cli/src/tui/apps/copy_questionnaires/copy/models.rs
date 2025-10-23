@@ -1,5 +1,5 @@
 use serde_json::Value;
-use crate::tui::{Resource, widgets::TreeState};
+use crate::tui::{Resource, widgets::{TreeState, fields::TextInputField}};
 use super::domain::Questionnaire;
 
 #[derive(Clone)]
@@ -8,6 +8,7 @@ pub struct State {
     pub questionnaire_name: String,
     pub questionnaire: Resource<Questionnaire>,
     pub tree_state: TreeState,
+    pub copy_name_input: TextInputField,
 }
 
 impl Default for State {
@@ -17,6 +18,7 @@ impl Default for State {
             questionnaire_name: String::new(),
             questionnaire: Resource::NotAsked,
             tree_state: TreeState::with_selection(),
+            copy_name_input: TextInputField::new(),
         }
     }
 }
@@ -75,8 +77,9 @@ pub enum Msg {
     TreeEvent(crate::tui::widgets::TreeEvent),
     TreeNodeClicked(String), // Node clicked in tree
     ViewportHeight(usize),   // Called by renderer with actual area.height
+    CopyNameInputEvent(crate::tui::widgets::TextInputEvent),
+    Continue,
     Back,
-    StartCopy, // Placeholder for future functionality
 }
 
 pub struct CopyQuestionnaireParams {

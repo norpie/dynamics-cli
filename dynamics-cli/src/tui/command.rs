@@ -116,6 +116,7 @@ pub enum AppId {
     OperationQueue,
     SelectQuestionnaire,
     CopyQuestionnaire,
+    PushQuestionnaire,
 }
 
 impl<Msg> Command<Msg> {

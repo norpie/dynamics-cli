@@ -21,11 +21,16 @@ impl App for CopyQuestionnaireApp {
     type InitParams = CopyQuestionnaireParams;
 
     fn init(params: CopyQuestionnaireParams) -> (State, Command<Msg>) {
+        let default_copy_name = format!("{} - Copy", params.questionnaire_name);
+        let mut copy_name_input = crate::tui::widgets::fields::TextInputField::new();
+        copy_name_input.set_value(default_copy_name);
+
         let mut state = State {
             questionnaire_id: params.questionnaire_id.clone(),
             questionnaire_name: params.questionnaire_name,
             questionnaire: Resource::Loading,
             tree_state: crate::tui::widgets::TreeState::with_selection(),
+            copy_name_input,
         };
 
         // Load complete questionnaire snapshot - single task that loads everything sequentially
@@ -78,16 +83,26 @@ impl App for CopyQuestionnaireApp {
                 state.tree_state.set_viewport_height(height);
                 Command::None
             }
+            Msg::CopyNameInputEvent(event) => {
+                state.copy_name_input.handle_event(event, None);
+                Command::None
+            }
+            Msg::Continue => {
+                // Navigate to push app with copy parameters
+                log::info!("Continuing to push app with copy name: {}", state.copy_name_input.value());
+                Command::start_app(
+                    AppId::PushQuestionnaire,
+                    crate::tui::apps::copy_questionnaires::push::PushQuestionnaireParams {
+                        questionnaire_id: state.questionnaire_id.clone(),
+                        copy_name: state.copy_name_input.value().to_string(),
+                    }
+                )
+            }
             Msg::Back => {
                 Command::batch(vec![
                     Command::navigate_to(AppId::SelectQuestionnaire),
                     Command::quit_self(),
                 ])
-            }
-            Msg::StartCopy => {
-                // TODO: Implement actual copy functionality
-                log::info!("Copy functionality not yet implemented for questionnaire: {}", state.questionnaire_id);
-                Command::None
             }
         }
     }
