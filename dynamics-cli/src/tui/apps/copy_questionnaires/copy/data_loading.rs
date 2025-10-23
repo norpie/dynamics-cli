@@ -26,7 +26,8 @@ pub async fn load_full_snapshot(questionnaire_id: &str) -> Result<QuestionnaireS
     // 2. Load page lines (junction records for page ordering)
     log::debug!("Loading page lines");
     let page_lines = load_page_lines(&client, questionnaire_id).await?;
-    let page_ids = extract_ids(&page_lines, "nrq_questionnairepageid");
+    let page_ids = extract_ids(&page_lines, "_nrq_questionnairepageid_value");
+    log::debug!("Extracted page IDs: {:?}", page_ids);
 
     // 3. Load pages
     log::debug!("Loading pages ({})", page_ids.len());
@@ -43,7 +44,7 @@ pub async fn load_full_snapshot(questionnaire_id: &str) -> Result<QuestionnaireS
     } else {
         vec![]
     };
-    let group_ids = extract_ids(&group_lines, "nrq_questiongroupid");
+    let group_ids = extract_ids(&group_lines, "_nrq_questiongroupid_value");
 
     // 5. Load groups
     log::debug!("Loading groups ({})", group_ids.len());
@@ -155,9 +156,16 @@ async fn load_pages(client: &crate::api::DynamicsClient, page_ids: &[String]) ->
     let mut query = Query::new("nrq_questionnairepages");
     query.filter = Some(build_or_filter("nrq_questionnairepageid", page_ids));
 
+    log::debug!("Loading pages with IDs: {:?}", page_ids);
+    if let Some(ref filter) = query.filter {
+        log::debug!("Pages filter: {}", filter.to_odata_string());
+    }
+
     let result = client.execute_query(&query)
         .await
         .map_err(|e| format!("Failed to load pages: {}", e))?;
+
+    log::debug!("Pages result count: {}", result.data.as_ref().map(|d| d.value.len()).unwrap_or(0));
 
     Ok(result.data.map(|d| d.value).unwrap_or_default())
 }
