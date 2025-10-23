@@ -1,6 +1,6 @@
 use super::models::QuestionnaireSnapshot;
 use serde_json::Value;
-use crate::api::query::{Query, Filter};
+use crate::api::query::{Query, Filter, FilterValue};
 
 /// Load complete questionnaire snapshot with all related entities
 /// This performs multiple sequential queries to fetch all data
@@ -129,12 +129,19 @@ async fn load_questionnaire(client: &crate::api::DynamicsClient, id: &str) -> Re
 
 /// Load page lines (ordering junctions) for a questionnaire
 async fn load_page_lines(client: &crate::api::DynamicsClient, questionnaire_id: &str) -> Result<Vec<Value>, String> {
-    let mut query = Query::new("nrq_questionnairepageline");
-    query.filter = Some(Filter::eq("_nrq_questionnaireid_value", questionnaire_id.to_string()));
+    let mut query = Query::new("nrq_questionnairepagelines");
+    query.filter = Some(Filter::eq("_nrq_questionnaireid_value", FilterValue::Guid(questionnaire_id.to_string())));
+
+    log::debug!("Loading page_lines with questionnaire_id: {}", questionnaire_id);
+    if let Some(ref filter) = query.filter {
+        log::debug!("Filter OData string: {}", filter.to_odata_string());
+    }
 
     let result = client.execute_query(&query)
         .await
         .map_err(|e| format!("Failed to load page lines: {}", e))?;
+
+    log::debug!("Page lines result count: {}", result.data.as_ref().map(|d| d.value.len()).unwrap_or(0));
 
     Ok(result.data.map(|d| d.value).unwrap_or_default())
 }
@@ -145,7 +152,7 @@ async fn load_pages(client: &crate::api::DynamicsClient, page_ids: &[String]) ->
         return Ok(vec![]);
     }
 
-    let mut query = Query::new("nrq_questionnairepage");
+    let mut query = Query::new("nrq_questionnairepages");
     query.filter = Some(build_or_filter("nrq_questionnairepageid", page_ids));
 
     let result = client.execute_query(&query)
@@ -161,7 +168,7 @@ async fn load_group_lines(client: &crate::api::DynamicsClient, page_ids: &[Strin
         return Ok(vec![]);
     }
 
-    let mut query = Query::new("nrq_questiongroupline");
+    let mut query = Query::new("nrq_questiongrouplines");
     query.filter = Some(build_or_filter("_nrq_questionnairepageid_value", page_ids));
 
     let result = client.execute_query(&query)
@@ -177,7 +184,7 @@ async fn load_groups(client: &crate::api::DynamicsClient, group_ids: &[String]) 
         return Ok(vec![]);
     }
 
-    let mut query = Query::new("nrq_questiongroup");
+    let mut query = Query::new("nrq_questiongroups");
     query.filter = Some(build_or_filter("nrq_questiongroupid", group_ids));
 
     let result = client.execute_query(&query)
@@ -189,12 +196,19 @@ async fn load_groups(client: &crate::api::DynamicsClient, group_ids: &[String]) 
 
 /// Load questions related to a questionnaire
 async fn load_questions(client: &crate::api::DynamicsClient, questionnaire_id: &str) -> Result<Vec<Value>, String> {
-    let mut query = Query::new("nrq_question");
-    query.filter = Some(Filter::eq("_nrq_questionnaireid_value", questionnaire_id.to_string()));
+    let mut query = Query::new("nrq_questions");
+    query.filter = Some(Filter::eq("_nrq_questionnaireid_value", FilterValue::Guid(questionnaire_id.to_string())));
+
+    log::debug!("Loading questions with questionnaire_id: {}", questionnaire_id);
+    if let Some(ref filter) = query.filter {
+        log::debug!("Filter OData string: {}", filter.to_odata_string());
+    }
 
     let result = client.execute_query(&query)
         .await
         .map_err(|e| format!("Failed to load questions: {}", e))?;
+
+    log::debug!("Questions result count: {}", result.data.as_ref().map(|d| d.value.len()).unwrap_or(0));
 
     Ok(result.data.map(|d| d.value).unwrap_or_default())
 }
@@ -205,7 +219,7 @@ async fn load_template_lines(client: &crate::api::DynamicsClient, group_ids: &[S
         return Ok(vec![]);
     }
 
-    let mut query = Query::new("nrq_questiontemplateline");
+    let mut query = Query::new("nrq_questiontemplatelines");
     query.filter = Some(build_or_filter("_nrq_questiongroupid_value", group_ids));
 
     let result = client.execute_query(&query)
@@ -221,7 +235,7 @@ async fn load_conditions(client: &crate::api::DynamicsClient, question_ids: &[St
         return Ok(vec![]);
     }
 
-    let mut query = Query::new("nrq_questioncondition");
+    let mut query = Query::new("nrq_questionconditions");
     query.filter = Some(build_or_filter("_nrq_questionid_value", question_ids));
 
     let result = client.execute_query(&query)
@@ -237,7 +251,7 @@ async fn load_condition_actions(client: &crate::api::DynamicsClient, condition_i
         return Ok(vec![]);
     }
 
-    let mut query = Query::new("nrq_questionconditionaction");
+    let mut query = Query::new("nrq_questionconditionactions");
     query.filter = Some(build_or_filter("_nrq_questionconditionid_value", condition_ids));
 
     let result = client.execute_query(&query)
@@ -256,7 +270,7 @@ async fn load_n_n_relationship(
     related_id_field: &str,
 ) -> Result<Vec<String>, String> {
     let mut query = Query::new(junction_table);
-    query.filter = Some(Filter::eq("nrq_questionnaireid", questionnaire_id.to_string()));
+    query.filter = Some(Filter::eq("nrq_questionnaireid", FilterValue::Guid(questionnaire_id.to_string())));
     query.select = Some(vec![related_id_field.to_string()]);
 
     let result = client.execute_query(&query)
@@ -287,10 +301,10 @@ fn extract_ids(records: &[Value], id_field: &str) -> Vec<String> {
 }
 
 /// Build an OR filter for matching multiple IDs
-/// Example: field eq 'id1' or field eq 'id2' or field eq 'id3'
+/// Example: field eq id1 or field eq id2 or field eq id3
 fn build_or_filter(field: &str, ids: &[String]) -> Filter {
     let filters: Vec<Filter> = ids.iter()
-        .map(|id| Filter::eq(field, id.clone()))
+        .map(|id| Filter::eq(field, FilterValue::Guid(id.clone())))
         .collect();
 
     Filter::or(filters)

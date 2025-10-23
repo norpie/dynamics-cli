@@ -31,6 +31,7 @@ pub enum Filter {
 #[derive(Debug, Clone)]
 pub enum FilterValue {
     String(String),
+    Guid(String),  // GUIDs don't use quotes in OData
     Number(f64),
     Integer(i64),
     Boolean(bool),
@@ -127,6 +128,7 @@ impl FilterValue {
     pub fn to_odata_string(&self) -> String {
         match self {
             FilterValue::String(s) => format!("'{}'", s.replace('\'', "''")),
+            FilterValue::Guid(g) => g.clone(),  // GUIDs don't use quotes
             FilterValue::Number(n) => n.to_string(),
             FilterValue::Integer(i) => i.to_string(),
             FilterValue::Boolean(b) => b.to_string(),
