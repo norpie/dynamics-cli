@@ -107,12 +107,23 @@ impl App for CopyQuestionnaireApp {
                 log::info!("Continuing to push app with copy name: {} and copy code: {}",
                     state.copy_name_input.value(),
                     state.copy_code_input.value());
+
+                // Extract the questionnaire from state
+                let questionnaire = match &state.questionnaire {
+                    Resource::Success(q) => q.clone(),
+                    _ => {
+                        log::error!("Cannot continue: questionnaire not loaded");
+                        return Command::None;
+                    }
+                };
+
                 Command::start_app(
                     AppId::PushQuestionnaire,
                     crate::tui::apps::copy_questionnaires::push::PushQuestionnaireParams {
                         questionnaire_id: state.questionnaire_id.clone(),
                         copy_name: state.copy_name_input.value().to_string(),
                         copy_code: state.copy_code_input.value().to_string(),
+                        questionnaire,
                     }
                 )
             }
