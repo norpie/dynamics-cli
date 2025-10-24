@@ -258,21 +258,31 @@ pub async fn step2_create_pages(
     }
 
     let mut new_id_map = id_map;
+    let mut first_error = None;
 
+    // Process ALL results, tracking successes even if some fail
     for (page, result) in questionnaire.pages.iter().zip(results.iter()) {
-        if !result.success {
-            return Err(build_error(
-                result.error.clone().unwrap_or_else(|| "Unknown error".to_string()),
-                CopyPhase::CreatingPages,
-                2,
-            ));
+        if result.success {
+            // Track successful creations
+            match extract_entity_id(result) {
+                Ok(new_id) => {
+                    new_id_map.insert(page.id.clone(), new_id.clone());
+                    created_ids.push(("nrq_questionnairepages".to_string(), new_id));
+                }
+                Err(e) => {
+                    if first_error.is_none() {
+                        first_error = Some(format!("Failed to extract page ID: {}", e));
+                    }
+                }
+            }
+        } else if first_error.is_none() {
+            first_error = Some(result.error.clone().unwrap_or_else(|| "Unknown error".to_string()));
         }
+    }
 
-        let new_id = extract_entity_id(result)
-            .map_err(|e| build_error(format!("Failed to extract page ID: {}", e), CopyPhase::CreatingPages, 2))?;
-
-        new_id_map.insert(page.id.clone(), new_id.clone());
-        created_ids.push(("nrq_questionnairepages".to_string(), new_id));
+    // If any errors occurred, return error with ALL successful IDs tracked
+    if let Some(error_msg) = first_error {
+        return Err(build_error(error_msg, CopyPhase::CreatingPages, 2));
     }
 
     Ok((new_id_map, created_ids))
@@ -285,6 +295,79 @@ fn build_error(message: String, phase: CopyPhase, step: usize) -> CopyError {
         step,
         partial_counts: HashMap::new(),
         rollback_complete: false,
+    }
+}
+
+/// Rollback all created entities in reverse order
+/// Returns true if rollback succeeded, false if it failed
+pub async fn rollback_created_entities(
+    created_ids: Vec<(String, String)>,
+) -> bool {
+    if created_ids.is_empty() {
+        return true; // Nothing to rollback
+    }
+
+    log::info!("Starting rollback of {} entities", created_ids.len());
+
+    let client_manager = crate::client_manager();
+
+    // Get client
+    let env_name = match client_manager.get_current_environment_name().await {
+        Ok(Some(name)) => name,
+        _ => {
+            log::error!("Rollback failed: Could not get environment name");
+            return false;
+        }
+    };
+
+    let client = match client_manager.get_client(&env_name).await {
+        Ok(c) => c,
+        Err(e) => {
+            log::error!("Rollback failed: Could not get client: {}", e);
+            return false;
+        }
+    };
+
+    let resilience = ResilienceConfig::default();
+    let mut operations = Operations::new();
+
+    // Delete in REVERSE order (bottom-up to respect dependencies)
+    for (entity_set, entity_id) in created_ids.iter().rev() {
+        operations = operations.add(Operation::Delete {
+            entity: entity_set.clone(),
+            id: entity_id.clone(),
+        });
+    }
+
+    // Execute batch delete
+    match operations.execute(&client, &resilience).await {
+        Ok(results) => {
+            let mut all_success = true;
+            for (idx, result) in results.iter().enumerate() {
+                if !result.success {
+                    let (entity_set, entity_id) = &created_ids[created_ids.len() - 1 - idx];
+                    log::error!(
+                        "Failed to delete {} ({}): {:?}",
+                        entity_set,
+                        entity_id,
+                        result.error
+                    );
+                    all_success = false;
+                }
+            }
+
+            if all_success {
+                log::info!("Rollback completed successfully - deleted {} entities", created_ids.len());
+            } else {
+                log::warn!("Rollback partially failed - some entities may remain");
+            }
+
+            all_success
+        }
+        Err(e) => {
+            log::error!("Rollback batch operation failed: {}", e);
+            false
+        }
     }
 }
 
@@ -332,18 +415,29 @@ pub async fn step3_create_page_lines(
     let results = operations.execute(&client, &resilience).await
         .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingPageLines, 3))?;
 
-    for result in &results {
-        if !result.success {
-            return Err(build_error(
-                result.error.clone().unwrap_or_else(|| "Unknown error".to_string()),
-                CopyPhase::CreatingPageLines,
-                3,
-            ));
-        }
+    let mut first_error = None;
 
-        let new_id = extract_entity_id(result)
-            .map_err(|e| build_error(format!("Failed to extract page line ID: {}", e), CopyPhase::CreatingPageLines, 3))?;
-        created_ids.push(("nrq_questionnairepagelines".to_string(), new_id));
+    // Process ALL results, tracking successes even if some fail
+    for result in &results {
+        if result.success {
+            match extract_entity_id(result) {
+                Ok(new_id) => {
+                    created_ids.push(("nrq_questionnairepagelines".to_string(), new_id));
+                }
+                Err(e) => {
+                    if first_error.is_none() {
+                        first_error = Some(format!("Failed to extract page line ID: {}", e));
+                    }
+                }
+            }
+        } else if first_error.is_none() {
+            first_error = Some(result.error.clone().unwrap_or_else(|| "Unknown error".to_string()));
+        }
+    }
+
+    // If any errors occurred, return error with ALL successful IDs tracked
+    if let Some(error_msg) = first_error {
+        return Err(build_error(error_msg, CopyPhase::CreatingPageLines, 3));
     }
 
     Ok((id_map, created_ids))

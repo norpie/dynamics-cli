@@ -238,6 +238,10 @@ pub enum Msg {
     CopySuccess(CopyResult),
     CopyFailed(CopyError),
 
+    // Rollback
+    StartRollback,
+    RollbackComplete(bool),  // true if successful, false if failed
+
     // Actions
     ViewCopy,
     CopyAnother,

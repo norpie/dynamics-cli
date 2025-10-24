@@ -85,7 +85,12 @@ impl App for PushQuestionnaireApp {
                     }
                     Err(error) => {
                         state.push_state = PushState::Failed(error);
-                        Command::None
+                        // Trigger rollback of all created entities
+                        let created_ids = state.created_ids.clone();
+                        Command::perform(
+                            super::step_commands::rollback_created_entities(created_ids),
+                            Msg::RollbackComplete
+                        )
                     }
                 }
             }
@@ -117,7 +122,12 @@ impl App for PushQuestionnaireApp {
                     }
                     Err(error) => {
                         state.push_state = PushState::Failed(error);
-                        Command::None
+                        // Trigger rollback of all created entities
+                        let created_ids = state.created_ids.clone();
+                        Command::perform(
+                            super::step_commands::rollback_created_entities(created_ids),
+                            Msg::RollbackComplete
+                        )
                     }
                 }
             }
@@ -146,7 +156,12 @@ impl App for PushQuestionnaireApp {
                     }
                     Err(error) => {
                         state.push_state = PushState::Failed(error);
-                        Command::None
+                        // Trigger rollback of all created entities
+                        let created_ids = state.created_ids.clone();
+                        Command::perform(
+                            super::step_commands::rollback_created_entities(created_ids),
+                            Msg::RollbackComplete
+                        )
                     }
                 }
             }
@@ -175,7 +190,12 @@ impl App for PushQuestionnaireApp {
                     }
                     Err(error) => {
                         state.push_state = PushState::Failed(error);
-                        Command::None
+                        // Trigger rollback of all created entities
+                        let created_ids = state.created_ids.clone();
+                        Command::perform(
+                            super::step_commands::rollback_created_entities(created_ids),
+                            Msg::RollbackComplete
+                        )
                     }
                 }
             }
@@ -204,7 +224,12 @@ impl App for PushQuestionnaireApp {
                     }
                     Err(error) => {
                         state.push_state = PushState::Failed(error);
-                        Command::None
+                        // Trigger rollback of all created entities
+                        let created_ids = state.created_ids.clone();
+                        Command::perform(
+                            super::step_commands::rollback_created_entities(created_ids),
+                            Msg::RollbackComplete
+                        )
                     }
                 }
             }
@@ -233,7 +258,12 @@ impl App for PushQuestionnaireApp {
                     }
                     Err(error) => {
                         state.push_state = PushState::Failed(error);
-                        Command::None
+                        // Trigger rollback of all created entities
+                        let created_ids = state.created_ids.clone();
+                        Command::perform(
+                            super::step_commands::rollback_created_entities(created_ids),
+                            Msg::RollbackComplete
+                        )
                     }
                 }
             }
@@ -262,7 +292,12 @@ impl App for PushQuestionnaireApp {
                     }
                     Err(error) => {
                         state.push_state = PushState::Failed(error);
-                        Command::None
+                        // Trigger rollback of all created entities
+                        let created_ids = state.created_ids.clone();
+                        Command::perform(
+                            super::step_commands::rollback_created_entities(created_ids),
+                            Msg::RollbackComplete
+                        )
                     }
                 }
             }
@@ -291,7 +326,12 @@ impl App for PushQuestionnaireApp {
                     }
                     Err(error) => {
                         state.push_state = PushState::Failed(error);
-                        Command::None
+                        // Trigger rollback of all created entities
+                        let created_ids = state.created_ids.clone();
+                        Command::perform(
+                            super::step_commands::rollback_created_entities(created_ids),
+                            Msg::RollbackComplete
+                        )
                     }
                 }
             }
@@ -330,7 +370,12 @@ impl App for PushQuestionnaireApp {
                     }
                     Err(error) => {
                         state.push_state = PushState::Failed(error);
-                        Command::None
+                        // Trigger rollback of all created entities
+                        let created_ids = state.created_ids.clone();
+                        Command::perform(
+                            super::step_commands::rollback_created_entities(created_ids),
+                            Msg::RollbackComplete
+                        )
                     }
                 }
             }
@@ -359,7 +404,12 @@ impl App for PushQuestionnaireApp {
                     }
                     Err(error) => {
                         state.push_state = PushState::Failed(error);
-                        Command::None
+                        // Trigger rollback of all created entities
+                        let created_ids = state.created_ids.clone();
+                        Command::perform(
+                            super::step_commands::rollback_created_entities(created_ids),
+                            Msg::RollbackComplete
+                        )
                     }
                 }
             }
@@ -371,8 +421,26 @@ impl App for PushQuestionnaireApp {
             }
 
             Msg::CopyFailed(error) => {
-                // Copy failed
+                // Copy failed - already rolled back by step error handler
                 state.push_state = PushState::Failed(error);
+                Command::None
+            }
+
+            Msg::StartRollback => {
+                // This message is not needed - rollback happens in error handlers
+                Command::None
+            }
+
+            Msg::RollbackComplete(success) => {
+                // Update the error state with rollback status
+                if let PushState::Failed(ref mut error) = state.push_state {
+                    error.rollback_complete = success;
+                    if success {
+                        log::info!("Rollback completed successfully");
+                    } else {
+                        log::error!("Rollback failed - some entities may remain");
+                    }
+                }
                 Command::None
             }
 
