@@ -9,6 +9,11 @@ pub struct State {
     pub copy_code: String,
     pub questionnaire: Questionnaire,  // Already loaded from copy screen
     pub push_state: PushState,
+
+    // Copy engine state (persists across steps)
+    pub id_map: HashMap<String, String>,  // old_id -> new_id
+    pub created_ids: Vec<(String, String)>,  // (entity_set, id) for rollback
+    pub start_time: Option<std::time::Instant>,
 }
 
 impl Default for State {
@@ -37,6 +42,9 @@ impl Default for State {
                 },
             },
             push_state: PushState::Confirming,
+            id_map: HashMap::new(),
+            created_ids: Vec::new(),
+            start_time: None,
         }
     }
 }
@@ -214,8 +222,17 @@ pub enum Msg {
     StartCopy,
     Cancel,
 
-    // Screen 2: Progress (from async task)
-    CopyProgressUpdate(CopyProgress),
+    // Screen 2: Progress (per-step messages)
+    Step1Complete(Result<String, CopyError>),  // Returns new questionnaire ID
+    Step2Complete(Result<(HashMap<String, String>, Vec<(String, String)>), CopyError>),
+    Step3Complete(Result<(HashMap<String, String>, Vec<(String, String)>), CopyError>),
+    Step4Complete(Result<(HashMap<String, String>, Vec<(String, String)>), CopyError>),
+    Step5Complete(Result<(HashMap<String, String>, Vec<(String, String)>), CopyError>),
+    Step6Complete(Result<(HashMap<String, String>, Vec<(String, String)>), CopyError>),
+    Step7Complete(Result<(HashMap<String, String>, Vec<(String, String)>), CopyError>),
+    Step8Complete(Result<(HashMap<String, String>, Vec<(String, String)>), CopyError>),
+    Step9Complete(Result<(HashMap<String, String>, Vec<(String, String)>), CopyError>),
+    Step10Complete(Result<(HashMap<String, String>, Vec<(String, String)>), CopyError>),
 
     // Screen 3: Results
     CopySuccess(CopyResult),
