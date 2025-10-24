@@ -12,6 +12,7 @@ pub mod autocomplete;
 pub mod panel;
 pub mod stack;
 pub mod color_picker;
+pub mod progress_bar;
 
 // Re-export all widget renderers
 pub use primitives::{render_primitive, is_primitive};
@@ -27,3 +28,4 @@ pub use autocomplete::render_autocomplete;
 pub use panel::render_panel;
 pub use stack::{render_stack, render_dim_overlay, calculate_layer_position};
 pub use color_picker::render_color_picker;
+pub use progress_bar::render_progress_bar;

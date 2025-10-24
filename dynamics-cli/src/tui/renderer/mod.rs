@@ -472,6 +472,11 @@ impl Renderer {
                 render_stack(frame, registry, focus_registry, dropdown_registry, focused_id, layers, area, inside_panel, Self::render_element, Self::estimate_element_size);
             }
 
+            Element::ProgressBar { .. } => {
+                let theme = &crate::global_runtime_config().theme;
+                render_progress_bar(frame, element, area, theme);
+            }
+
             // Primitives are handled at the top of the function
             Element::None | Element::Text { .. } | Element::StyledText { .. } => {
                 unreachable!("Primitives should be handled before the match statement")
@@ -580,6 +585,19 @@ impl Renderer {
                 (max_width, entry_count.min(max_height))
             }
             Element::ColorPicker { .. } => (max_width.min(50), 9),
+            Element::ProgressBar { label, show_percentage, show_count, width, .. } => {
+                // Calculate minimum width needed
+                let label_width = label.as_ref().map(|l| l.len() + 1).unwrap_or(0) as u16;
+                let status_width = match (*show_count, *show_percentage) {
+                    (true, true) => 20,  // "23/47 42%"
+                    (true, false) => 12, // "23/47"
+                    (false, true) => 6,  // "42%"
+                    (false, false) => 0,
+                };
+                let bar_width = width.unwrap_or(30);
+                let total_width = (label_width + bar_width + status_width).min(max_width);
+                (total_width, 1)
+            }
             Element::Stack { layers } => {
                 // Stack size is the max of all layers
                 let mut max_w = 0u16;
@@ -649,6 +667,10 @@ impl Renderer {
             Element::ColorPicker { .. } => {
                 // Color picker: fixed size (sliders + preview + hex)
                 (container.width.min(50), 9)
+            }
+            Element::ProgressBar { .. } => {
+                // Progress bar: full width, 1 line height
+                (container.width, 1)
             }
             _ => {
                 // Default: 50% of container

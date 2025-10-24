@@ -271,6 +271,16 @@ pub enum Element<Msg> {
         on_focus: Option<Msg>,
         on_blur: Option<Msg>,
     },
+
+    /// Progress bar showing completion (non-interactive)
+    ProgressBar {
+        current: usize,
+        total: usize,
+        label: Option<String>,
+        show_percentage: bool,
+        show_count: bool,
+        width: Option<u16>,
+    },
 }
 
 impl<Msg> Element<Msg> {
@@ -287,6 +297,19 @@ impl<Msg> Element<Msg> {
         StyledTextBuilder {
             line,
             background: None,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+
+    /// Create a progress bar element
+    pub fn progress_bar(current: usize, total: usize) -> ProgressBarBuilder<Msg> {
+        ProgressBarBuilder {
+            current,
+            total,
+            label: None,
+            show_percentage: true,
+            show_count: true,
+            width: None,
             _phantom: std::marker::PhantomData,
         }
     }
@@ -457,6 +480,7 @@ impl<Msg> Element<Msg> {
             Element::Autocomplete { .. } => LayoutConstraint::Length(1),  // Borderless like TextInput
             Element::FileBrowser { .. } => LayoutConstraint::Fill(1),  // Fill available space like List
             Element::ColorPicker { .. } => LayoutConstraint::Length(9),  // 3 sliders + hex + labels
+            Element::ProgressBar { .. } => LayoutConstraint::Length(1),  // Single line
         }
     }
 
