@@ -31,6 +31,7 @@ impl App for CopyQuestionnaireApp {
             questionnaire: Resource::Loading,
             tree_state: crate::tui::widgets::TreeState::with_selection(),
             copy_name_input,
+            copy_code_input: crate::tui::widgets::fields::TextInputField::new(),
         };
 
         // Load complete questionnaire snapshot - single task that loads everything sequentially
@@ -59,6 +60,16 @@ impl App for CopyQuestionnaireApp {
                 match result {
                     Ok(questionnaire) => {
                         log::info!("Successfully loaded questionnaire with {} total entities", questionnaire.total_entities());
+
+                        // Extract copypostfix from raw questionnaire data and populate copy_code_input
+                        if let Some(copypostfix) = questionnaire.raw.get("nrq_copypostfix")
+                            .and_then(|v| v.as_str()) {
+                            state.copy_code_input.set_value(copypostfix.to_string());
+                            log::debug!("Set copy code to: {}", copypostfix);
+                        } else {
+                            log::debug!("No copypostfix found in questionnaire");
+                        }
+
                         state.questionnaire = Resource::Success(questionnaire);
                     }
                     Err(e) => {
@@ -87,14 +98,21 @@ impl App for CopyQuestionnaireApp {
                 state.copy_name_input.handle_event(event, None);
                 Command::None
             }
+            Msg::CopyCodeInputEvent(event) => {
+                state.copy_code_input.handle_event(event, None);
+                Command::None
+            }
             Msg::Continue => {
                 // Navigate to push app with copy parameters
-                log::info!("Continuing to push app with copy name: {}", state.copy_name_input.value());
+                log::info!("Continuing to push app with copy name: {} and copy code: {}",
+                    state.copy_name_input.value(),
+                    state.copy_code_input.value());
                 Command::start_app(
                     AppId::PushQuestionnaire,
                     crate::tui::apps::copy_questionnaires::push::PushQuestionnaireParams {
                         questionnaire_id: state.questionnaire_id.clone(),
                         copy_name: state.copy_name_input.value().to_string(),
+                        copy_code: state.copy_code_input.value().to_string(),
                     }
                 )
             }

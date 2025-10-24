@@ -9,6 +9,7 @@ pub struct State {
     pub questionnaire: Resource<Questionnaire>,
     pub tree_state: TreeState,
     pub copy_name_input: TextInputField,
+    pub copy_code_input: TextInputField,
 }
 
 impl Default for State {
@@ -19,6 +20,7 @@ impl Default for State {
             questionnaire: Resource::NotAsked,
             tree_state: TreeState::with_selection(),
             copy_name_input: TextInputField::new(),
+            copy_code_input: TextInputField::new(),
         }
     }
 }
@@ -78,6 +80,7 @@ pub enum Msg {
     TreeNodeClicked(String), // Node clicked in tree
     ViewportHeight(usize),   // Called by renderer with actual area.height
     CopyNameInputEvent(crate::tui::widgets::TextInputEvent),
+    CopyCodeInputEvent(crate::tui::widgets::TextInputEvent),
     Continue,
     Back,
 }

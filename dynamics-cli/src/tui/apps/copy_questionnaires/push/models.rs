@@ -2,6 +2,7 @@
 pub struct State {
     pub questionnaire_id: String,
     pub copy_name: String,
+    pub copy_code: String,
 }
 
 impl Default for State {
@@ -9,6 +10,7 @@ impl Default for State {
         Self {
             questionnaire_id: String::new(),
             copy_name: String::new(),
+            copy_code: String::new(),
         }
     }
 }
@@ -21,6 +23,7 @@ pub enum Msg {
 pub struct PushQuestionnaireParams {
     pub questionnaire_id: String,
     pub copy_name: String,
+    pub copy_code: String,
 }
 
 impl Default for PushQuestionnaireParams {
@@ -28,6 +31,7 @@ impl Default for PushQuestionnaireParams {
         Self {
             questionnaire_id: String::new(),
             copy_name: String::new(),
+            copy_code: String::new(),
         }
     }
 }

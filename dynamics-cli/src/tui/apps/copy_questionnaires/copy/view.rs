@@ -6,7 +6,7 @@ use ratatui::{
     style::Style,
     prelude::Stylize,
 };
-use crate::{col, use_constraints};
+use crate::{col, row, use_constraints};
 
 pub fn render_view(state: &mut State) -> LayeredView<super::models::Msg> {
     let theme = &crate::global_runtime_config().theme;
@@ -44,28 +44,26 @@ fn render_snapshot_summary(
     let tree_items = build_snapshot_tree(questionnaire);
 
     col![
-        // Copy name input wrapped in panel
-        Element::panel(
-            Element::text_input("copy_name_input", state.copy_name_input.value(), &state.copy_name_input.state)
-                .on_event(super::Msg::CopyNameInputEvent)
-                .placeholder("Enter name for copy...")
-                .build()
-        )
-        .title("New Questionnaire Name")
-        .build() => Length(3),
-        Element::text("") => Length(1),
+        // Row with both inputs
+        row![
+            Element::panel(
+                Element::text_input("copy_name_input", state.copy_name_input.value(), &state.copy_name_input.state)
+                    .on_event(super::Msg::CopyNameInputEvent)
+                    .placeholder("Enter name for copy...")
+                    .build()
+            )
+            .title("New Questionnaire Name")
+            .build(),
 
-        // Header
-        Element::styled_text(Line::from(vec![
-            Span::styled("Source: ", Style::default().fg(theme.text_secondary)),
-            Span::styled(state.questionnaire_name.clone(), Style::default().fg(theme.text_primary).bold()),
-        ])).build() => Length(1),
-
-        // Total
-        Element::styled_text(Line::from(vec![
-            Span::styled(format!("Total: {} entities", questionnaire.total_entities()), Style::default().fg(theme.accent_success).bold()),
-        ])).build() => Length(1),
-        Element::text("") => Length(1),
+            Element::panel(
+                Element::text_input("copy_code_input", state.copy_code_input.value(), &state.copy_code_input.state)
+                    .on_event(super::Msg::CopyCodeInputEvent)
+                    .placeholder("Enter copy code...")
+                    .build()
+            )
+            .title("Copy Code")
+            .build(),
+        ] => Length(3),
 
         // Tree widget wrapped in panel
         Element::panel(
@@ -77,8 +75,6 @@ fn render_snapshot_summary(
         )
         .title("Questionnaire Structure")
         .build() => Fill(1),
-
-        Element::text("") => Length(1),
 
         // Continue button
         Element::button("continue_button", "Continue")

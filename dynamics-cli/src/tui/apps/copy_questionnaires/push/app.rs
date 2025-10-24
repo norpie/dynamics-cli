@@ -22,6 +22,7 @@ impl App for PushQuestionnaireApp {
         let state = State {
             questionnaire_id: params.questionnaire_id,
             copy_name: params.copy_name,
+            copy_code: params.copy_code,
         };
 
         (state, Command::None)

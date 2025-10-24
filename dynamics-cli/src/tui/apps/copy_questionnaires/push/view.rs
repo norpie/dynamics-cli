@@ -22,6 +22,10 @@ pub fn render_view(state: &State) -> LayeredView<super::models::Msg> {
             Span::styled("Copy Name: ", Style::default().fg(theme.text_secondary)),
             Span::styled(state.copy_name.clone(), Style::default().fg(theme.text_primary)),
         ])).build(),
+        Element::styled_text(Line::from(vec![
+            Span::styled("Copy Code: ", Style::default().fg(theme.text_secondary)),
+            Span::styled(state.copy_code.clone(), Style::default().fg(theme.text_primary)),
+        ])).build(),
         Element::text(""),
         Element::text("This is a stub. Copy implementation will go here."),
     ])
