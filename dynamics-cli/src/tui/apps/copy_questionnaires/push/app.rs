@@ -104,6 +104,7 @@ impl App for PushQuestionnaireApp {
             created_ids: Vec::new(),
             start_time: None,
             cancel_requested: false,
+            show_undo_confirmation: false,
         };
 
         (state, Command::None)
@@ -433,14 +434,28 @@ impl App for PushQuestionnaireApp {
             }
 
             Msg::UndoCopy => {
-                // User wants to rollback a successful copy
-                // Trigger the same rollback process used for failures
-                log::info!("User requested undo of successful copy");
+                // Show confirmation modal before undo
+                log::info!("Showing undo confirmation");
+                state.show_undo_confirmation = true;
+                Command::None
+            }
+
+            Msg::ConfirmUndo => {
+                // User confirmed undo - trigger rollback
+                log::info!("User confirmed undo of successful copy");
+                state.show_undo_confirmation = false;
                 let created_ids = state.created_ids.clone();
                 Command::perform(
                     super::step_commands::rollback_created_entities(created_ids),
                     Msg::RollbackComplete
                 )
+            }
+
+            Msg::CancelUndo => {
+                // User cancelled undo - hide confirmation
+                log::info!("User cancelled undo");
+                state.show_undo_confirmation = false;
+                Command::None
             }
 
             Msg::CancelCopy => {
@@ -472,12 +487,22 @@ impl App for PushQuestionnaireApp {
                 ]
             }
             PushState::Success(_) => {
-                vec![
-                    Subscription::keyboard(KeyCode::Enter, "Done", Msg::Done),
-                    Subscription::keyboard(KeyCode::Char('u'), "Undo Copy", Msg::UndoCopy),
-                    Subscription::keyboard(KeyCode::Char('c'), "Copy Another", Msg::CopyAnother),
-                    Subscription::keyboard(KeyCode::Char('v'), "View Copy", Msg::ViewCopy),
-                ]
+                if state.show_undo_confirmation {
+                    // Show y/n confirmation keys
+                    vec![
+                        Subscription::keyboard(KeyCode::Char('y'), "Yes, delete all", Msg::ConfirmUndo),
+                        Subscription::keyboard(KeyCode::Char('n'), "No, keep it", Msg::CancelUndo),
+                        Subscription::keyboard(KeyCode::Esc, "Cancel", Msg::CancelUndo),
+                    ]
+                } else {
+                    // Normal success screen keys
+                    vec![
+                        Subscription::keyboard(KeyCode::Enter, "Done", Msg::Done),
+                        Subscription::keyboard(KeyCode::Char('u'), "Undo Copy", Msg::UndoCopy),
+                        Subscription::keyboard(KeyCode::Char('c'), "Copy Another", Msg::CopyAnother),
+                        Subscription::keyboard(KeyCode::Char('v'), "View Copy", Msg::ViewCopy),
+                    ]
+                }
             }
             PushState::Failed(_) => {
                 vec![

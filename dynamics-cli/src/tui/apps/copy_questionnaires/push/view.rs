@@ -21,7 +21,15 @@ pub fn render_view(state: &State) -> LayeredView<super::models::Msg> {
         .title("Push Questionnaire")
         .build();
 
-    LayeredView::new(panel)
+    let mut view = LayeredView::new(panel);
+
+    // Show undo confirmation modal if flag is set
+    if state.show_undo_confirmation {
+        let modal = render_undo_confirmation_modal(theme);
+        view = view.with_app_modal(modal, crate::tui::Alignment::Center);
+    }
+
+    view
 }
 
 /// Screen 1: Confirmation - show summary before starting
@@ -470,4 +478,55 @@ pub fn render_status(state: &State) -> Option<Line<'static>> {
             ]))
         }
     }
+}
+
+/// Render undo confirmation modal
+fn render_undo_confirmation_modal(theme: &crate::tui::Theme) -> Element<super::models::Msg> {
+    let content = Element::column(vec![
+        Element::styled_text(Line::from(vec![
+            Span::styled("⚠ CONFIRM UNDO", Style::default().fg(theme.accent_error).bold()),
+        ])).build(),
+
+        spacer!(),
+
+        Element::styled_text(Line::from(vec![
+            Span::styled("This will DELETE all entities that were created during the copy:", Style::default().fg(theme.text_primary)),
+        ])).build(),
+
+        spacer!(),
+
+        Element::styled_text(Line::from(vec![
+            Span::styled("• The new questionnaire", Style::default().fg(theme.text_primary)),
+        ])).build(),
+
+        Element::styled_text(Line::from(vec![
+            Span::styled("• All pages, groups, and questions", Style::default().fg(theme.text_primary)),
+        ])).build(),
+
+        Element::styled_text(Line::from(vec![
+            Span::styled("• All conditions and classifications", Style::default().fg(theme.text_primary)),
+        ])).build(),
+
+        spacer!(),
+
+        Element::styled_text(Line::from(vec![
+            Span::styled("This action CANNOT be undone!", Style::default().fg(theme.accent_error).bold()),
+        ])).build(),
+
+        spacer!(),
+
+        Element::styled_text(Line::from(vec![
+            Span::styled("Are you sure you want to delete everything?", Style::default().fg(theme.text_primary)),
+        ])).build(),
+
+        spacer!(),
+
+        Element::styled_text(Line::from(vec![
+            Span::styled("[Y] Yes, delete all    [N] No, keep it    [Esc] Cancel", Style::default().fg(theme.text_secondary)),
+        ])).build(),
+    ]).build();
+
+    Element::panel(content)
+        .title("Confirm Undo")
+        .build()
 }

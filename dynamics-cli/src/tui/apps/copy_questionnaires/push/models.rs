@@ -17,6 +17,9 @@ pub struct State {
 
     // Cancellation flag
     pub cancel_requested: bool,
+
+    // Undo confirmation flag
+    pub show_undo_confirmation: bool,
 }
 
 impl Default for State {
@@ -49,6 +52,7 @@ impl Default for State {
             created_ids: Vec::new(),
             start_time: None,
             cancel_requested: false,
+            show_undo_confirmation: false,
         }
     }
 }
@@ -252,7 +256,9 @@ pub enum Msg {
     ViewLogs,
     Done,
     Back,
-    UndoCopy,  // Rollback a successful copy
+    UndoCopy,  // Show undo confirmation
+    ConfirmUndo,  // Actually rollback after confirmation
+    CancelUndo,  // Cancel the undo confirmation
     CancelCopy,  // Cancel during copy (triggers rollback)
 }
 
