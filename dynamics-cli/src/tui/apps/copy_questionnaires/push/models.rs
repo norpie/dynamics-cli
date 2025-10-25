@@ -239,7 +239,6 @@ pub enum Msg {
     CopyFailed(CopyError),
 
     // Rollback
-    StartRollback,
     RollbackComplete(bool),  // true if successful, false if failed
 
     // Actions
@@ -249,6 +248,7 @@ pub enum Msg {
     ViewLogs,
     Done,
     Back,
+    UndoCopy,  // Rollback a successful copy
 }
 
 pub struct PushQuestionnaireParams {

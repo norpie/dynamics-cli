@@ -156,11 +156,11 @@ pub async fn step1_create_questionnaire(
     let client_manager = crate::client_manager();
 
     let env_name = client_manager.get_current_environment_name().await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingQuestionnaire, 1))?
-        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingQuestionnaire, 1))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingQuestionnaire, 1, &[]))?
+        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingQuestionnaire, 1, &[]))?;
 
     let client = client_manager.get_client(&env_name).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingQuestionnaire, 1))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingQuestionnaire, 1, &[]))?;
 
     let resilience = ResilienceConfig::default();
 
@@ -180,18 +180,19 @@ pub async fn step1_create_questionnaire(
 
     let operations = Operations::new().create("nrq_questionnaires", data);
     let results = operations.execute(&client, &resilience).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingQuestionnaire, 1))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingQuestionnaire, 1, &[]))?;
 
     if !results[0].success {
         return Err(build_error(
             results[0].error.clone().unwrap_or_else(|| "Unknown error".to_string()),
             CopyPhase::CreatingQuestionnaire,
             1,
+            &[],
         ));
     }
 
     let new_id = extract_entity_id(&results[0])
-        .map_err(|e| build_error(format!("Failed to extract questionnaire ID: {}", e), CopyPhase::CreatingQuestionnaire, 1))?;
+        .map_err(|e| build_error(format!("Failed to extract questionnaire ID: {}", e), CopyPhase::CreatingQuestionnaire, 1, &[]))?;
 
     let created_ids = vec![("nrq_questionnaires".to_string(), new_id.clone())];
 
@@ -209,16 +210,16 @@ pub async fn step2_create_pages(
 
     let client_manager = crate::client_manager();
     let env_name = client_manager.get_current_environment_name().await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingPages, 2))?
-        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingPages, 2))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingPages, 2, &created_ids))?
+        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingPages, 2, &created_ids))?;
 
     let client = client_manager.get_client(&env_name).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingPages, 2))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingPages, 2, &created_ids))?;
 
     let resilience = ResilienceConfig::default();
 
     let new_questionnaire_id = id_map.get(&questionnaire.id)
-        .ok_or_else(|| build_error("Questionnaire ID not found in map".to_string(), CopyPhase::CreatingPages, 2))?;
+        .ok_or_else(|| build_error("Questionnaire ID not found in map".to_string(), CopyPhase::CreatingPages, 2, &created_ids))?;
 
     let shared_entities = get_shared_entities();
     let mut operations = Operations::new();
@@ -229,6 +230,7 @@ pub async fn step2_create_pages(
                 format!("Failed to remap page lookup fields: {}", e),
                 CopyPhase::CreatingPages,
                 2,
+                &created_ids,
             ))?;
         data["nrq_questionnaireid@odata.bind"] = json!(format!("/nrq_questionnaires({})", new_questionnaire_id));
 
@@ -245,7 +247,7 @@ pub async fn step2_create_pages(
     }
 
     let results = operations.execute(&client, &resilience).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingPages, 2))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingPages, 2, &created_ids))?;
 
     // Validate result count matches expected count
     if results.len() != questionnaire.pages.len() {
@@ -254,6 +256,7 @@ pub async fn step2_create_pages(
                 questionnaire.pages.len(), results.len()),
             CopyPhase::CreatingPages,
             2,
+            &created_ids,
         ));
     }
 
@@ -282,18 +285,41 @@ pub async fn step2_create_pages(
 
     // If any errors occurred, return error with ALL successful IDs tracked
     if let Some(error_msg) = first_error {
-        return Err(build_error(error_msg, CopyPhase::CreatingPages, 2));
+        return Err(build_error(error_msg, CopyPhase::CreatingPages, 2, &created_ids));
     }
 
     Ok((new_id_map, created_ids))
 }
 
-fn build_error(message: String, phase: CopyPhase, step: usize) -> CopyError {
+fn build_error(
+    message: String,
+    phase: CopyPhase,
+    step: usize,
+    created_ids: &[(String, String)],
+) -> CopyError {
+    // Calculate how many of each entity type were created before the error
+    let mut partial_counts = HashMap::new();
+    for (entity_set, _) in created_ids {
+        let friendly_name = match entity_set.as_str() {
+            "nrq_questionnaires" => "questionnaire",
+            "nrq_questionnairepages" => "pages",
+            "nrq_pagelines" => "page_lines",
+            "nrq_questiongroups" => "groups",
+            "nrq_grouplines" => "group_lines",
+            "nrq_questions" => "questions",
+            "nrq_templatelines" => "template_lines",
+            "nrq_conditions" => "conditions",
+            "nrq_conditionactions" => "condition_actions",
+            _ => entity_set.as_str(),  // Fallback for classifications
+        };
+        *partial_counts.entry(friendly_name.to_string()).or_insert(0) += 1;
+    }
+
     CopyError {
         error_message: message,
         phase,
         step,
-        partial_counts: HashMap::new(),
+        partial_counts,
         rollback_complete: false,
     }
 }
@@ -382,11 +408,11 @@ pub async fn step3_create_page_lines(
 
     let client_manager = crate::client_manager();
     let env_name = client_manager.get_current_environment_name().await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingPageLines, 3))?
-        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingPageLines, 3))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingPageLines, 3, &created_ids))?
+        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingPageLines, 3, &created_ids))?;
 
     let client = client_manager.get_client(&env_name).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingPageLines, 3))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingPageLines, 3, &created_ids))?;
 
     let resilience = ResilienceConfig::default();
     let shared_entities = get_shared_entities();
@@ -398,6 +424,7 @@ pub async fn step3_create_page_lines(
                 format!("Failed to remap page line lookup fields: {}", e),
                 CopyPhase::CreatingPageLines,
                 3,
+                &created_ids,
             ))?;
 
         if let Value::Object(ref mut map) = data {
@@ -413,7 +440,7 @@ pub async fn step3_create_page_lines(
     }
 
     let results = operations.execute(&client, &resilience).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingPageLines, 3))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingPageLines, 3, &created_ids))?;
 
     let mut first_error = None;
 
@@ -437,7 +464,7 @@ pub async fn step3_create_page_lines(
 
     // If any errors occurred, return error with ALL successful IDs tracked
     if let Some(error_msg) = first_error {
-        return Err(build_error(error_msg, CopyPhase::CreatingPageLines, 3));
+        return Err(build_error(error_msg, CopyPhase::CreatingPageLines, 3, &created_ids));
     }
 
     Ok((id_map, created_ids))
@@ -459,6 +486,7 @@ pub async fn step4_create_groups(
                     format!("Failed to remap group lookup fields: {}", e),
                     CopyPhase::CreatingGroups,
                     4,
+                    &created_ids,
                 ))?;
 
             if let Value::Object(ref mut map) = data {
@@ -481,15 +509,15 @@ pub async fn step4_create_groups(
 
     let client_manager = crate::client_manager();
     let env_name = client_manager.get_current_environment_name().await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingGroups, 4))?
-        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingGroups, 4))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingGroups, 4, &created_ids))?
+        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingGroups, 4, &created_ids))?;
 
     let client = client_manager.get_client(&env_name).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingGroups, 4))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingGroups, 4, &created_ids))?;
 
     let resilience = ResilienceConfig::default();
     let results = operations.execute(&client, &resilience).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingGroups, 4))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingGroups, 4, &created_ids))?;
 
     // Validate result count matches expected count
     if results.len() != all_groups.len() {
@@ -498,25 +526,35 @@ pub async fn step4_create_groups(
                 all_groups.len(), results.len()),
             CopyPhase::CreatingGroups,
             4,
+            &created_ids,
         ));
     }
 
     let mut new_id_map = id_map;
+    let mut first_error = None;
 
+    // Process ALL results, tracking successes even if some fail
     for (group, result) in all_groups.iter().zip(results.iter()) {
-        if !result.success {
-            return Err(build_error(
-                result.error.clone().unwrap_or_else(|| "Unknown error".to_string()),
-                CopyPhase::CreatingGroups,
-                4,
-            ));
+        if result.success {
+            match extract_entity_id(result) {
+                Ok(new_id) => {
+                    new_id_map.insert(group.id.clone(), new_id.clone());
+                    created_ids.push(("nrq_questiongroups".to_string(), new_id));
+                }
+                Err(e) => {
+                    if first_error.is_none() {
+                        first_error = Some(format!("Failed to extract group ID: {}", e));
+                    }
+                }
+            }
+        } else if first_error.is_none() {
+            first_error = Some(result.error.clone().unwrap_or_else(|| "Unknown error".to_string()));
         }
+    }
 
-        let new_id = extract_entity_id(result)
-            .map_err(|e| build_error(format!("Failed to extract group ID: {}", e), CopyPhase::CreatingGroups, 4))?;
-
-        new_id_map.insert(group.id.clone(), new_id.clone());
-        created_ids.push(("nrq_questiongroups".to_string(), new_id));
+    // If any errors occurred, return error with ALL successful IDs tracked
+    if let Some(error_msg) = first_error {
+        return Err(build_error(error_msg, CopyPhase::CreatingGroups, 4, &created_ids));
     }
 
     Ok((new_id_map, created_ids))
@@ -533,11 +571,11 @@ pub async fn step5_create_group_lines(
 
     let client_manager = crate::client_manager();
     let env_name = client_manager.get_current_environment_name().await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingGroupLines, 5))?
-        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingGroupLines, 5))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingGroupLines, 5, &created_ids))?
+        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingGroupLines, 5, &created_ids))?;
 
     let client = client_manager.get_client(&env_name).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingGroupLines, 5))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingGroupLines, 5, &created_ids))?;
 
     let resilience = ResilienceConfig::default();
     let shared_entities = get_shared_entities();
@@ -549,6 +587,7 @@ pub async fn step5_create_group_lines(
                 format!("Failed to remap group line lookup fields: {}", e),
                 CopyPhase::CreatingGroupLines,
                 5,
+                &created_ids,
             ))?;
 
         if let Value::Object(ref mut map) = data {
@@ -564,20 +603,31 @@ pub async fn step5_create_group_lines(
     }
 
     let results = operations.execute(&client, &resilience).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingGroupLines, 5))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingGroupLines, 5, &created_ids))?;
 
+    let mut first_error = None;
+
+    // Process ALL results, tracking successes even if some fail
     for result in &results {
-        if !result.success {
-            return Err(build_error(
-                result.error.clone().unwrap_or_else(|| "Unknown error".to_string()),
-                CopyPhase::CreatingGroupLines,
-                5,
-            ));
+        if result.success {
+            match extract_entity_id(result) {
+                Ok(new_id) => {
+                    created_ids.push(("nrq_questiongrouplines".to_string(), new_id));
+                }
+                Err(e) => {
+                    if first_error.is_none() {
+                        first_error = Some(format!("Failed to extract group line ID: {}", e));
+                    }
+                }
+            }
+        } else if first_error.is_none() {
+            first_error = Some(result.error.clone().unwrap_or_else(|| "Unknown error".to_string()));
         }
+    }
 
-        let new_id = extract_entity_id(result)
-            .map_err(|e| build_error(format!("Failed to extract group line ID: {}", e), CopyPhase::CreatingGroupLines, 5))?;
-        created_ids.push(("nrq_questiongrouplines".to_string(), new_id));
+    // If any errors occurred, return error with ALL successful IDs tracked
+    if let Some(error_msg) = first_error {
+        return Err(build_error(error_msg, CopyPhase::CreatingGroupLines, 5, &created_ids));
     }
 
     Ok((id_map, created_ids))
@@ -600,6 +650,7 @@ pub async fn step6_create_questions(
                         format!("Failed to remap question lookup fields: {}", e),
                         CopyPhase::CreatingQuestions,
                         6,
+                        &created_ids,
                     ))?;
 
                 if let Value::Object(ref mut map) = data {
@@ -623,15 +674,15 @@ pub async fn step6_create_questions(
 
     let client_manager = crate::client_manager();
     let env_name = client_manager.get_current_environment_name().await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingQuestions, 6))?
-        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingQuestions, 6))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingQuestions, 6, &created_ids))?
+        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingQuestions, 6, &created_ids))?;
 
     let client = client_manager.get_client(&env_name).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingQuestions, 6))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingQuestions, 6, &created_ids))?;
 
     let resilience = ResilienceConfig::default();
     let results = operations.execute(&client, &resilience).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingQuestions, 6))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingQuestions, 6, &created_ids))?;
 
     // Validate result count matches expected count
     if results.len() != all_questions.len() {
@@ -640,25 +691,35 @@ pub async fn step6_create_questions(
                 all_questions.len(), results.len()),
             CopyPhase::CreatingQuestions,
             6,
+            &created_ids,
         ));
     }
 
     let mut new_id_map = id_map;
+    let mut first_error = None;
 
+    // Process ALL results, tracking successes even if some fail
     for (question, result) in all_questions.iter().zip(results.iter()) {
-        if !result.success {
-            return Err(build_error(
-                result.error.clone().unwrap_or_else(|| "Unknown error".to_string()),
-                CopyPhase::CreatingQuestions,
-                6,
-            ));
+        if result.success {
+            match extract_entity_id(result) {
+                Ok(new_id) => {
+                    new_id_map.insert(question.id.clone(), new_id.clone());
+                    created_ids.push(("nrq_questions".to_string(), new_id));
+                }
+                Err(e) => {
+                    if first_error.is_none() {
+                        first_error = Some(format!("Failed to extract question ID: {}", e));
+                    }
+                }
+            }
+        } else if first_error.is_none() {
+            first_error = Some(result.error.clone().unwrap_or_else(|| "Unknown error".to_string()));
         }
+    }
 
-        let new_id = extract_entity_id(result)
-            .map_err(|e| build_error(format!("Failed to extract question ID: {}", e), CopyPhase::CreatingQuestions, 6))?;
-
-        new_id_map.insert(question.id.clone(), new_id.clone());
-        created_ids.push(("nrq_questions".to_string(), new_id));
+    // If any errors occurred, return error with ALL successful IDs tracked
+    if let Some(error_msg) = first_error {
+        return Err(build_error(error_msg, CopyPhase::CreatingQuestions, 6, &created_ids));
     }
 
     Ok((new_id_map, created_ids))
@@ -675,11 +736,11 @@ pub async fn step7_create_template_lines(
 
     let client_manager = crate::client_manager();
     let env_name = client_manager.get_current_environment_name().await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingTemplateLines, 7))?
-        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingTemplateLines, 7))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingTemplateLines, 7, &created_ids))?
+        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingTemplateLines, 7, &created_ids))?;
 
     let client = client_manager.get_client(&env_name).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingTemplateLines, 7))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingTemplateLines, 7, &created_ids))?;
 
     let resilience = ResilienceConfig::default();
     let shared_entities = get_shared_entities();
@@ -691,6 +752,7 @@ pub async fn step7_create_template_lines(
                 format!("Failed to remap template line lookup fields: {}", e),
                 CopyPhase::CreatingTemplateLines,
                 7,
+                &created_ids,
             ))?;
 
         if let Value::Object(ref mut map) = data {
@@ -706,20 +768,31 @@ pub async fn step7_create_template_lines(
     }
 
     let results = operations.execute(&client, &resilience).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingTemplateLines, 7))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingTemplateLines, 7, &created_ids))?;
 
+    let mut first_error = None;
+
+    // Process ALL results, tracking successes even if some fail
     for result in &results {
-        if !result.success {
-            return Err(build_error(
-                result.error.clone().unwrap_or_else(|| "Unknown error".to_string()),
-                CopyPhase::CreatingTemplateLines,
-                7,
-            ));
+        if result.success {
+            match extract_entity_id(result) {
+                Ok(new_id) => {
+                    created_ids.push(("nrq_questiontemplatetogrouplines".to_string(), new_id));
+                }
+                Err(e) => {
+                    if first_error.is_none() {
+                        first_error = Some(format!("Failed to extract template line ID: {}", e));
+                    }
+                }
+            }
+        } else if first_error.is_none() {
+            first_error = Some(result.error.clone().unwrap_or_else(|| "Unknown error".to_string()));
         }
+    }
 
-        let new_id = extract_entity_id(result)
-            .map_err(|e| build_error(format!("Failed to extract template line ID: {}", e), CopyPhase::CreatingTemplateLines, 7))?;
-        created_ids.push(("nrq_questiontemplatetogrouplines".to_string(), new_id));
+    // If any errors occurred, return error with ALL successful IDs tracked
+    if let Some(error_msg) = first_error {
+        return Err(build_error(error_msg, CopyPhase::CreatingTemplateLines, 7, &created_ids));
     }
 
     Ok((id_map, created_ids))
@@ -736,11 +809,11 @@ pub async fn step8_create_conditions(
 
     let client_manager = crate::client_manager();
     let env_name = client_manager.get_current_environment_name().await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingConditions, 8))?
-        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingConditions, 8))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingConditions, 8, &created_ids))?
+        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingConditions, 8, &created_ids))?;
 
     let client = client_manager.get_client(&env_name).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingConditions, 8))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingConditions, 8, &created_ids))?;
 
     let resilience = ResilienceConfig::default();
     let shared_entities = get_shared_entities();
@@ -752,6 +825,7 @@ pub async fn step8_create_conditions(
                 format!("Failed to remap condition lookup fields: {}", e),
                 CopyPhase::CreatingConditions,
                 8,
+                &created_ids,
             ))?;
 
         // CRITICAL: Remap condition JSON with embedded question IDs
@@ -761,6 +835,7 @@ pub async fn step8_create_conditions(
                     format!("Failed to remap condition JSON: {}", e),
                     CopyPhase::CreatingConditions,
                     8,
+                    &created_ids,
                 ))?;
             data["nrq_conditionjson"] = json!(remapped_json);
         }
@@ -778,7 +853,7 @@ pub async fn step8_create_conditions(
     }
 
     let results = operations.execute(&client, &resilience).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingConditions, 8))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingConditions, 8, &created_ids))?;
 
     // Validate result count matches expected count
     if results.len() != questionnaire.conditions.len() {
@@ -787,25 +862,35 @@ pub async fn step8_create_conditions(
                 questionnaire.conditions.len(), results.len()),
             CopyPhase::CreatingConditions,
             8,
+            &created_ids,
         ));
     }
 
     let mut new_id_map = id_map;
+    let mut first_error = None;
 
+    // Process ALL results, tracking successes even if some fail
     for (condition, result) in questionnaire.conditions.iter().zip(results.iter()) {
-        if !result.success {
-            return Err(build_error(
-                result.error.clone().unwrap_or_else(|| "Unknown error".to_string()),
-                CopyPhase::CreatingConditions,
-                8,
-            ));
+        if result.success {
+            match extract_entity_id(result) {
+                Ok(new_id) => {
+                    new_id_map.insert(condition.id.clone(), new_id.clone());
+                    created_ids.push(("nrq_questionconditions".to_string(), new_id));
+                }
+                Err(e) => {
+                    if first_error.is_none() {
+                        first_error = Some(format!("Failed to extract condition ID: {}", e));
+                    }
+                }
+            }
+        } else if first_error.is_none() {
+            first_error = Some(result.error.clone().unwrap_or_else(|| "Unknown error".to_string()));
         }
+    }
 
-        let new_id = extract_entity_id(result)
-            .map_err(|e| build_error(format!("Failed to extract condition ID: {}", e), CopyPhase::CreatingConditions, 8))?;
-
-        new_id_map.insert(condition.id.clone(), new_id.clone());
-        created_ids.push(("nrq_questionconditions".to_string(), new_id));
+    // If any errors occurred, return error with ALL successful IDs tracked
+    if let Some(error_msg) = first_error {
+        return Err(build_error(error_msg, CopyPhase::CreatingConditions, 8, &created_ids));
     }
 
     Ok((new_id_map, created_ids))
@@ -827,6 +912,7 @@ pub async fn step9_create_condition_actions(
                     format!("Failed to remap condition action lookup fields: {}", e),
                     CopyPhase::CreatingConditionActions,
                     9,
+                    &created_ids,
                 ))?;
 
             if let Value::Object(ref mut map) = data {
@@ -849,28 +935,39 @@ pub async fn step9_create_condition_actions(
 
     let client_manager = crate::client_manager();
     let env_name = client_manager.get_current_environment_name().await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingConditionActions, 9))?
-        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingConditionActions, 9))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingConditionActions, 9, &created_ids))?
+        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingConditionActions, 9, &created_ids))?;
 
     let client = client_manager.get_client(&env_name).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingConditionActions, 9))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingConditionActions, 9, &created_ids))?;
 
     let resilience = ResilienceConfig::default();
     let results = operations.execute(&client, &resilience).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingConditionActions, 9))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingConditionActions, 9, &created_ids))?;
 
+    let mut first_error = None;
+
+    // Process ALL results, tracking successes even if some fail
     for result in &results {
-        if !result.success {
-            return Err(build_error(
-                result.error.clone().unwrap_or_else(|| "Unknown error".to_string()),
-                CopyPhase::CreatingConditionActions,
-                9,
-            ));
+        if result.success {
+            match extract_entity_id(result) {
+                Ok(new_id) => {
+                    created_ids.push(("nrq_questionconditionactions".to_string(), new_id));
+                }
+                Err(e) => {
+                    if first_error.is_none() {
+                        first_error = Some(format!("Failed to extract condition action ID: {}", e));
+                    }
+                }
+            }
+        } else if first_error.is_none() {
+            first_error = Some(result.error.clone().unwrap_or_else(|| "Unknown error".to_string()));
         }
+    }
 
-        let new_id = extract_entity_id(result)
-            .map_err(|e| build_error(format!("Failed to extract condition action ID: {}", e), CopyPhase::CreatingConditionActions, 9))?;
-        created_ids.push(("nrq_questionconditionactions".to_string(), new_id));
+    // If any errors occurred, return error with ALL successful IDs tracked
+    if let Some(error_msg) = first_error {
+        return Err(build_error(error_msg, CopyPhase::CreatingConditionActions, 9, &created_ids));
     }
 
     Ok((id_map, created_ids))
@@ -882,7 +979,7 @@ pub async fn step10_create_classifications(
     mut created_ids: Vec<(String, String)>,
 ) -> Result<(HashMap<String, String>, Vec<(String, String)>), CopyError> {
     let new_questionnaire_id = id_map.get(&questionnaire.id)
-        .ok_or_else(|| build_error("Questionnaire ID not found in map".to_string(), CopyPhase::CreatingClassifications, 10))?;
+        .ok_or_else(|| build_error("Questionnaire ID not found in map".to_string(), CopyPhase::CreatingClassifications, 10, &created_ids))?;
 
     let mut operations = Operations::new();
     let mut classifications_count = 0;
@@ -970,28 +1067,31 @@ pub async fn step10_create_classifications(
 
     let client_manager = crate::client_manager();
     let env_name = client_manager.get_current_environment_name().await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingClassifications, 10))?
-        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingClassifications, 10))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingClassifications, 10, &created_ids))?
+        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingClassifications, 10, &created_ids))?;
 
     let client = client_manager.get_client(&env_name).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingClassifications, 10))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingClassifications, 10, &created_ids))?;
 
     let resilience = ResilienceConfig::default();
     let results = operations.execute(&client, &resilience).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingClassifications, 10))?;
+        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingClassifications, 10, &created_ids))?;
 
+    // Track errors but don't stop - we want to know if ANY associations failed
+    let mut first_error = None;
     for result in &results {
-        if !result.success {
-            return Err(build_error(
-                result.error.clone().unwrap_or_else(|| "Unknown error".to_string()),
-                CopyPhase::CreatingClassifications,
-                10,
-            ));
+        if !result.success && first_error.is_none() {
+            first_error = Some(result.error.clone().unwrap_or_else(|| "Unknown error".to_string()));
         }
     }
 
     // Note: AssociateRef operations don't create new entities, they just link existing ones
     // So we don't add anything to created_ids here
+
+    // If any errors occurred, return error (rollback will delete questionnaire which removes associations)
+    if let Some(error_msg) = first_error {
+        return Err(build_error(error_msg, CopyPhase::CreatingClassifications, 10, &created_ids));
+    }
 
     Ok((id_map, created_ids))
 }

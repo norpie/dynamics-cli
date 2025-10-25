@@ -347,9 +347,22 @@ impl App for PushQuestionnaireApp {
                             .cloned()
                             .unwrap_or_else(|| "unknown".to_string());
 
+                        // Map entity_set names to friendly names for UI display
                         let mut entities_created = HashMap::new();
                         for (entity_set, _) in &state.created_ids {
-                            *entities_created.entry(entity_set.clone()).or_insert(0) += 1;
+                            let friendly_name = match entity_set.as_str() {
+                                "nrq_questionnaires" => "questionnaire",
+                                "nrq_questionnairepages" => "pages",
+                                "nrq_pagelines" => "page_lines",
+                                "nrq_questiongroups" => "groups",
+                                "nrq_grouplines" => "group_lines",
+                                "nrq_questions" => "questions",
+                                "nrq_templatelines" => "template_lines",
+                                "nrq_conditions" => "conditions",
+                                "nrq_conditionactions" => "condition_actions",
+                                _ => entity_set.as_str(),  // Fallback for classifications
+                            };
+                            *entities_created.entry(friendly_name.to_string()).or_insert(0) += 1;
                         }
 
                         let total_entities = state.created_ids.len();
@@ -426,11 +439,6 @@ impl App for PushQuestionnaireApp {
                 Command::None
             }
 
-            Msg::StartRollback => {
-                // This message is not needed - rollback happens in error handlers
-                Command::None
-            }
-
             Msg::RollbackComplete(success) => {
                 // Update the error state with rollback status
                 if let PushState::Failed(ref mut error) = state.push_state {
@@ -484,6 +492,17 @@ impl App for PushQuestionnaireApp {
                 log::info!("View logs (not implemented)");
                 Command::None
             }
+
+            Msg::UndoCopy => {
+                // User wants to rollback a successful copy
+                // Trigger the same rollback process used for failures
+                log::info!("User requested undo of successful copy");
+                let created_ids = state.created_ids.clone();
+                Command::perform(
+                    super::step_commands::rollback_created_entities(created_ids),
+                    Msg::RollbackComplete
+                )
+            }
         }
     }
 
@@ -506,6 +525,7 @@ impl App for PushQuestionnaireApp {
             PushState::Success(_) => {
                 vec![
                     Subscription::keyboard(KeyCode::Enter, "Done", Msg::Done),
+                    Subscription::keyboard(KeyCode::Char('u'), "Undo Copy", Msg::UndoCopy),
                     Subscription::keyboard(KeyCode::Char('c'), "Copy Another", Msg::CopyAnother),
                     Subscription::keyboard(KeyCode::Char('v'), "View Copy", Msg::ViewCopy),
                 ]

@@ -329,9 +329,14 @@ fn render_success_screen(
             ])).build(),
         ]).build() => Fill(1),
 
-        Element::button("done_button", "Done")
-            .on_press(super::Msg::Done)
-            .build() => Length(3),
+        Element::row(vec![
+            Element::button("undo_button", "Undo Copy (Delete)")
+                .on_press(super::Msg::UndoCopy)
+                .build(),
+            Element::button("done_button", "Done")
+                .on_press(super::Msg::Done)
+                .build(),
+        ]).build() => Length(3),
     ]
 }
 
