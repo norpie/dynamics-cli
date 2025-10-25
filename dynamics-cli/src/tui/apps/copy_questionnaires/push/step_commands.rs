@@ -442,6 +442,17 @@ pub async fn step3_create_page_lines(
     let results = operations.execute(&client, &resilience).await
         .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingPageLines, 3, &created_ids))?;
 
+    // Validate result count matches expected count
+    if results.len() != questionnaire.page_lines.len() {
+        return Err(build_error(
+            format!("Result count mismatch: expected {} page lines, got {} results",
+                questionnaire.page_lines.len(), results.len()),
+            CopyPhase::CreatingPageLines,
+            3,
+            &created_ids,
+        ));
+    }
+
     let mut first_error = None;
 
     // Process ALL results, tracking successes even if some fail
@@ -604,6 +615,17 @@ pub async fn step5_create_group_lines(
 
     let results = operations.execute(&client, &resilience).await
         .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingGroupLines, 5, &created_ids))?;
+
+    // Validate result count matches expected count
+    if results.len() != questionnaire.group_lines.len() {
+        return Err(build_error(
+            format!("Result count mismatch: expected {} group lines, got {} results",
+                questionnaire.group_lines.len(), results.len()),
+            CopyPhase::CreatingGroupLines,
+            5,
+            &created_ids,
+        ));
+    }
 
     let mut first_error = None;
 
@@ -769,6 +791,17 @@ pub async fn step7_create_template_lines(
 
     let results = operations.execute(&client, &resilience).await
         .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingTemplateLines, 7, &created_ids))?;
+
+    // Validate result count matches expected count
+    if results.len() != questionnaire.template_lines.len() {
+        return Err(build_error(
+            format!("Result count mismatch: expected {} template lines, got {} results",
+                questionnaire.template_lines.len(), results.len()),
+            CopyPhase::CreatingTemplateLines,
+            7,
+            &created_ids,
+        ));
+    }
 
     let mut first_error = None;
 
@@ -945,6 +978,17 @@ pub async fn step9_create_condition_actions(
     let results = operations.execute(&client, &resilience).await
         .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingConditionActions, 9, &created_ids))?;
 
+    // Validate result count matches expected count
+    if results.len() != actions_count {
+        return Err(build_error(
+            format!("Result count mismatch: expected {} condition actions, got {} results",
+                actions_count, results.len()),
+            CopyPhase::CreatingConditionActions,
+            9,
+            &created_ids,
+        ));
+    }
+
     let mut first_error = None;
 
     // Process ALL results, tracking successes even if some fail
@@ -1076,6 +1120,17 @@ pub async fn step10_create_classifications(
     let resilience = ResilienceConfig::default();
     let results = operations.execute(&client, &resilience).await
         .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingClassifications, 10, &created_ids))?;
+
+    // Validate result count matches expected count
+    if results.len() != classifications_count {
+        return Err(build_error(
+            format!("Result count mismatch: expected {} classification associations, got {} results",
+                classifications_count, results.len()),
+            CopyPhase::CreatingClassifications,
+            10,
+            &created_ids,
+        ));
+    }
 
     // Track errors but don't stop - we want to know if ANY associations failed
     let mut first_error = None;
