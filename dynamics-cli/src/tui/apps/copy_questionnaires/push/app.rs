@@ -40,9 +40,28 @@ where
 
             // Update progress
             if let PushState::Copying(ref mut progress) = state.push_state {
-                progress.phase = next_phase;
+                progress.phase = next_phase.clone();
                 progress.step = next_step;
                 update_progress(progress);
+            }
+
+            // Check if cancellation was requested
+            if state.cancel_requested {
+                log::info!("Copy cancelled by user after step {}", next_step - 1);
+                let error = CopyError {
+                    phase: next_phase,
+                    step: next_step,
+                    error_message: "Copy cancelled by user".to_string(),
+                    partial_counts: HashMap::new(),
+                    rollback_complete: false,
+                };
+                state.push_state = PushState::Failed(error);
+                state.cancel_requested = false;
+                let created_ids = state.created_ids.clone();
+                return Command::perform(
+                    super::step_commands::rollback_created_entities(created_ids),
+                    Msg::RollbackComplete
+                );
             }
 
             // Start next step
@@ -84,6 +103,7 @@ impl App for PushQuestionnaireApp {
             id_map: HashMap::new(),
             created_ids: Vec::new(),
             start_time: None,
+            cancel_requested: false,
         };
 
         (state, Command::None)
@@ -116,6 +136,25 @@ impl App for PushQuestionnaireApp {
             Msg::Step1Complete(result) => {
                 match result {
                     Ok(new_q_id) => {
+                        // Check if cancellation was requested
+                        if state.cancel_requested {
+                            log::info!("Copy cancelled by user after step 1");
+                            let error = CopyError {
+                                phase: CopyPhase::CreatingPages,
+                                step: 2,
+                                error_message: "Copy cancelled by user".to_string(),
+                                partial_counts: HashMap::new(),
+                                rollback_complete: false,
+                            };
+                            state.push_state = PushState::Failed(error);
+                            state.cancel_requested = false;
+                            let created_ids = state.created_ids.clone();
+                            return Command::perform(
+                                super::step_commands::rollback_created_entities(created_ids),
+                                Msg::RollbackComplete
+                            );
+                        }
+
                         // Update id map and created_ids
                         state.id_map.insert(state.questionnaire_id.clone(), new_q_id.clone());
                         state.created_ids.push(("nrq_questionnaires".to_string(), new_q_id));
@@ -403,6 +442,15 @@ impl App for PushQuestionnaireApp {
                     Msg::RollbackComplete
                 )
             }
+
+            Msg::CancelCopy => {
+                // User pressed Esc during copy - set cancellation flag
+                log::info!("User requested copy cancellation");
+                state.cancel_requested = true;
+                // The actual cancellation will happen when the current operation completes
+                // and the next step handler checks this flag
+                Command::None
+            }
         }
     }
 
@@ -419,8 +467,9 @@ impl App for PushQuestionnaireApp {
                 ]
             }
             PushState::Copying(_) => {
-                // No user input during copy
-                vec![]
+                vec![
+                    Subscription::keyboard(KeyCode::Esc, "Cancel (will rollback)", Msg::CancelCopy),
+                ]
             }
             PushState::Success(_) => {
                 vec![

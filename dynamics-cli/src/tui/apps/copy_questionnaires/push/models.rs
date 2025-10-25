@@ -14,6 +14,9 @@ pub struct State {
     pub id_map: HashMap<String, String>,  // old_id -> new_id
     pub created_ids: Vec<(String, String)>,  // (entity_set, id) for rollback
     pub start_time: Option<std::time::Instant>,
+
+    // Cancellation flag
+    pub cancel_requested: bool,
 }
 
 impl Default for State {
@@ -45,6 +48,7 @@ impl Default for State {
             id_map: HashMap::new(),
             created_ids: Vec::new(),
             start_time: None,
+            cancel_requested: false,
         }
     }
 }
@@ -249,6 +253,7 @@ pub enum Msg {
     Done,
     Back,
     UndoCopy,  // Rollback a successful copy
+    CancelCopy,  // Cancel during copy (triggers rollback)
 }
 
 pub struct PushQuestionnaireParams {
