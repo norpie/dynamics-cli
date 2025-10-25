@@ -5,6 +5,7 @@ use ratatui::{
     text::{Line, Span},
     style::Style,
     prelude::Stylize,
+    layout::Constraint as LayoutConstraint,
 };
 use crate::{col, row, use_constraints};
 
@@ -43,44 +44,93 @@ fn render_snapshot_summary(
     // Build tree items from questionnaire
     let tree_items = build_snapshot_tree(questionnaire);
 
-    col![
-        // Row with both inputs
-        row![
+    if let Some(ref error) = state.validation_error {
+        // Show validation error
+        col![
+            // Row with both inputs
+            row![
+                Element::panel(
+                    Element::text_input("copy_name_input", state.copy_name_input.value(), &state.copy_name_input.state)
+                        .on_event(super::Msg::CopyNameInputEvent)
+                        .placeholder("Enter name for copy...")
+                        .build()
+                )
+                .title("New Questionnaire Name")
+                .build(),
+
+                Element::panel(
+                    Element::text_input("copy_code_input", state.copy_code_input.value(), &state.copy_code_input.state)
+                        .on_event(super::Msg::CopyCodeInputEvent)
+                        .placeholder("Enter copy code...")
+                        .build()
+                )
+                .title("Copy Code")
+                .build(),
+            ] => Length(3),
+
+            // Validation error
+            Element::styled_text(Line::from(vec![
+                Span::styled("⚠ Validation Error: ", Style::default().fg(theme.accent_error).bold()),
+                Span::styled(error.clone(), Style::default().fg(theme.text_primary)),
+            ])).build() => Length(1),
+
+            // Tree widget wrapped in panel
             Element::panel(
-                Element::text_input("copy_name_input", state.copy_name_input.value(), &state.copy_name_input.state)
-                    .on_event(super::Msg::CopyNameInputEvent)
-                    .placeholder("Enter name for copy...")
+                Element::tree("snapshot_tree", &tree_items, &mut state.tree_state, theme)
+                    .on_event(super::Msg::TreeEvent)
+                    .on_select(super::Msg::TreeNodeClicked)
+                    .on_render(super::Msg::ViewportHeight)
                     .build()
             )
-            .title("New Questionnaire Name")
-            .build(),
+            .title("Questionnaire Structure")
+            .build() => Fill(1),
 
+            // Continue button
+            Element::button("continue_button", "Continue")
+                .on_press(super::Msg::Continue)
+                .build() => Length(3),
+        ]
+    } else {
+        // No validation error
+        col![
+            // Row with both inputs
+            row![
+                Element::panel(
+                    Element::text_input("copy_name_input", state.copy_name_input.value(), &state.copy_name_input.state)
+                        .on_event(super::Msg::CopyNameInputEvent)
+                        .placeholder("Enter name for copy...")
+                        .build()
+                )
+                .title("New Questionnaire Name")
+                .build(),
+
+                Element::panel(
+                    Element::text_input("copy_code_input", state.copy_code_input.value(), &state.copy_code_input.state)
+                        .on_event(super::Msg::CopyCodeInputEvent)
+                        .placeholder("Enter copy code...")
+                        .build()
+                )
+                .title("Copy Code")
+                .build(),
+            ] => Length(3),
+
+            // Tree widget wrapped in panel
             Element::panel(
-                Element::text_input("copy_code_input", state.copy_code_input.value(), &state.copy_code_input.state)
-                    .on_event(super::Msg::CopyCodeInputEvent)
-                    .placeholder("Enter copy code...")
+                Element::tree("snapshot_tree", &tree_items, &mut state.tree_state, theme)
+                    .on_event(super::Msg::TreeEvent)
+                    .on_select(super::Msg::TreeNodeClicked)
+                    .on_render(super::Msg::ViewportHeight)
                     .build()
             )
-            .title("Copy Code")
-            .build(),
-        ] => Length(3),
+            .title("Questionnaire Structure")
+            .build() => Fill(1),
 
-        // Tree widget wrapped in panel
-        Element::panel(
-            Element::tree("snapshot_tree", &tree_items, &mut state.tree_state, theme)
-                .on_event(super::Msg::TreeEvent)
-                .on_select(super::Msg::TreeNodeClicked)
-                .on_render(super::Msg::ViewportHeight)
-                .build()
-        )
-        .title("Questionnaire Structure")
-        .build() => Fill(1),
-
-        // Continue button
-        Element::button("continue_button", "Continue")
-            .on_press(super::Msg::Continue)
-            .build() => Length(3),
-    ]
+            // Continue button
+            Element::button("continue_button", "Continue")
+                .on_press(super::Msg::Continue)
+                .build() => Length(3),
+        ]
+    }
 }
 
 fn render_error(err: &str, theme: &crate::tui::Theme) -> Element<super::models::Msg> {

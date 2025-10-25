@@ -10,6 +10,7 @@ pub struct State {
     pub tree_state: TreeState,
     pub copy_name_input: TextInputField,
     pub copy_code_input: TextInputField,
+    pub validation_error: Option<String>,
 }
 
 impl Default for State {
@@ -21,6 +22,7 @@ impl Default for State {
             tree_state: TreeState::with_selection(),
             copy_name_input: TextInputField::new(),
             copy_code_input: TextInputField::new(),
+            validation_error: None,
         }
     }
 }
