@@ -208,85 +208,53 @@ pub async fn step2_create_pages(
         return Ok((id_map, created_ids));
     }
 
-    let client_manager = crate::client_manager();
-    let env_name = client_manager.get_current_environment_name().await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingPages, 2, &created_ids))?
-        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingPages, 2, &created_ids))?;
+    let expected_count = questionnaire.pages.len();
+    let mut new_id_map = id_map.clone();
 
-    let client = client_manager.get_client(&env_name).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingPages, 2, &created_ids))?;
+    // Execute creation using generic helper
+    let (results, entity_info) = execute_creation_step(
+        questionnaire.clone(),
+        id_map,
+        &mut created_ids,
+        CopyPhase::CreatingPages,
+        2,
+        expected_count,
+        |q, id_map| {
+            let new_questionnaire_id = id_map.get(&q.id)
+                .ok_or_else(|| "Questionnaire ID not found in map".to_string())?;
 
-    let resilience = ResilienceConfig::default();
+            let shared_entities = get_shared_entities();
+            let mut operations = Operations::new();
+            let mut entity_info = Vec::new();
 
-    let new_questionnaire_id = id_map.get(&questionnaire.id)
-        .ok_or_else(|| build_error("Questionnaire ID not found in map".to_string(), CopyPhase::CreatingPages, 2, &created_ids))?;
+            for page in &q.pages {
+                let mut data = remap_lookup_fields(&page.raw, &id_map, &shared_entities)
+                    .map_err(|e| format!("Failed to remap page lookup fields: {}", e))?;
 
-    let shared_entities = get_shared_entities();
-    let mut operations = Operations::new();
+                data["nrq_questionnaireid@odata.bind"] = json!(format!("/nrq_questionnaires({})", new_questionnaire_id));
 
-    for page in &questionnaire.pages {
-        let mut data = remap_lookup_fields(&page.raw, &id_map, &shared_entities)
-            .map_err(|e| build_error(
-                format!("Failed to remap page lookup fields: {}", e),
-                CopyPhase::CreatingPages,
-                2,
-                &created_ids,
-            ))?;
-        data["nrq_questionnaireid@odata.bind"] = json!(format!("/nrq_questionnaires({})", new_questionnaire_id));
-
-        if let Value::Object(ref mut map) = data {
-            map.remove("nrq_questionnairepageid");
-            map.remove("createdon");
-            map.remove("modifiedon");
-            map.remove("_createdby_value");
-            map.remove("_modifiedby_value");
-            map.remove("versionnumber");
-        }
-
-        operations = operations.create("nrq_questionnairepages", data);
-    }
-
-    let results = operations.execute(&client, &resilience).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingPages, 2, &created_ids))?;
-
-    // Validate result count matches expected count
-    if results.len() != questionnaire.pages.len() {
-        return Err(build_error(
-            format!("Result count mismatch: expected {} pages, got {} results",
-                questionnaire.pages.len(), results.len()),
-            CopyPhase::CreatingPages,
-            2,
-            &created_ids,
-        ));
-    }
-
-    let mut new_id_map = id_map;
-    let mut first_error = None;
-
-    // Process ALL results, tracking successes even if some fail
-    for (page, result) in questionnaire.pages.iter().zip(results.iter()) {
-        if result.success {
-            // Track successful creations
-            match extract_entity_id(result) {
-                Ok(new_id) => {
-                    new_id_map.insert(page.id.clone(), new_id.clone());
-                    created_ids.push(("nrq_questionnairepages".to_string(), new_id));
+                if let Value::Object(ref mut map) = data {
+                    map.remove("nrq_questionnairepageid");
+                    map.remove("createdon");
+                    map.remove("modifiedon");
+                    map.remove("_createdby_value");
+                    map.remove("_modifiedby_value");
+                    map.remove("versionnumber");
                 }
-                Err(e) => {
-                    if first_error.is_none() {
-                        first_error = Some(format!("Failed to extract page ID: {}", e));
-                    }
-                }
+
+                operations = operations.create("nrq_questionnairepages", data);
+                entity_info.push(EntityInfo {
+                    old_id: Some(page.id.clone()),
+                    entity_set: "nrq_questionnairepages".to_string(),
+                });
             }
-        } else if first_error.is_none() {
-            first_error = Some(result.error.clone().unwrap_or_else(|| "Unknown error".to_string()));
-        }
-    }
 
-    // If any errors occurred, return error with ALL successful IDs tracked
-    if let Some(error_msg) = first_error {
-        return Err(build_error(error_msg, CopyPhase::CreatingPages, 2, &created_ids));
-    }
+            Ok((operations, entity_info))
+        }
+    ).await?;
+
+    // Process results using generic helper
+    process_creation_results(&results, entity_info, &mut new_id_map, &mut created_ids, CopyPhase::CreatingPages, 2)?;
 
     Ok((new_id_map, created_ids))
 }
@@ -322,6 +290,99 @@ fn build_error(
         partial_counts,
         rollback_complete: false,
     }
+}
+
+/// Metadata about an entity being created
+struct EntityInfo {
+    old_id: Option<String>,  // Original ID (for ID mapping), None if no mapping needed
+    entity_set: String,       // Entity set name for tracking
+}
+
+/// Generic helper for executing creation steps with common scaffolding
+/// This eliminates ~700 lines of duplication across steps 2-10
+async fn execute_creation_step<F>(
+    questionnaire: Questionnaire,
+    id_map: HashMap<String, String>,
+    created_ids: &mut Vec<(String, String)>,
+    phase: CopyPhase,
+    step: usize,
+    expected_count: usize,
+    build_operations: F,
+) -> Result<(Vec<crate::api::operations::OperationResult>, Vec<EntityInfo>), CopyError>
+where
+    F: FnOnce(Questionnaire, HashMap<String, String>) -> Result<(Operations, Vec<EntityInfo>), String>,
+{
+    // 1. Get client (common scaffolding)
+    let client_manager = crate::client_manager();
+    let env_name = client_manager.get_current_environment_name().await
+        .map_err(|e| build_error(e.to_string(), phase.clone(), step, created_ids))?
+        .ok_or_else(|| build_error("No environment selected".to_string(), phase.clone(), step, created_ids))?;
+
+    let client = client_manager.get_client(&env_name).await
+        .map_err(|e| build_error(e.to_string(), phase.clone(), step, created_ids))?;
+
+    let resilience = ResilienceConfig::default();
+
+    // 2. Build operations (unique per step)
+    let (operations, entity_info) = build_operations(questionnaire, id_map)
+        .map_err(|e| build_error(e, phase.clone(), step, created_ids))?;
+
+    // 3. Execute operations (common scaffolding)
+    let results = operations.execute(&client, &resilience).await
+        .map_err(|e| build_error(e.to_string(), phase.clone(), step, created_ids))?;
+
+    // 4. Validate result count (common scaffolding)
+    if results.len() != expected_count {
+        return Err(build_error(
+            format!("Result count mismatch: expected {} entities, got {} results", expected_count, results.len()),
+            phase,
+            step,
+            created_ids,
+        ));
+    }
+
+    Ok((results, entity_info))
+}
+
+/// Process results from creation operations - extracts IDs and handles errors
+fn process_creation_results(
+    results: &[crate::api::operations::OperationResult],
+    entity_info: Vec<EntityInfo>,
+    id_map: &mut HashMap<String, String>,
+    created_ids: &mut Vec<(String, String)>,
+    phase: CopyPhase,
+    step: usize,
+) -> Result<(), CopyError> {
+    let mut first_error = None;
+
+    // Process ALL results, tracking successes even if some fail
+    for (info, result) in entity_info.iter().zip(results.iter()) {
+        if result.success {
+            match extract_entity_id(result) {
+                Ok(new_id) => {
+                    // Update ID mapping if this entity has an old ID
+                    if let Some(ref old_id) = info.old_id {
+                        id_map.insert(old_id.clone(), new_id.clone());
+                    }
+                    created_ids.push((info.entity_set.clone(), new_id));
+                }
+                Err(e) => {
+                    if first_error.is_none() {
+                        first_error = Some(format!("Failed to extract entity ID: {}", e));
+                    }
+                }
+            }
+        } else if first_error.is_none() {
+            first_error = Some(result.error.clone().unwrap_or_else(|| "Unknown error".to_string()));
+        }
+    }
+
+    // If any errors occurred, return error with ALL successful IDs tracked
+    if let Some(error_msg) = first_error {
+        return Err(build_error(error_msg, phase, step, created_ids));
+    }
+
+    Ok(())
 }
 
 /// Rollback all created entities in reverse order
@@ -406,79 +467,48 @@ pub async fn step3_create_page_lines(
         return Ok((id_map, created_ids));
     }
 
-    let client_manager = crate::client_manager();
-    let env_name = client_manager.get_current_environment_name().await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingPageLines, 3, &created_ids))?
-        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingPageLines, 3, &created_ids))?;
+    let expected_count = questionnaire.page_lines.len();
+    let mut new_id_map = id_map.clone();
 
-    let client = client_manager.get_client(&env_name).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingPageLines, 3, &created_ids))?;
+    let (results, entity_info) = execute_creation_step(
+        questionnaire.clone(),
+        id_map,
+        &mut created_ids,
+        CopyPhase::CreatingPageLines,
+        3,
+        expected_count,
+        |q, id_map| {
+            let shared_entities = get_shared_entities();
+            let mut operations = Operations::new();
+            let mut entity_info = Vec::new();
 
-    let resilience = ResilienceConfig::default();
-    let shared_entities = get_shared_entities();
-    let mut operations = Operations::new();
+            for page_line in &q.page_lines {
+                let mut data = remap_lookup_fields(page_line, &id_map, &shared_entities)
+                    .map_err(|e| format!("Failed to remap page line lookup fields: {}", e))?;
 
-    for page_line in &questionnaire.page_lines {
-        let mut data = remap_lookup_fields(page_line, &id_map, &shared_entities)
-            .map_err(|e| build_error(
-                format!("Failed to remap page line lookup fields: {}", e),
-                CopyPhase::CreatingPageLines,
-                3,
-                &created_ids,
-            ))?;
-
-        if let Value::Object(ref mut map) = data {
-            map.remove("nrq_questionnairepagelineid");
-            map.remove("createdon");
-            map.remove("modifiedon");
-            map.remove("_createdby_value");
-            map.remove("_modifiedby_value");
-            map.remove("versionnumber");
-        }
-
-        operations = operations.create("nrq_questionnairepagelines", data);
-    }
-
-    let results = operations.execute(&client, &resilience).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingPageLines, 3, &created_ids))?;
-
-    // Validate result count matches expected count
-    if results.len() != questionnaire.page_lines.len() {
-        return Err(build_error(
-            format!("Result count mismatch: expected {} page lines, got {} results",
-                questionnaire.page_lines.len(), results.len()),
-            CopyPhase::CreatingPageLines,
-            3,
-            &created_ids,
-        ));
-    }
-
-    let mut first_error = None;
-
-    // Process ALL results, tracking successes even if some fail
-    for result in &results {
-        if result.success {
-            match extract_entity_id(result) {
-                Ok(new_id) => {
-                    created_ids.push(("nrq_questionnairepagelines".to_string(), new_id));
+                if let Value::Object(ref mut map) = data {
+                    map.remove("nrq_questionnairepagelineid");
+                    map.remove("createdon");
+                    map.remove("modifiedon");
+                    map.remove("_createdby_value");
+                    map.remove("_modifiedby_value");
+                    map.remove("versionnumber");
                 }
-                Err(e) => {
-                    if first_error.is_none() {
-                        first_error = Some(format!("Failed to extract page line ID: {}", e));
-                    }
-                }
+
+                operations = operations.create("nrq_questionnairepagelines", data);
+                entity_info.push(EntityInfo {
+                    old_id: None,  // No ID mapping needed for page lines
+                    entity_set: "nrq_questionnairepagelines".to_string(),
+                });
             }
-        } else if first_error.is_none() {
-            first_error = Some(result.error.clone().unwrap_or_else(|| "Unknown error".to_string()));
+
+            Ok((operations, entity_info))
         }
-    }
+    ).await?;
 
-    // If any errors occurred, return error with ALL successful IDs tracked
-    if let Some(error_msg) = first_error {
-        return Err(build_error(error_msg, CopyPhase::CreatingPageLines, 3, &created_ids));
-    }
+    process_creation_results(&results, entity_info, &mut new_id_map, &mut created_ids, CopyPhase::CreatingPageLines, 3)?;
 
-    Ok((id_map, created_ids))
+    Ok((new_id_map, created_ids))
 }
 
 pub async fn step4_create_groups(
@@ -486,87 +516,53 @@ pub async fn step4_create_groups(
     id_map: HashMap<String, String>,
     mut created_ids: Vec<(String, String)>,
 ) -> Result<(HashMap<String, String>, Vec<(String, String)>), CopyError> {
-    let shared_entities = get_shared_entities();
-    let mut operations = Operations::new();
-    let mut all_groups = Vec::new();
-
-    for page in &questionnaire.pages {
-        for group in &page.groups {
-            let mut data = remap_lookup_fields(&group.raw, &id_map, &shared_entities)
-                .map_err(|e| build_error(
-                    format!("Failed to remap group lookup fields: {}", e),
-                    CopyPhase::CreatingGroups,
-                    4,
-                    &created_ids,
-                ))?;
-
-            if let Value::Object(ref mut map) = data {
-                map.remove("nrq_questiongroupid");
-                map.remove("createdon");
-                map.remove("modifiedon");
-                map.remove("_createdby_value");
-                map.remove("_modifiedby_value");
-                map.remove("versionnumber");
-            }
-
-            operations = operations.create("nrq_questiongroups", data);
-            all_groups.push(group);
-        }
-    }
-
-    if all_groups.is_empty() {
+    // Count total groups across all pages
+    let groups_count: usize = questionnaire.pages.iter().map(|p| p.groups.len()).sum();
+    if groups_count == 0 {
         return Ok((id_map, created_ids));
     }
 
-    let client_manager = crate::client_manager();
-    let env_name = client_manager.get_current_environment_name().await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingGroups, 4, &created_ids))?
-        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingGroups, 4, &created_ids))?;
+    let mut new_id_map = id_map.clone();
 
-    let client = client_manager.get_client(&env_name).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingGroups, 4, &created_ids))?;
+    let (results, entity_info) = execute_creation_step(
+        questionnaire.clone(),
+        id_map,
+        &mut created_ids,
+        CopyPhase::CreatingGroups,
+        4,
+        groups_count,
+        |q, id_map| {
+            let shared_entities = get_shared_entities();
+            let mut operations = Operations::new();
+            let mut entity_info = Vec::new();
 
-    let resilience = ResilienceConfig::default();
-    let results = operations.execute(&client, &resilience).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingGroups, 4, &created_ids))?;
+            for page in &q.pages {
+                for group in &page.groups {
+                    let mut data = remap_lookup_fields(&group.raw, &id_map, &shared_entities)
+                        .map_err(|e| format!("Failed to remap group lookup fields: {}", e))?;
 
-    // Validate result count matches expected count
-    if results.len() != all_groups.len() {
-        return Err(build_error(
-            format!("Result count mismatch: expected {} groups, got {} results",
-                all_groups.len(), results.len()),
-            CopyPhase::CreatingGroups,
-            4,
-            &created_ids,
-        ));
-    }
-
-    let mut new_id_map = id_map;
-    let mut first_error = None;
-
-    // Process ALL results, tracking successes even if some fail
-    for (group, result) in all_groups.iter().zip(results.iter()) {
-        if result.success {
-            match extract_entity_id(result) {
-                Ok(new_id) => {
-                    new_id_map.insert(group.id.clone(), new_id.clone());
-                    created_ids.push(("nrq_questiongroups".to_string(), new_id));
-                }
-                Err(e) => {
-                    if first_error.is_none() {
-                        first_error = Some(format!("Failed to extract group ID: {}", e));
+                    if let Value::Object(ref mut map) = data {
+                        map.remove("nrq_questiongroupid");
+                        map.remove("createdon");
+                        map.remove("modifiedon");
+                        map.remove("_createdby_value");
+                        map.remove("_modifiedby_value");
+                        map.remove("versionnumber");
                     }
+
+                    operations = operations.create("nrq_questiongroups", data);
+                    entity_info.push(EntityInfo {
+                        old_id: Some(group.id.clone()),
+                        entity_set: "nrq_questiongroups".to_string(),
+                    });
                 }
             }
-        } else if first_error.is_none() {
-            first_error = Some(result.error.clone().unwrap_or_else(|| "Unknown error".to_string()));
-        }
-    }
 
-    // If any errors occurred, return error with ALL successful IDs tracked
-    if let Some(error_msg) = first_error {
-        return Err(build_error(error_msg, CopyPhase::CreatingGroups, 4, &created_ids));
-    }
+            Ok((operations, entity_info))
+        }
+    ).await?;
+
+    process_creation_results(&results, entity_info, &mut new_id_map, &mut created_ids, CopyPhase::CreatingGroups, 4)?;
 
     Ok((new_id_map, created_ids))
 }
@@ -580,103 +576,27 @@ pub async fn step5_create_group_lines(
         return Ok((id_map, created_ids));
     }
 
-    let client_manager = crate::client_manager();
-    let env_name = client_manager.get_current_environment_name().await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingGroupLines, 5, &created_ids))?
-        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingGroupLines, 5, &created_ids))?;
+    let expected_count = questionnaire.group_lines.len();
+    let mut new_id_map = id_map.clone();
 
-    let client = client_manager.get_client(&env_name).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingGroupLines, 5, &created_ids))?;
+    let (results, entity_info) = execute_creation_step(
+        questionnaire.clone(),
+        id_map,
+        &mut created_ids,
+        CopyPhase::CreatingGroupLines,
+        5,
+        expected_count,
+        |q, id_map| {
+            let shared_entities = get_shared_entities();
+            let mut operations = Operations::new();
+            let mut entity_info = Vec::new();
 
-    let resilience = ResilienceConfig::default();
-    let shared_entities = get_shared_entities();
-    let mut operations = Operations::new();
-
-    for group_line in &questionnaire.group_lines {
-        let mut data = remap_lookup_fields(group_line, &id_map, &shared_entities)
-            .map_err(|e| build_error(
-                format!("Failed to remap group line lookup fields: {}", e),
-                CopyPhase::CreatingGroupLines,
-                5,
-                &created_ids,
-            ))?;
-
-        if let Value::Object(ref mut map) = data {
-            map.remove("nrq_questiongrouplineid");
-            map.remove("createdon");
-            map.remove("modifiedon");
-            map.remove("_createdby_value");
-            map.remove("_modifiedby_value");
-            map.remove("versionnumber");
-        }
-
-        operations = operations.create("nrq_questiongrouplines", data);
-    }
-
-    let results = operations.execute(&client, &resilience).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingGroupLines, 5, &created_ids))?;
-
-    // Validate result count matches expected count
-    if results.len() != questionnaire.group_lines.len() {
-        return Err(build_error(
-            format!("Result count mismatch: expected {} group lines, got {} results",
-                questionnaire.group_lines.len(), results.len()),
-            CopyPhase::CreatingGroupLines,
-            5,
-            &created_ids,
-        ));
-    }
-
-    let mut first_error = None;
-
-    // Process ALL results, tracking successes even if some fail
-    for result in &results {
-        if result.success {
-            match extract_entity_id(result) {
-                Ok(new_id) => {
-                    created_ids.push(("nrq_questiongrouplines".to_string(), new_id));
-                }
-                Err(e) => {
-                    if first_error.is_none() {
-                        first_error = Some(format!("Failed to extract group line ID: {}", e));
-                    }
-                }
-            }
-        } else if first_error.is_none() {
-            first_error = Some(result.error.clone().unwrap_or_else(|| "Unknown error".to_string()));
-        }
-    }
-
-    // If any errors occurred, return error with ALL successful IDs tracked
-    if let Some(error_msg) = first_error {
-        return Err(build_error(error_msg, CopyPhase::CreatingGroupLines, 5, &created_ids));
-    }
-
-    Ok((id_map, created_ids))
-}
-
-pub async fn step6_create_questions(
-    questionnaire: Questionnaire,
-    id_map: HashMap<String, String>,
-    mut created_ids: Vec<(String, String)>,
-) -> Result<(HashMap<String, String>, Vec<(String, String)>), CopyError> {
-    let shared_entities = get_shared_entities();
-    let mut operations = Operations::new();
-    let mut all_questions = Vec::new();
-
-    for page in &questionnaire.pages {
-        for group in &page.groups {
-            for question in &group.questions {
-                let mut data = remap_lookup_fields(&question.raw, &id_map, &shared_entities)
-                    .map_err(|e| build_error(
-                        format!("Failed to remap question lookup fields: {}", e),
-                        CopyPhase::CreatingQuestions,
-                        6,
-                        &created_ids,
-                    ))?;
+            for group_line in &q.group_lines {
+                let mut data = remap_lookup_fields(group_line, &id_map, &shared_entities)
+                    .map_err(|e| format!("Failed to remap group line lookup fields: {}", e))?;
 
                 if let Value::Object(ref mut map) = data {
-                    map.remove("nrq_questionid");
+                    map.remove("nrq_questiongrouplineid");
                     map.remove("createdon");
                     map.remove("modifiedon");
                     map.remove("_createdby_value");
@@ -684,65 +604,79 @@ pub async fn step6_create_questions(
                     map.remove("versionnumber");
                 }
 
-                operations = operations.create("nrq_questions", data);
-                all_questions.push(question);
+                operations = operations.create("nrq_questiongrouplines", data);
+                entity_info.push(EntityInfo {
+                    old_id: None,  // No ID mapping needed for group lines
+                    entity_set: "nrq_questiongrouplines".to_string(),
+                });
             }
-        }
-    }
 
-    if all_questions.is_empty() {
+            Ok((operations, entity_info))
+        }
+    ).await?;
+
+    process_creation_results(&results, entity_info, &mut new_id_map, &mut created_ids, CopyPhase::CreatingGroupLines, 5)?;
+
+    Ok((new_id_map, created_ids))
+}
+
+pub async fn step6_create_questions(
+    questionnaire: Questionnaire,
+    id_map: HashMap<String, String>,
+    mut created_ids: Vec<(String, String)>,
+) -> Result<(HashMap<String, String>, Vec<(String, String)>), CopyError> {
+    // Count total questions across all pages and groups
+    let questions_count: usize = questionnaire.pages.iter()
+        .flat_map(|p| &p.groups)
+        .map(|g| g.questions.len())
+        .sum();
+    if questions_count == 0 {
         return Ok((id_map, created_ids));
     }
 
-    let client_manager = crate::client_manager();
-    let env_name = client_manager.get_current_environment_name().await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingQuestions, 6, &created_ids))?
-        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingQuestions, 6, &created_ids))?;
+    let mut new_id_map = id_map.clone();
 
-    let client = client_manager.get_client(&env_name).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingQuestions, 6, &created_ids))?;
+    let (results, entity_info) = execute_creation_step(
+        questionnaire.clone(),
+        id_map,
+        &mut created_ids,
+        CopyPhase::CreatingQuestions,
+        6,
+        questions_count,
+        |q, id_map| {
+            let shared_entities = get_shared_entities();
+            let mut operations = Operations::new();
+            let mut entity_info = Vec::new();
 
-    let resilience = ResilienceConfig::default();
-    let results = operations.execute(&client, &resilience).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingQuestions, 6, &created_ids))?;
+            for page in &q.pages {
+                for group in &page.groups {
+                    for question in &group.questions {
+                        let mut data = remap_lookup_fields(&question.raw, &id_map, &shared_entities)
+                            .map_err(|e| format!("Failed to remap question lookup fields: {}", e))?;
 
-    // Validate result count matches expected count
-    if results.len() != all_questions.len() {
-        return Err(build_error(
-            format!("Result count mismatch: expected {} questions, got {} results",
-                all_questions.len(), results.len()),
-            CopyPhase::CreatingQuestions,
-            6,
-            &created_ids,
-        ));
-    }
+                        if let Value::Object(ref mut map) = data {
+                            map.remove("nrq_questionid");
+                            map.remove("createdon");
+                            map.remove("modifiedon");
+                            map.remove("_createdby_value");
+                            map.remove("_modifiedby_value");
+                            map.remove("versionnumber");
+                        }
 
-    let mut new_id_map = id_map;
-    let mut first_error = None;
-
-    // Process ALL results, tracking successes even if some fail
-    for (question, result) in all_questions.iter().zip(results.iter()) {
-        if result.success {
-            match extract_entity_id(result) {
-                Ok(new_id) => {
-                    new_id_map.insert(question.id.clone(), new_id.clone());
-                    created_ids.push(("nrq_questions".to_string(), new_id));
-                }
-                Err(e) => {
-                    if first_error.is_none() {
-                        first_error = Some(format!("Failed to extract question ID: {}", e));
+                        operations = operations.create("nrq_questions", data);
+                        entity_info.push(EntityInfo {
+                            old_id: Some(question.id.clone()),
+                            entity_set: "nrq_questions".to_string(),
+                        });
                     }
                 }
             }
-        } else if first_error.is_none() {
-            first_error = Some(result.error.clone().unwrap_or_else(|| "Unknown error".to_string()));
-        }
-    }
 
-    // If any errors occurred, return error with ALL successful IDs tracked
-    if let Some(error_msg) = first_error {
-        return Err(build_error(error_msg, CopyPhase::CreatingQuestions, 6, &created_ids));
-    }
+            Ok((operations, entity_info))
+        }
+    ).await?;
+
+    process_creation_results(&results, entity_info, &mut new_id_map, &mut created_ids, CopyPhase::CreatingQuestions, 6)?;
 
     Ok((new_id_map, created_ids))
 }
@@ -756,79 +690,48 @@ pub async fn step7_create_template_lines(
         return Ok((id_map, created_ids));
     }
 
-    let client_manager = crate::client_manager();
-    let env_name = client_manager.get_current_environment_name().await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingTemplateLines, 7, &created_ids))?
-        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingTemplateLines, 7, &created_ids))?;
+    let expected_count = questionnaire.template_lines.len();
+    let mut new_id_map = id_map.clone();
 
-    let client = client_manager.get_client(&env_name).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingTemplateLines, 7, &created_ids))?;
+    let (results, entity_info) = execute_creation_step(
+        questionnaire.clone(),
+        id_map,
+        &mut created_ids,
+        CopyPhase::CreatingTemplateLines,
+        7,
+        expected_count,
+        |q, id_map| {
+            let shared_entities = get_shared_entities();
+            let mut operations = Operations::new();
+            let mut entity_info = Vec::new();
 
-    let resilience = ResilienceConfig::default();
-    let shared_entities = get_shared_entities();
-    let mut operations = Operations::new();
+            for template_line in &q.template_lines {
+                let mut data = remap_lookup_fields(&template_line.raw, &id_map, &shared_entities)
+                    .map_err(|e| format!("Failed to remap template line lookup fields: {}", e))?;
 
-    for template_line in &questionnaire.template_lines {
-        let mut data = remap_lookup_fields(&template_line.raw, &id_map, &shared_entities)
-            .map_err(|e| build_error(
-                format!("Failed to remap template line lookup fields: {}", e),
-                CopyPhase::CreatingTemplateLines,
-                7,
-                &created_ids,
-            ))?;
-
-        if let Value::Object(ref mut map) = data {
-            map.remove("nrq_questiontemplatetogrouplineid");
-            map.remove("createdon");
-            map.remove("modifiedon");
-            map.remove("_createdby_value");
-            map.remove("_modifiedby_value");
-            map.remove("versionnumber");
-        }
-
-        operations = operations.create("nrq_questiontemplatetogrouplines", data);
-    }
-
-    let results = operations.execute(&client, &resilience).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingTemplateLines, 7, &created_ids))?;
-
-    // Validate result count matches expected count
-    if results.len() != questionnaire.template_lines.len() {
-        return Err(build_error(
-            format!("Result count mismatch: expected {} template lines, got {} results",
-                questionnaire.template_lines.len(), results.len()),
-            CopyPhase::CreatingTemplateLines,
-            7,
-            &created_ids,
-        ));
-    }
-
-    let mut first_error = None;
-
-    // Process ALL results, tracking successes even if some fail
-    for result in &results {
-        if result.success {
-            match extract_entity_id(result) {
-                Ok(new_id) => {
-                    created_ids.push(("nrq_questiontemplatetogrouplines".to_string(), new_id));
+                if let Value::Object(ref mut map) = data {
+                    map.remove("nrq_questiontemplatetogrouplineid");
+                    map.remove("createdon");
+                    map.remove("modifiedon");
+                    map.remove("_createdby_value");
+                    map.remove("_modifiedby_value");
+                    map.remove("versionnumber");
                 }
-                Err(e) => {
-                    if first_error.is_none() {
-                        first_error = Some(format!("Failed to extract template line ID: {}", e));
-                    }
-                }
+
+                operations = operations.create("nrq_questiontemplatetogrouplines", data);
+                entity_info.push(EntityInfo {
+                    old_id: None,  // No ID mapping needed for template lines
+                    entity_set: "nrq_questiontemplatetogrouplines".to_string(),
+                });
             }
-        } else if first_error.is_none() {
-            first_error = Some(result.error.clone().unwrap_or_else(|| "Unknown error".to_string()));
+
+            Ok((operations, entity_info))
         }
-    }
+    ).await?;
 
-    // If any errors occurred, return error with ALL successful IDs tracked
-    if let Some(error_msg) = first_error {
-        return Err(build_error(error_msg, CopyPhase::CreatingTemplateLines, 7, &created_ids));
-    }
+    process_creation_results(&results, entity_info, &mut new_id_map, &mut created_ids, CopyPhase::CreatingTemplateLines, 7)?;
 
-    Ok((id_map, created_ids))
+    Ok((new_id_map, created_ids))
 }
 
 pub async fn step8_create_conditions(
@@ -840,91 +743,53 @@ pub async fn step8_create_conditions(
         return Ok((id_map, created_ids));
     }
 
-    let client_manager = crate::client_manager();
-    let env_name = client_manager.get_current_environment_name().await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingConditions, 8, &created_ids))?
-        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingConditions, 8, &created_ids))?;
+    let expected_count = questionnaire.conditions.len();
+    let mut new_id_map = id_map.clone();
 
-    let client = client_manager.get_client(&env_name).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingConditions, 8, &created_ids))?;
+    let (results, entity_info) = execute_creation_step(
+        questionnaire.clone(),
+        id_map,
+        &mut created_ids,
+        CopyPhase::CreatingConditions,
+        8,
+        expected_count,
+        |q, id_map| {
+            let shared_entities = get_shared_entities();
+            let mut operations = Operations::new();
+            let mut entity_info = Vec::new();
 
-    let resilience = ResilienceConfig::default();
-    let shared_entities = get_shared_entities();
-    let mut operations = Operations::new();
+            for condition in &q.conditions {
+                let mut data = remap_lookup_fields(&condition.raw, &id_map, &shared_entities)
+                    .map_err(|e| format!("Failed to remap condition lookup fields: {}", e))?;
 
-    for condition in &questionnaire.conditions {
-        let mut data = remap_lookup_fields(&condition.raw, &id_map, &shared_entities)
-            .map_err(|e| build_error(
-                format!("Failed to remap condition lookup fields: {}", e),
-                CopyPhase::CreatingConditions,
-                8,
-                &created_ids,
-            ))?;
-
-        // CRITICAL: Remap condition JSON with embedded question IDs
-        if let Some(condition_json_str) = condition.raw.get("nrq_conditionjson").and_then(|v| v.as_str()) {
-            let remapped_json = remap_condition_json(condition_json_str, &id_map)
-                .map_err(|e| build_error(
-                    format!("Failed to remap condition JSON: {}", e),
-                    CopyPhase::CreatingConditions,
-                    8,
-                    &created_ids,
-                ))?;
-            data["nrq_conditionjson"] = json!(remapped_json);
-        }
-
-        if let Value::Object(ref mut map) = data {
-            map.remove("nrq_questionconditionid");
-            map.remove("createdon");
-            map.remove("modifiedon");
-            map.remove("_createdby_value");
-            map.remove("_modifiedby_value");
-            map.remove("versionnumber");
-        }
-
-        operations = operations.create("nrq_questionconditions", data);
-    }
-
-    let results = operations.execute(&client, &resilience).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingConditions, 8, &created_ids))?;
-
-    // Validate result count matches expected count
-    if results.len() != questionnaire.conditions.len() {
-        return Err(build_error(
-            format!("Result count mismatch: expected {} conditions, got {} results",
-                questionnaire.conditions.len(), results.len()),
-            CopyPhase::CreatingConditions,
-            8,
-            &created_ids,
-        ));
-    }
-
-    let mut new_id_map = id_map;
-    let mut first_error = None;
-
-    // Process ALL results, tracking successes even if some fail
-    for (condition, result) in questionnaire.conditions.iter().zip(results.iter()) {
-        if result.success {
-            match extract_entity_id(result) {
-                Ok(new_id) => {
-                    new_id_map.insert(condition.id.clone(), new_id.clone());
-                    created_ids.push(("nrq_questionconditions".to_string(), new_id));
+                // CRITICAL: Remap condition JSON with embedded question IDs
+                if let Some(condition_json_str) = condition.raw.get("nrq_conditionjson").and_then(|v| v.as_str()) {
+                    let remapped_json = remap_condition_json(condition_json_str, &id_map)
+                        .map_err(|e| format!("Failed to remap condition JSON: {}", e))?;
+                    data["nrq_conditionjson"] = json!(remapped_json);
                 }
-                Err(e) => {
-                    if first_error.is_none() {
-                        first_error = Some(format!("Failed to extract condition ID: {}", e));
-                    }
+
+                if let Value::Object(ref mut map) = data {
+                    map.remove("nrq_questionconditionid");
+                    map.remove("createdon");
+                    map.remove("modifiedon");
+                    map.remove("_createdby_value");
+                    map.remove("_modifiedby_value");
+                    map.remove("versionnumber");
                 }
+
+                operations = operations.create("nrq_questionconditions", data);
+                entity_info.push(EntityInfo {
+                    old_id: Some(condition.id.clone()),
+                    entity_set: "nrq_questionconditions".to_string(),
+                });
             }
-        } else if first_error.is_none() {
-            first_error = Some(result.error.clone().unwrap_or_else(|| "Unknown error".to_string()));
-        }
-    }
 
-    // If any errors occurred, return error with ALL successful IDs tracked
-    if let Some(error_msg) = first_error {
-        return Err(build_error(error_msg, CopyPhase::CreatingConditions, 8, &created_ids));
-    }
+            Ok((operations, entity_info))
+        }
+    ).await?;
+
+    process_creation_results(&results, entity_info, &mut new_id_map, &mut created_ids, CopyPhase::CreatingConditions, 8)?;
 
     Ok((new_id_map, created_ids))
 }
@@ -934,87 +799,55 @@ pub async fn step9_create_condition_actions(
     id_map: HashMap<String, String>,
     mut created_ids: Vec<(String, String)>,
 ) -> Result<(HashMap<String, String>, Vec<(String, String)>), CopyError> {
-    let shared_entities = get_shared_entities();
-    let mut operations = Operations::new();
-    let mut actions_count = 0;
-
-    for condition in &questionnaire.conditions {
-        for action in &condition.actions {
-            let mut data = remap_lookup_fields(&action.raw, &id_map, &shared_entities)
-                .map_err(|e| build_error(
-                    format!("Failed to remap condition action lookup fields: {}", e),
-                    CopyPhase::CreatingConditionActions,
-                    9,
-                    &created_ids,
-                ))?;
-
-            if let Value::Object(ref mut map) = data {
-                map.remove("nrq_questionconditionactionid");
-                map.remove("createdon");
-                map.remove("modifiedon");
-                map.remove("_createdby_value");
-                map.remove("_modifiedby_value");
-                map.remove("versionnumber");
-            }
-
-            operations = operations.create("nrq_questionconditionactions", data);
-            actions_count += 1;
-        }
-    }
-
+    // Count total actions across all conditions
+    let actions_count: usize = questionnaire.conditions.iter().map(|c| c.actions.len()).sum();
     if actions_count == 0 {
         return Ok((id_map, created_ids));
     }
 
-    let client_manager = crate::client_manager();
-    let env_name = client_manager.get_current_environment_name().await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingConditionActions, 9, &created_ids))?
-        .ok_or_else(|| build_error("No environment selected".to_string(), CopyPhase::CreatingConditionActions, 9, &created_ids))?;
+    let mut new_id_map = id_map.clone();
 
-    let client = client_manager.get_client(&env_name).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingConditionActions, 9, &created_ids))?;
+    let (results, entity_info) = execute_creation_step(
+        questionnaire.clone(),
+        id_map,
+        &mut created_ids,
+        CopyPhase::CreatingConditionActions,
+        9,
+        actions_count,
+        |q, id_map| {
+            let shared_entities = get_shared_entities();
+            let mut operations = Operations::new();
+            let mut entity_info = Vec::new();
 
-    let resilience = ResilienceConfig::default();
-    let results = operations.execute(&client, &resilience).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingConditionActions, 9, &created_ids))?;
+            for condition in &q.conditions {
+                for action in &condition.actions {
+                    let mut data = remap_lookup_fields(&action.raw, &id_map, &shared_entities)
+                        .map_err(|e| format!("Failed to remap condition action lookup fields: {}", e))?;
 
-    // Validate result count matches expected count
-    if results.len() != actions_count {
-        return Err(build_error(
-            format!("Result count mismatch: expected {} condition actions, got {} results",
-                actions_count, results.len()),
-            CopyPhase::CreatingConditionActions,
-            9,
-            &created_ids,
-        ));
-    }
-
-    let mut first_error = None;
-
-    // Process ALL results, tracking successes even if some fail
-    for result in &results {
-        if result.success {
-            match extract_entity_id(result) {
-                Ok(new_id) => {
-                    created_ids.push(("nrq_questionconditionactions".to_string(), new_id));
-                }
-                Err(e) => {
-                    if first_error.is_none() {
-                        first_error = Some(format!("Failed to extract condition action ID: {}", e));
+                    if let Value::Object(ref mut map) = data {
+                        map.remove("nrq_questionconditionactionid");
+                        map.remove("createdon");
+                        map.remove("modifiedon");
+                        map.remove("_createdby_value");
+                        map.remove("_modifiedby_value");
+                        map.remove("versionnumber");
                     }
+
+                    operations = operations.create("nrq_questionconditionactions", data);
+                    entity_info.push(EntityInfo {
+                        old_id: None,  // No ID mapping needed for condition actions
+                        entity_set: "nrq_questionconditionactions".to_string(),
+                    });
                 }
             }
-        } else if first_error.is_none() {
-            first_error = Some(result.error.clone().unwrap_or_else(|| "Unknown error".to_string()));
+
+            Ok((operations, entity_info))
         }
-    }
+    ).await?;
 
-    // If any errors occurred, return error with ALL successful IDs tracked
-    if let Some(error_msg) = first_error {
-        return Err(build_error(error_msg, CopyPhase::CreatingConditionActions, 9, &created_ids));
-    }
+    process_creation_results(&results, entity_info, &mut new_id_map, &mut created_ids, CopyPhase::CreatingConditionActions, 9)?;
 
-    Ok((id_map, created_ids))
+    Ok((new_id_map, created_ids))
 }
 
 pub async fn step10_create_classifications(
