@@ -36,6 +36,9 @@ pub async fn step8_create_conditions(
             let mut entity_info = Vec::new();
 
             for condition in &q.conditions {
+                // DEBUG: Log source condition data
+                log::info!("Source condition: {}", serde_json::to_string_pretty(&condition.raw).unwrap_or_else(|_| format!("{:?}", condition.raw)));
+
                 let mut data = build_payload(&condition.raw, field_specs::CONDITION_FIELDS, &id_map, &shared_entities)
                     .map_err(|e| format!("Failed to build condition payload: {}", e))?;
 
@@ -45,6 +48,13 @@ pub async fn step8_create_conditions(
                         .map_err(|e| format!("Failed to remap condition JSON: {}", e))?;
                     data["nrq_conditionjson"] = json!(remapped_json);
                 }
+
+                // CRITICAL: Create condition in draft status (1) not published (170590001)
+                // Published status requires actions to exist first, which are created in Step 9
+                data["statuscode"] = json!(1);
+
+                // DEBUG: Log the payload being sent
+                log::info!("Condition payload: {}", serde_json::to_string_pretty(&data).unwrap_or_else(|_| format!("{:?}", data)));
 
                 operations = operations.create(entity_sets::CONDITIONS, data);
                 entity_info.push(EntityInfo {
