@@ -1,0 +1,179 @@
+/// Helper functions for data transformation and field manipulation
+
+use serde_json::{json, Value};
+use std::collections::{HashMap, HashSet};
+
+/// Get list of shared entity field names (not copied, referenced from existing entities)
+pub fn get_shared_entities() -> HashSet<&'static str> {
+    let mut set = HashSet::new();
+    set.insert("questiontemplateid");
+    set.insert("questiontagid");
+    set.insert("categoryid");
+    set.insert("domainid");
+    set.insert("fundid");
+    set.insert("supportid");
+    set.insert("typeid");
+    set.insert("subcategoryid");
+    set.insert("flemishshareid");
+    set
+}
+
+/// Remove system-managed fields from entity data before creation
+/// These fields are read-only and will be populated by Dynamics
+pub fn remove_system_fields(data: &mut Value, id_field: &str) {
+    if let Value::Object(map) = data {
+        // Remove primary key
+        map.remove(id_field);
+
+        // Remove system-managed fields
+        map.remove("createdon");
+        map.remove("modifiedon");
+        map.remove("_createdby_value");
+        map.remove("_modifiedby_value");
+        map.remove("versionnumber");
+    }
+}
+
+/// Convert entity set name to friendly display name for UI
+pub fn entity_set_to_friendly_name(entity_set: &str) -> &str {
+    match entity_set {
+        "nrq_questionnaires" => "questionnaire",
+        "nrq_questionnairepages" => "pages",
+        "nrq_pagelines" => "page_lines",
+        "nrq_questiongroups" => "groups",
+        "nrq_grouplines" => "group_lines",
+        "nrq_questions" => "questions",
+        "nrq_templatelines" => "template_lines",
+        "nrq_conditions" => "conditions",
+        "nrq_conditionactions" => "condition_actions",
+        _ => entity_set,  // Fallback for classifications and unknown types
+    }
+}
+
+/// Remap lookup fields from old entity IDs to new entity IDs
+/// Handles both copied entities (remapped) and shared entities (preserved)
+pub fn remap_lookup_fields(
+    raw_data: &Value,
+    id_map: &HashMap<String, String>,
+    shared_entities: &HashSet<&str>,
+) -> Result<Value, String> {
+    let mut data = raw_data.clone();
+
+    if let Value::Object(map) = &mut data {
+        let mut remapped_fields = Vec::new();
+
+        for (key, value) in map.iter() {
+            if key.starts_with('_') && key.ends_with("_value") {
+                if let Some(guid) = value.as_str() {
+                    let field_name = key.trim_start_matches('_').trim_end_matches("_value");
+                    let is_shared = shared_entities.iter().any(|&entity_field| field_name.contains(entity_field));
+
+                    let final_guid = if is_shared {
+                        guid.to_string()
+                    } else {
+                        // No fallback - error if mapping not found
+                        id_map.get(guid)
+                            .cloned()
+                            .ok_or_else(|| format!("ID mapping not found for GUID {} in field {}", guid, field_name))?
+                    };
+
+                    let entity_set = infer_entity_set_from_field(field_name)?;
+
+                    remapped_fields.push((
+                        key.clone(),
+                        format!("{}@odata.bind", field_name),
+                        format!("/{}({})", entity_set, final_guid),
+                    ));
+                }
+            }
+        }
+
+        for (old_key, new_key, new_value) in remapped_fields {
+            map.remove(&old_key);
+            map.insert(new_key, json!(new_value));
+        }
+    }
+
+    Ok(data)
+}
+
+/// Infer entity set name from field name pattern
+fn infer_entity_set_from_field(field_name: &str) -> Result<String, String> {
+    if field_name.contains("questionnaireid") {
+        Ok("nrq_questionnaires".to_string())
+    } else if field_name.contains("questionnairepageid") {
+        Ok("nrq_questionnairepages".to_string())
+    } else if field_name.contains("questiongroupid") {
+        Ok("nrq_questiongroups".to_string())
+    } else if field_name.contains("questiontemplateid") {
+        Ok("nrq_questiontemplates".to_string())
+    } else if field_name.contains("questiontagid") {
+        Ok("nrq_questiontags".to_string())
+    } else if field_name.contains("questionconditionid") {
+        Ok("nrq_questionconditions".to_string())
+    } else if field_name.contains("questionid") {
+        Ok("nrq_questions".to_string())
+    } else if field_name.contains("categoryid") {
+        Ok("nrq_categories".to_string())
+    } else if field_name.contains("domainid") {
+        Ok("nrq_domains".to_string())
+    } else if field_name.contains("fundid") {
+        Ok("nrq_funds".to_string())
+    } else if field_name.contains("supportid") {
+        Ok("nrq_supports".to_string())
+    } else if field_name.contains("typeid") {
+        Ok("nrq_types".to_string())
+    } else if field_name.contains("subcategoryid") {
+        Ok("nrq_subcategories".to_string())
+    } else if field_name.contains("flemishshareid") {
+        Ok("nrq_flemishshares".to_string())
+    } else {
+        Err(format!("Unknown entity field: {} - please add explicit mapping", field_name))
+    }
+}
+
+/// Remap question IDs embedded in condition JSON
+pub fn remap_condition_json(
+    condition_json_str: &str,
+    id_map: &HashMap<String, String>,
+) -> Result<String, String> {
+    let mut json: Value = serde_json::from_str(condition_json_str)
+        .map_err(|e| format!("Failed to parse condition JSON: {}", e))?;
+
+    // Remap root questionId - REQUIRED
+    if let Some(question_id) = json.get("questionId").and_then(|v| v.as_str()) {
+        let new_id = id_map.get(question_id)
+            .ok_or_else(|| format!("Question ID {} not found in mapping (root questionId)", question_id))?;
+        json["questionId"] = json!(new_id);
+    }
+
+    // Remap questions array - each is REQUIRED
+    if let Some(questions) = json.get_mut("questions").and_then(|v| v.as_array_mut()) {
+        for (idx, q) in questions.iter_mut().enumerate() {
+            if let Some(question_id) = q.get("questionId").and_then(|v| v.as_str()) {
+                let new_id = id_map.get(question_id)
+                    .ok_or_else(|| format!("Question ID {} not found in mapping (questions[{}])", question_id, idx))?;
+                q["questionId"] = json!(new_id);
+            }
+        }
+    }
+
+    serde_json::to_string(&json)
+        .map_err(|e| format!("Failed to serialize condition JSON: {}", e))
+}
+
+/// Extract entity ID from OData-EntityId header in operation result
+pub fn extract_entity_id(result: &crate::api::operations::OperationResult) -> Result<String, String> {
+    // Primary method: Extract from OData-EntityId header
+    if let Some(entity_id_url) = result.headers.get("OData-EntityId") {
+        if let Some(start) = entity_id_url.rfind('(') {
+            if let Some(end) = entity_id_url.rfind(')') {
+                return Ok(entity_id_url[start + 1..end].to_string());
+            }
+        }
+        return Err(format!("Failed to parse OData-EntityId header: {}", entity_id_url));
+    }
+
+    // No fallback - OData-EntityId header should always be present for Create operations
+    Err("No OData-EntityId header found in response - this should not happen for Create operations".to_string())
+}

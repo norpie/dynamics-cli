@@ -1,5 +1,6 @@
 use super::models::*;
 use super::view;
+use super::step_commands;
 use super::super::copy::domain::Questionnaire;
 use crate::tui::{
     app::App,
@@ -318,18 +319,7 @@ impl App for PushQuestionnaireApp {
                         // Map entity_set names to friendly names for UI display
                         let mut entities_created = HashMap::new();
                         for (entity_set, _) in &state.created_ids {
-                            let friendly_name = match entity_set.as_str() {
-                                "nrq_questionnaires" => "questionnaire",
-                                "nrq_questionnairepages" => "pages",
-                                "nrq_pagelines" => "page_lines",
-                                "nrq_questiongroups" => "groups",
-                                "nrq_grouplines" => "group_lines",
-                                "nrq_questions" => "questions",
-                                "nrq_templatelines" => "template_lines",
-                                "nrq_conditions" => "conditions",
-                                "nrq_conditionactions" => "condition_actions",
-                                _ => entity_set.as_str(),  // Fallback for classifications
-                            };
+                            let friendly_name = step_commands::entity_set_to_friendly_name(entity_set.as_str());
                             *entities_created.entry(friendly_name.to_string()).or_insert(0) += 1;
                         }
 
