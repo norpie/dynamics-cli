@@ -2,6 +2,7 @@
 
 use crate::api::{ResilienceConfig};
 use crate::api::operations::{Operation, Operations};
+use super::execution::BATCH_CHUNK_SIZE;
 use std::fs::File;
 use std::io::Write;
 
@@ -83,52 +84,84 @@ pub async fn rollback_created_entities(
         });
     }
 
-    // Execute batch delete
-    log::info!("Executing batch delete for {} entities", created_ids.len());
-    match operations.execute(&client, &resilience).await {
-        Ok(results) => {
-            log::debug!("Received {} deletion results", results.len());
+    // Execute batch delete with automatic chunking
+    let entity_count = created_ids.len();
+    let all_operations = operations.operations();
+    let mut results = Vec::with_capacity(entity_count);
 
-            let mut all_success = true;
-            let mut success_count = 0;
-            let mut failure_count = 0;
+    if entity_count > BATCH_CHUNK_SIZE {
+        log::info!("Chunking {} delete operations into batches of {}", entity_count, BATCH_CHUNK_SIZE);
 
-            for (idx, result) in results.iter().enumerate() {
-                let (entity_set, entity_id) = &created_ids[created_ids.len() - 1 - idx];
+        for (chunk_idx, chunk) in all_operations.chunks(BATCH_CHUNK_SIZE).enumerate() {
+            let chunk_ops = Operations::from_operations(chunk.to_vec());
 
-                if result.success {
-                    log::debug!("Deleted [{}/{}]: {} ({})", idx + 1, results.len(), entity_id, entity_set);
-                    success_count += 1;
-                } else {
-                    log::error!(
-                        "Failed to delete [{}/{}]: {} ({}) - {:?}",
-                        idx + 1,
-                        results.len(),
-                        entity_id,
-                        entity_set,
-                        result.error
-                    );
-                    all_success = false;
-                    failure_count += 1;
+            log::debug!("Executing rollback chunk {}/{} ({} operations)",
+                chunk_idx + 1,
+                (entity_count + BATCH_CHUNK_SIZE - 1) / BATCH_CHUNK_SIZE,
+                chunk.len());
+
+            match chunk_ops.execute(&client, &resilience).await {
+                Ok(chunk_results) => {
+                    results.extend(chunk_results);
+                }
+                Err(e) => {
+                    log::error!("Rollback chunk {} failed: {}", chunk_idx + 1, e);
+                    let csv_path = export_orphaned_entities_csv(&created_ids)
+                        .unwrap_or_else(|e| format!("(CSV export also failed: {})", e));
+                    return Err(csv_path);
                 }
             }
-
-            if all_success {
-                log::info!("Rollback completed successfully - deleted {} entities", created_ids.len());
-                Ok(())
-            } else {
-                log::warn!("Rollback partially failed: {} succeeded, {} failed", success_count, failure_count);
+        }
+    } else {
+        log::info!("Executing batch delete for {} entities", entity_count);
+        match operations.execute(&client, &resilience).await {
+            Ok(batch_results) => {
+                results = batch_results;
+            }
+            Err(e) => {
+                log::error!("Rollback batch operation failed: {}", e);
                 let csv_path = export_orphaned_entities_csv(&created_ids)
                     .unwrap_or_else(|e| format!("(CSV export also failed: {})", e));
-                log::error!("Orphaned entities exported to: {}", csv_path);
-                Err(csv_path)
+                return Err(csv_path);
             }
         }
-        Err(e) => {
-            log::error!("Rollback batch operation failed: {}", e);
-            let csv_path = export_orphaned_entities_csv(&created_ids)
-                .unwrap_or_else(|e| format!("(CSV export also failed: {})", e));
-            Err(csv_path)
+    }
+
+    // Process results
+    log::debug!("Received {} deletion results", results.len());
+
+    let mut all_success = true;
+    let mut success_count = 0;
+    let mut failure_count = 0;
+
+    for (idx, result) in results.iter().enumerate() {
+        let (entity_set, entity_id) = &created_ids[created_ids.len() - 1 - idx];
+
+        if result.success {
+            log::debug!("Deleted [{}/{}]: {} ({})", idx + 1, results.len(), entity_id, entity_set);
+            success_count += 1;
+        } else {
+            log::error!(
+                "Failed to delete [{}/{}]: {} ({}) - {:?}",
+                idx + 1,
+                results.len(),
+                entity_id,
+                entity_set,
+                result.error
+            );
+            all_success = false;
+            failure_count += 1;
         }
+    }
+
+    if all_success {
+        log::info!("Rollback completed successfully - deleted {} entities", created_ids.len());
+        Ok(())
+    } else {
+        log::warn!("Rollback partially failed: {} succeeded, {} failed", success_count, failure_count);
+        let csv_path = export_orphaned_entities_csv(&created_ids)
+            .unwrap_or_else(|e| format!("(CSV export also failed: {})", e));
+        log::error!("Orphaned entities exported to: {}", csv_path);
+        Err(csv_path)
     }
 }
