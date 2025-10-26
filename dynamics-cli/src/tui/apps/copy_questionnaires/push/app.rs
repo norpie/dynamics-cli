@@ -337,6 +337,7 @@ impl App for PushQuestionnaireApp {
                         if let PushState::Copying(progress) = &mut state.push_state {
                             progress.phase = CopyPhase::PublishingConditions;
                             progress.step = 11;
+                            progress.complete(EntityType::Classifications);
                         }
 
                         // Trigger step 11
@@ -365,6 +366,11 @@ impl App for PushQuestionnaireApp {
                     Ok((new_id_map, new_created_ids)) => {
                         state.id_map = new_id_map;
                         state.created_ids = new_created_ids;
+
+                        // Complete condition status updates progress
+                        if let PushState::Copying(progress) = &mut state.push_state {
+                            progress.complete(EntityType::ConditionStatusUpdates);
+                        }
 
                         // Calculate final statistics
                         let new_questionnaire_id = state.id_map.get(&state.questionnaire_id)

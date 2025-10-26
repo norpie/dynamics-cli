@@ -73,6 +73,7 @@ pub enum EntityType {
     Conditions,
     ConditionActions,
     Classifications,
+    ConditionStatusUpdates,
 }
 
 impl EntityType {
@@ -89,6 +90,7 @@ impl EntityType {
             EntityType::Conditions => "Conditions",
             EntityType::ConditionActions => "Condition Actions",
             EntityType::Classifications => "Classifications",
+            EntityType::ConditionStatusUpdates => "Condition Status Updates",
         }
     }
 }
@@ -162,6 +164,7 @@ impl CopyProgress {
         entity_progress.insert(EntityType::Conditions, (0, conditions_count));
         entity_progress.insert(EntityType::ConditionActions, (0, condition_actions_count));
         entity_progress.insert(EntityType::Classifications, (0, classifications_count));
+        entity_progress.insert(EntityType::ConditionStatusUpdates, (0, conditions_count));
 
         Self {
             phase: CopyPhase::CreatingQuestionnaire,
