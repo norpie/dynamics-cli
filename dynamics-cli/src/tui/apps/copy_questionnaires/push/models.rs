@@ -14,6 +14,7 @@ pub struct State {
     // Copy engine state (persists across steps)
     pub id_map: HashMap<String, String>,  // old_id -> new_id
     pub created_ids: Vec<(String, String)>,  // (entity_set, id) for rollback
+    pub classifications_associated: usize,  // Count of classification associations (not in created_ids since they're not entities)
     pub start_time: Option<std::time::Instant>,
 
     // Cancellation flag
@@ -51,6 +52,7 @@ impl Default for State {
             push_state: PushState::Confirming,
             id_map: HashMap::new(),
             created_ids: Vec::new(),
+            classifications_associated: 0,
             start_time: None,
             cancel_requested: false,
             show_undo_confirmation: false,
@@ -289,7 +291,7 @@ pub enum Msg {
     Step7Complete(Result<(HashMap<String, String>, Vec<(String, String)>), CopyError>),
     Step8Complete(Result<(HashMap<String, String>, Vec<(String, String)>), CopyError>),
     Step9Complete(Result<(HashMap<String, String>, Vec<(String, String)>), CopyError>),
-    Step10Complete(Result<(HashMap<String, String>, Vec<(String, String)>), CopyError>),
+    Step10Complete(Result<(HashMap<String, String>, Vec<(String, String)>, usize), CopyError>),
     Step11Complete(Result<(HashMap<String, String>, Vec<(String, String)>), CopyError>),
 
     // Screen 3: Results

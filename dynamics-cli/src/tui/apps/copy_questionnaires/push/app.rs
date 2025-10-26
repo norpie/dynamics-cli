@@ -105,6 +105,7 @@ impl App for PushQuestionnaireApp {
             push_state: PushState::Confirming,
             id_map: HashMap::new(),
             created_ids: Vec::new(),
+            classifications_associated: 0,
             start_time: None,
             cancel_requested: false,
             show_undo_confirmation: false,
@@ -292,31 +293,71 @@ impl App for PushQuestionnaireApp {
             }
 
             Msg::Step9Complete(result) => {
-                handle_step_complete(
-                    state,
-                    result,
-                    CopyPhase::CreatingClassifications,
-                    10,
-                    |progress| {
-                        progress.complete(EntityType::ConditionActions);
-                    },
-                    |q, id_map, created_ids| Box::pin(super::step_commands::step10_create_classifications(q, id_map, created_ids)),
-                    Msg::Step10Complete,
-                )
+                match result {
+                    Ok((new_id_map, new_created_ids)) => {
+                        state.id_map = new_id_map;
+                        state.created_ids = new_created_ids;
+
+                        // Update progress
+                        if let PushState::Copying(progress) = &mut state.push_state {
+                            progress.complete(EntityType::ConditionActions);
+                            progress.phase = CopyPhase::CreatingClassifications;
+                            progress.step = 10;
+                        }
+
+                        // Trigger step 10
+                        let questionnaire = Arc::clone(&state.questionnaire);
+                        let id_map = state.id_map.clone();
+                        let created_ids = state.created_ids.clone();
+                        Command::perform(
+                            super::step_commands::step10_create_classifications(questionnaire, id_map, created_ids),
+                            Msg::Step10Complete
+                        )
+                    }
+                    Err(error) => {
+                        state.push_state = PushState::Failed(error);
+                        // Trigger rollback of all created entities
+                        let created_ids = state.created_ids.clone();
+                        Command::perform(
+                            super::step_commands::rollback_created_entities(created_ids),
+                            Msg::RollbackComplete
+                        )
+                    }
+                }
             }
 
             Msg::Step10Complete(result) => {
-                handle_step_complete(
-                    state,
-                    result,
-                    CopyPhase::PublishingConditions,
-                    11,
-                    |_progress| {
-                        // No new entity type for publishing - just updating existing conditions
-                    },
-                    |q, id_map, created_ids| Box::pin(super::step_commands::step11_publish_conditions(q, id_map, created_ids)),
-                    Msg::Step11Complete,
-                )
+                match result {
+                    Ok((new_id_map, new_created_ids, classifications_count)) => {
+                        state.id_map = new_id_map;
+                        state.created_ids = new_created_ids;
+                        state.classifications_associated = classifications_count;
+
+                        // Update progress
+                        if let PushState::Copying(progress) = &mut state.push_state {
+                            progress.phase = CopyPhase::PublishingConditions;
+                            progress.step = 11;
+                        }
+
+                        // Trigger step 11
+                        let questionnaire = Arc::clone(&state.questionnaire);
+                        let id_map = state.id_map.clone();
+                        let created_ids = state.created_ids.clone();
+                        Command::perform(
+                            super::step_commands::step11_publish_conditions(questionnaire, id_map, created_ids),
+                            Msg::Step11Complete
+                        )
+                    }
+                    Err(error) => {
+                        state.push_state = PushState::Failed(error);
+                        // Trigger rollback of all created entities
+                        let created_ids = state.created_ids.clone();
+                        Command::perform(
+                            super::step_commands::rollback_created_entities(created_ids),
+                            Msg::RollbackComplete
+                        )
+                    }
+                }
             }
 
             Msg::Step11Complete(result) => {
@@ -337,7 +378,12 @@ impl App for PushQuestionnaireApp {
                             *entities_created.entry(friendly_name.to_string()).or_insert(0) += 1;
                         }
 
-                        let total_entities = state.created_ids.len();
+                        // Add classifications associated count (not in created_ids since they're associations, not entities)
+                        if state.classifications_associated > 0 {
+                            entities_created.insert("classifications".to_string(), state.classifications_associated);
+                        }
+
+                        let total_entities = state.created_ids.len() + state.classifications_associated;
                         let duration = state.start_time
                             .map(|t| t.elapsed())
                             .unwrap_or_default();

@@ -14,7 +14,7 @@ pub async fn step10_create_classifications(
     questionnaire: Arc<Questionnaire>,
     id_map: HashMap<String, String>,
     mut created_ids: Vec<(String, String)>,
-) -> Result<(HashMap<String, String>, Vec<(String, String)>), CopyError> {
+) -> Result<(HashMap<String, String>, Vec<(String, String)>, usize), CopyError> {
     let new_questionnaire_id = id_map.get(&questionnaire.id)
         .ok_or_else(|| build_error("Questionnaire ID not found in map".to_string(), CopyPhase::CreatingClassifications, 10, &created_ids))?;
 
@@ -99,7 +99,7 @@ pub async fn step10_create_classifications(
     }
 
     if classifications_count == 0 {
-        return Ok((id_map, created_ids));
+        return Ok((id_map, created_ids, 0));
     }
 
     let client_manager = crate::client_manager();
@@ -170,5 +170,5 @@ pub async fn step10_create_classifications(
         return Err(build_error(error_msg, CopyPhase::CreatingClassifications, 10, &created_ids));
     }
 
-    Ok((id_map, created_ids))
+    Ok((id_map, created_ids, classifications_count))
 }
