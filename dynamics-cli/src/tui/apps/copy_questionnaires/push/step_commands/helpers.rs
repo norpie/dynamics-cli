@@ -248,7 +248,7 @@ pub fn extract_entity_id(result: &crate::api::operations::OperationResult) -> Re
             .or_else(|| data.get("nrq_questiongroupid"))
             .or_else(|| data.get("nrq_questiongrouplineid"))
             .or_else(|| data.get("nrq_questionid"))
-            .or_else(|| data.get("nrq_questiontemplatetogrouplineid"))
+            .or_else(|| data.get("nrq_questiontemplatelineid"))
             .or_else(|| data.get("nrq_questionconditionid"))
             .or_else(|| data.get("nrq_questionconditionactionid"))
         {
