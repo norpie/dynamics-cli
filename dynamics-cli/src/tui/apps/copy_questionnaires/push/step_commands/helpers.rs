@@ -222,18 +222,41 @@ pub fn remap_condition_json(
         .map_err(|e| format!("Failed to serialize condition JSON: {}", e))
 }
 
-/// Extract entity ID from OData-EntityId header in operation result
+/// Extract entity ID from OData-EntityId header or response body
 pub fn extract_entity_id(result: &crate::api::operations::OperationResult) -> Result<String, String> {
-    // Primary method: Extract from OData-EntityId header
-    if let Some(entity_id_url) = result.headers.get("OData-EntityId") {
-        if let Some(start) = entity_id_url.rfind('(') {
-            if let Some(end) = entity_id_url.rfind(')') {
-                return Ok(entity_id_url[start + 1..end].to_string());
+    // Primary method: Extract from OData-EntityId or Location header
+    for (key, value) in &result.headers {
+        if key.eq_ignore_ascii_case("odata-entityid") || key.eq_ignore_ascii_case("location") {
+            // Format: /entityset(guid) or https://host/api/data/v9.2/entityset(guid)
+            if let Some(start) = value.rfind('(') {
+                if let Some(end) = value.rfind(')') {
+                    if end > start {
+                        return Ok(value[start + 1..end].to_string());
+                    }
+                }
             }
+            return Err(format!("Failed to parse {} header: {}", key, value));
         }
-        return Err(format!("Failed to parse OData-EntityId header: {}", entity_id_url));
     }
 
-    // No fallback - OData-EntityId header should always be present for Create operations
-    Err("No OData-EntityId header found in response - this should not happen for Create operations".to_string())
+    // Fallback: Try response body (when Prefer: return=representation is used)
+    if let Some(ref data) = result.data {
+        // Try common questionnaire entity ID fields
+        if let Some(id_value) = data.get("nrq_questionnaireid")
+            .or_else(|| data.get("nrq_questionnairepageid"))
+            .or_else(|| data.get("nrq_questionnairepagelineid"))
+            .or_else(|| data.get("nrq_questiongroupid"))
+            .or_else(|| data.get("nrq_questiongrouplineid"))
+            .or_else(|| data.get("nrq_questionid"))
+            .or_else(|| data.get("nrq_questiontemplatetogrouplineid"))
+            .or_else(|| data.get("nrq_questionconditionid"))
+            .or_else(|| data.get("nrq_questionconditionactionid"))
+        {
+            if let Some(guid_str) = id_value.as_str() {
+                return Ok(guid_str.to_string());
+            }
+        }
+    }
+
+    Err("No OData-EntityId header or ID field found in response body".to_string())
 }
