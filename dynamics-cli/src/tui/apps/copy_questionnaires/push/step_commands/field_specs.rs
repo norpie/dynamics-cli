@@ -135,8 +135,8 @@ pub const QUESTION_FIELDS: &[FieldSpec] = &[
 /// Step 7: Template Line fields
 pub const TEMPLATE_LINE_FIELDS: &[FieldSpec] = &[
     // Pure junction entity - only lookups
-    lookup_field!("_nrq_questiontemplateid_value", "nrq_questiontemplateid", "nrq_questiontemplates"),
-    lookup_field!("_nrq_questiongroupid_value", "nrq_questiongroupid", "nrq_questiongroups"),
+    lookup_field!("_nrq_questiontemplateid_value", "nrq_QuestionTemplateId", "nrq_questiontemplates"),
+    lookup_field!("_nrq_questiongroupid_value", "nrq_QuestionGroupid", "nrq_questiongroups"),
 ];
 
 /// Step 8: Condition fields

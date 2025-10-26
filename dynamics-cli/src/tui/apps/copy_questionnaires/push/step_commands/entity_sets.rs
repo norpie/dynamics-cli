@@ -9,7 +9,7 @@ pub const PAGE_LINES: &str = "nrq_questionnairepagelines";
 pub const GROUPS: &str = "nrq_questiongroups";
 pub const GROUP_LINES: &str = "nrq_questiongrouplines";
 pub const QUESTIONS: &str = "nrq_questions";
-pub const TEMPLATE_LINES: &str = "nrq_questiontemplatetogrouplines";
+pub const TEMPLATE_LINES: &str = "nrq_questiontemplatelines";
 pub const CONDITIONS: &str = "nrq_questionconditions";
 pub const CONDITION_ACTIONS: &str = "nrq_questionconditionactions";
 
