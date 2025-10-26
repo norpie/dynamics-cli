@@ -427,6 +427,21 @@ impl App for PushQuestionnaireApp {
                 // User confirmed undo - trigger rollback
                 log::info!("User confirmed undo of successful copy");
                 state.show_undo_confirmation = false;
+
+                // Transition to Failed state to show rollback progress
+                // (Quick hack: reuse the failure UI which has rollback tracking)
+                if let PushState::Success(result) = &state.push_state {
+                    let synthetic_error = CopyError {
+                        phase: CopyPhase::CreatingClassifications, // Last phase
+                        step: 10,
+                        error_message: "Manual undo requested by user".to_string(),
+                        partial_counts: result.entities_created.clone(),
+                        rollback_complete: false,  // Will be set by RollbackComplete
+                        orphaned_entities_csv: None,
+                    };
+                    state.push_state = PushState::Failed(synthetic_error);
+                }
+
                 let created_ids = state.created_ids.clone();
                 Command::perform(
                     super::step_commands::rollback_created_entities(created_ids),
