@@ -81,8 +81,8 @@ pub const PAGE_LINE_FIELDS: &[FieldSpec] = &[
     value_field!("nrq_editablerequeststatusses"),
     value_field!("nrq_visibleinstatusses"),
 
-    lookup_field!("_nrq_questionnaireid_value", "nrq_questionnaireid", "nrq_questionnaires"),
-    lookup_field!("_nrq_questionnairepageid_value", "nrq_questionnairepageid", "nrq_questionnairepages"),
+    lookup_field!("_nrq_questionnaireid_value", "nrq_QuestionnaireId", "nrq_questionnaires"),
+    lookup_field!("_nrq_questionnairepageid_value", "nrq_QuestionnairepageId", "nrq_questionnairepages"),
 ];
 
 /// Step 4: Group fields
@@ -99,8 +99,8 @@ pub const GROUP_LINE_FIELDS: &[FieldSpec] = &[
     value_field!("nrq_code"),
     value_field!("nrq_order"),
 
-    lookup_field!("_nrq_questiongroupid_value", "nrq_questiongroupid", "nrq_questiongroups"),
-    lookup_field!("_nrq_questionnairepageid_value", "nrq_questionnairepageid", "nrq_questionnairepages"),
+    lookup_field!("_nrq_questiongroupid_value", "nrq_QuestionGroupId", "nrq_questiongroups"),
+    lookup_field!("_nrq_questionnairepageid_value", "nrq_QuestionnairePageId", "nrq_questionnairepages"),
 ];
 
 /// Step 6: Question fields (largest entity)
@@ -125,10 +125,10 @@ pub const QUESTION_FIELDS: &[FieldSpec] = &[
     value_field!("nrq_versionnumber"),
 
     // Lookup fields
-    lookup_field!("_nrq_questiongroupid_value", "nrq_questiongroupid", "nrq_questiongroups"),
-    lookup_field!("_nrq_questionnaireid_value", "nrq_questionnaireid", "nrq_questionnaires"),
-    lookup_field!("_nrq_questiontagid_value", "nrq_questiontagid", "nrq_questiontags"),
-    lookup_field!("_nrq_questiontemplateid_value", "nrq_questiontemplateid", "nrq_questiontemplates"),
+    lookup_field!("_nrq_questiongroupid_value", "nrq_QuestionGroupid", "nrq_questiongroups"),
+    lookup_field!("_nrq_questionnaireid_value", "nrq_QuestionnaireId", "nrq_questionnaires"),
+    lookup_field!("_nrq_questiontagid_value", "nrq_QuestionTagId", "nrq_questiontags"),
+    lookup_field!("_nrq_questiontemplateid_value", "nrq_QuestionTemplateId", "nrq_questiontemplates"),
     lookup_field!("_nrq_contactrole_value", "nrq_contactrole", "contactroles"),
 ];
 
