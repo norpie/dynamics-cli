@@ -1,5 +1,6 @@
 /// Helper functions for data transformation and field manipulation
 
+use super::entity_sets;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 
@@ -37,15 +38,15 @@ pub fn remove_system_fields(data: &mut Value, id_field: &str) {
 /// Convert entity set name to friendly display name for UI
 pub fn entity_set_to_friendly_name(entity_set: &str) -> &str {
     match entity_set {
-        "nrq_questionnaires" => "questionnaire",
-        "nrq_questionnairepages" => "pages",
-        "nrq_pagelines" => "page_lines",
-        "nrq_questiongroups" => "groups",
-        "nrq_grouplines" => "group_lines",
-        "nrq_questions" => "questions",
-        "nrq_templatelines" => "template_lines",
-        "nrq_conditions" => "conditions",
-        "nrq_conditionactions" => "condition_actions",
+        entity_sets::QUESTIONNAIRES => "questionnaire",
+        entity_sets::PAGES => "pages",
+        entity_sets::PAGE_LINES => "page_lines",
+        entity_sets::GROUPS => "groups",
+        entity_sets::GROUP_LINES => "group_lines",
+        entity_sets::QUESTIONS => "questions",
+        entity_sets::TEMPLATE_LINES => "template_lines",
+        entity_sets::CONDITIONS => "conditions",
+        entity_sets::CONDITION_ACTIONS => "condition_actions",
         _ => entity_set,  // Fallback for classifications and unknown types
     }
 }
@@ -100,33 +101,33 @@ pub fn remap_lookup_fields(
 /// Infer entity set name from field name pattern
 fn infer_entity_set_from_field(field_name: &str) -> Result<String, String> {
     if field_name.contains("questionnaireid") {
-        Ok("nrq_questionnaires".to_string())
+        Ok(entity_sets::QUESTIONNAIRES.to_string())
     } else if field_name.contains("questionnairepageid") {
-        Ok("nrq_questionnairepages".to_string())
+        Ok(entity_sets::PAGES.to_string())
     } else if field_name.contains("questiongroupid") {
-        Ok("nrq_questiongroups".to_string())
+        Ok(entity_sets::GROUPS.to_string())
     } else if field_name.contains("questiontemplateid") {
-        Ok("nrq_questiontemplates".to_string())
+        Ok(entity_sets::TEMPLATES.to_string())
     } else if field_name.contains("questiontagid") {
-        Ok("nrq_questiontags".to_string())
+        Ok(entity_sets::TAGS.to_string())
     } else if field_name.contains("questionconditionid") {
-        Ok("nrq_questionconditions".to_string())
+        Ok(entity_sets::CONDITIONS.to_string())
     } else if field_name.contains("questionid") {
-        Ok("nrq_questions".to_string())
+        Ok(entity_sets::QUESTIONS.to_string())
     } else if field_name.contains("categoryid") {
-        Ok("nrq_categories".to_string())
+        Ok(entity_sets::CATEGORIES.to_string())
     } else if field_name.contains("domainid") {
-        Ok("nrq_domains".to_string())
+        Ok(entity_sets::DOMAINS.to_string())
     } else if field_name.contains("fundid") {
-        Ok("nrq_funds".to_string())
+        Ok(entity_sets::FUNDS.to_string())
     } else if field_name.contains("supportid") {
-        Ok("nrq_supports".to_string())
+        Ok(entity_sets::SUPPORTS.to_string())
     } else if field_name.contains("typeid") {
-        Ok("nrq_types".to_string())
+        Ok(entity_sets::TYPES.to_string())
     } else if field_name.contains("subcategoryid") {
-        Ok("nrq_subcategories".to_string())
+        Ok(entity_sets::SUBCATEGORIES.to_string())
     } else if field_name.contains("flemishshareid") {
-        Ok("nrq_flemishshares".to_string())
+        Ok(entity_sets::FLEMISH_SHARES.to_string())
     } else {
         Err(format!("Unknown entity field: {} - please add explicit mapping", field_name))
     }

@@ -1,3 +1,4 @@
+use super::super::entity_sets;
 /// Step 9: Create condition actions
 
 use super::super::super::super::copy::domain::Questionnaire;
@@ -40,10 +41,10 @@ pub async fn step9_create_condition_actions(
 
                     remove_system_fields(&mut data, "nrq_questionconditionactionid");
 
-                    operations = operations.create("nrq_questionconditionactions", data);
+                    operations = operations.create(entity_sets::CONDITION_ACTIONS, data);
                     entity_info.push(EntityInfo {
                         old_id: None,  // No ID mapping needed for condition actions
-                        entity_set: "nrq_questionconditionactions".to_string(),
+                        entity_set: entity_sets::CONDITION_ACTIONS.to_string(),
                     });
                 }
             }

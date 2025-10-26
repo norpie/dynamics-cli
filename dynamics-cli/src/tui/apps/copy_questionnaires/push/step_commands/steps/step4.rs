@@ -1,3 +1,4 @@
+use super::super::entity_sets;
 /// Step 4: Create question groups
 
 use super::super::super::super::copy::domain::Questionnaire;
@@ -40,10 +41,10 @@ pub async fn step4_create_groups(
 
                     remove_system_fields(&mut data, "nrq_questiongroupid");
 
-                    operations = operations.create("nrq_questiongroups", data);
+                    operations = operations.create(entity_sets::GROUPS, data);
                     entity_info.push(EntityInfo {
                         old_id: Some(group.id.clone()),
-                        entity_set: "nrq_questiongroups".to_string(),
+                        entity_set: entity_sets::GROUPS.to_string(),
                     });
                 }
             }

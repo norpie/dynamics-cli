@@ -1,3 +1,4 @@
+use super::super::entity_sets;
 /// Step 10: Create classification associations
 
 use super::super::super::super::copy::domain::Questionnaire;
@@ -23,7 +24,7 @@ pub async fn step10_create_classifications(
     // Category associations
     for category_ref in &questionnaire.classifications.categories {
         operations = operations.add(Operation::AssociateRef {
-            entity: "nrq_questionnaires".to_string(),
+            entity: entity_sets::QUESTIONNAIRES.to_string(),
             entity_ref: new_questionnaire_id.clone(),
             navigation_property: "nrq_questionnaire_nrq_Category_nrq_Category".to_string(),
             target_ref: format!("/nrq_categories({})", category_ref.id),
@@ -34,7 +35,7 @@ pub async fn step10_create_classifications(
     // Domain associations
     for domain_ref in &questionnaire.classifications.domains {
         operations = operations.add(Operation::AssociateRef {
-            entity: "nrq_questionnaires".to_string(),
+            entity: entity_sets::QUESTIONNAIRES.to_string(),
             entity_ref: new_questionnaire_id.clone(),
             navigation_property: "nrq_questionnaire_nrq_Domain_nrq_Domain".to_string(),
             target_ref: format!("/nrq_domains({})", domain_ref.id),
@@ -45,7 +46,7 @@ pub async fn step10_create_classifications(
     // Fund associations
     for fund_ref in &questionnaire.classifications.funds {
         operations = operations.add(Operation::AssociateRef {
-            entity: "nrq_questionnaires".to_string(),
+            entity: entity_sets::QUESTIONNAIRES.to_string(),
             entity_ref: new_questionnaire_id.clone(),
             navigation_property: "nrq_questionnaire_nrq_Fund_nrq_Fund".to_string(),
             target_ref: format!("/nrq_funds({})", fund_ref.id),
@@ -56,7 +57,7 @@ pub async fn step10_create_classifications(
     // Support associations
     for support_ref in &questionnaire.classifications.supports {
         operations = operations.add(Operation::AssociateRef {
-            entity: "nrq_questionnaires".to_string(),
+            entity: entity_sets::QUESTIONNAIRES.to_string(),
             entity_ref: new_questionnaire_id.clone(),
             navigation_property: "nrq_questionnaire_nrq_Support_nrq_Support".to_string(),
             target_ref: format!("/nrq_supports({})", support_ref.id),
@@ -67,7 +68,7 @@ pub async fn step10_create_classifications(
     // Type associations
     for type_ref in &questionnaire.classifications.types {
         operations = operations.add(Operation::AssociateRef {
-            entity: "nrq_questionnaires".to_string(),
+            entity: entity_sets::QUESTIONNAIRES.to_string(),
             entity_ref: new_questionnaire_id.clone(),
             navigation_property: "nrq_questionnaire_nrq_Type_nrq_Type".to_string(),
             target_ref: format!("/nrq_types({})", type_ref.id),
@@ -78,7 +79,7 @@ pub async fn step10_create_classifications(
     // Subcategory associations
     for subcategory_ref in &questionnaire.classifications.subcategories {
         operations = operations.add(Operation::AssociateRef {
-            entity: "nrq_questionnaires".to_string(),
+            entity: entity_sets::QUESTIONNAIRES.to_string(),
             entity_ref: new_questionnaire_id.clone(),
             navigation_property: "nrq_questionnaire_nrq_Subcategory_nrq_Subcategory".to_string(),
             target_ref: format!("/nrq_subcategories({})", subcategory_ref.id),
@@ -89,7 +90,7 @@ pub async fn step10_create_classifications(
     // Flemish share associations
     for flemish_share_ref in &questionnaire.classifications.flemish_shares {
         operations = operations.add(Operation::AssociateRef {
-            entity: "nrq_questionnaires".to_string(),
+            entity: entity_sets::QUESTIONNAIRES.to_string(),
             entity_ref: new_questionnaire_id.clone(),
             navigation_property: "nrq_questionnaire_nrq_FlemishShare_nrq_FlemishShare".to_string(),
             target_ref: format!("/nrq_flemishshares({})", flemish_share_ref.id),

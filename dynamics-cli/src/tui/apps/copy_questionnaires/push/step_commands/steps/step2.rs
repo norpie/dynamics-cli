@@ -1,3 +1,4 @@
+use super::super::entity_sets;
 /// Step 2: Create questionnaire pages
 
 use super::super::super::super::copy::domain::Questionnaire;
@@ -44,10 +45,10 @@ pub async fn step2_create_pages(
                 data["nrq_questionnaireid@odata.bind"] = json!(format!("/nrq_questionnaires({})", new_questionnaire_id));
                 remove_system_fields(&mut data, "nrq_questionnairepageid");
 
-                operations = operations.create("nrq_questionnairepages", data);
+                operations = operations.create(entity_sets::PAGES, data);
                 entity_info.push(EntityInfo {
                     old_id: Some(page.id.clone()),
-                    entity_set: "nrq_questionnairepages".to_string(),
+                    entity_set: entity_sets::PAGES.to_string(),
                 });
             }
 

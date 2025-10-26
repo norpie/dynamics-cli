@@ -1,3 +1,4 @@
+use super::super::entity_sets;
 /// Step 5: Create group lines
 
 use super::super::super::super::copy::domain::Questionnaire;
@@ -38,10 +39,10 @@ pub async fn step5_create_group_lines(
 
                 remove_system_fields(&mut data, "nrq_questiongrouplineid");
 
-                operations = operations.create("nrq_questiongrouplines", data);
+                operations = operations.create(entity_sets::GROUP_LINES, data);
                 entity_info.push(EntityInfo {
                     old_id: None,  // No ID mapping needed for group lines
-                    entity_set: "nrq_questiongrouplines".to_string(),
+                    entity_set: entity_sets::GROUP_LINES.to_string(),
                 });
             }
 

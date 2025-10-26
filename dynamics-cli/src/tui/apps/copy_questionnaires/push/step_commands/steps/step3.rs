@@ -1,3 +1,4 @@
+use super::super::entity_sets;
 /// Step 3: Create page lines
 
 use super::super::super::super::copy::domain::Questionnaire;
@@ -38,10 +39,10 @@ pub async fn step3_create_page_lines(
 
                 remove_system_fields(&mut data, "nrq_questionnairepagelineid");
 
-                operations = operations.create("nrq_questionnairepagelines", data);
+                operations = operations.create(entity_sets::PAGE_LINES, data);
                 entity_info.push(EntityInfo {
                     old_id: None,  // No ID mapping needed for page lines
-                    entity_set: "nrq_questionnairepagelines".to_string(),
+                    entity_set: entity_sets::PAGE_LINES.to_string(),
                 });
             }
 

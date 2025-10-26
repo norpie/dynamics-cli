@@ -1,3 +1,4 @@
+use super::super::entity_sets;
 /// Step 6: Create questions
 
 use super::super::super::super::copy::domain::Questionnaire;
@@ -44,10 +45,10 @@ pub async fn step6_create_questions(
 
                         remove_system_fields(&mut data, "nrq_questionid");
 
-                        operations = operations.create("nrq_questions", data);
+                        operations = operations.create(entity_sets::QUESTIONS, data);
                         entity_info.push(EntityInfo {
                             old_id: Some(question.id.clone()),
-                            entity_set: "nrq_questions".to_string(),
+                            entity_set: entity_sets::QUESTIONS.to_string(),
                         });
                     }
                 }

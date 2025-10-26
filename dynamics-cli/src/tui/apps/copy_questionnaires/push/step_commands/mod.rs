@@ -18,6 +18,8 @@ mod execution;
 mod rollback;
 mod steps;
 
+pub mod entity_sets;
+
 // Re-export public API
 pub use steps::{
     step1_create_questionnaire,

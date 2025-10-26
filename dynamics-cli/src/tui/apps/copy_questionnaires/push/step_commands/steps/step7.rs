@@ -1,3 +1,4 @@
+use super::super::entity_sets;
 /// Step 7: Create template lines
 
 use super::super::super::super::copy::domain::Questionnaire;
@@ -38,10 +39,10 @@ pub async fn step7_create_template_lines(
 
                 remove_system_fields(&mut data, "nrq_questiontemplatetogrouplineid");
 
-                operations = operations.create("nrq_questiontemplatetogrouplines", data);
+                operations = operations.create(entity_sets::TEMPLATE_LINES, data);
                 entity_info.push(EntityInfo {
                     old_id: None,  // No ID mapping needed for template lines
-                    entity_set: "nrq_questiontemplatetogrouplines".to_string(),
+                    entity_set: entity_sets::TEMPLATE_LINES.to_string(),
                 });
             }
 

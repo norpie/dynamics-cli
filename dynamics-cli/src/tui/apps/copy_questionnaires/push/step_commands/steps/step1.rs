@@ -1,3 +1,4 @@
+use super::super::entity_sets;
 /// Step 1: Create the questionnaire entity
 
 use super::super::super::super::copy::domain::Questionnaire;
@@ -31,7 +32,7 @@ pub async fn step1_create_questionnaire(
     data["nrq_name"] = json!(copy_name);
     data["nrq_copypostfix"] = json!(copy_code);
 
-    let operations = Operations::new().create("nrq_questionnaires", data);
+    let operations = Operations::new().create(entity_sets::QUESTIONNAIRES, data);
     let results = operations.execute(&client, &resilience).await
         .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingQuestionnaire, 1, &[]))?;
 
@@ -47,7 +48,7 @@ pub async fn step1_create_questionnaire(
     let new_id = extract_entity_id(&results[0])
         .map_err(|e| build_error(format!("Failed to extract questionnaire ID: {}", e), CopyPhase::CreatingQuestionnaire, 1, &[]))?;
 
-    let created_ids = vec![("nrq_questionnaires".to_string(), new_id.clone())];
+    let created_ids = vec![(entity_sets::QUESTIONNAIRES.to_string(), new_id.clone())];
 
     Ok((new_id, created_ids))
 }

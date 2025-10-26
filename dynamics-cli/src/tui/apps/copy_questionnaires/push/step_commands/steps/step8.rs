@@ -1,3 +1,4 @@
+use super::super::entity_sets;
 /// Step 8: Create conditions
 
 use super::super::super::super::copy::domain::Questionnaire;
@@ -46,10 +47,10 @@ pub async fn step8_create_conditions(
 
                 remove_system_fields(&mut data, "nrq_questionconditionid");
 
-                operations = operations.create("nrq_questionconditions", data);
+                operations = operations.create(entity_sets::CONDITIONS, data);
                 entity_info.push(EntityInfo {
                     old_id: Some(condition.id.clone()),
-                    entity_set: "nrq_questionconditions".to_string(),
+                    entity_set: entity_sets::CONDITIONS.to_string(),
                 });
             }
 

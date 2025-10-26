@@ -95,6 +95,18 @@ impl Filter {
         Self::Raw(filter.into())
     }
 
+    /// Build an OR filter for matching multiple GUID values on a field
+    /// Example: field eq id1 or field eq id2 or field eq id3
+    ///
+    /// This is a common pattern when querying by multiple IDs.
+    pub fn any_of(field: impl Into<String>, ids: &[String]) -> Self {
+        let field_name = field.into();
+        let filters: Vec<Filter> = ids.iter()
+            .map(|id| Filter::eq(field_name.clone(), FilterValue::Guid(id.clone())))
+            .collect();
+        Self::Or(filters)
+    }
+
     /// Convert filter to OData query string
     pub fn to_odata_string(&self) -> String {
         match self {

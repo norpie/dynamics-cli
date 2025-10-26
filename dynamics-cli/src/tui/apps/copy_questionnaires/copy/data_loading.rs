@@ -183,7 +183,7 @@ async fn load_pages(client: &crate::api::DynamicsClient, page_ids: &[String]) ->
     }
 
     let mut query = Query::new("nrq_questionnairepages");
-    query.filter = Some(build_or_filter("nrq_questionnairepageid", page_ids));
+    query.filter = Some(Filter::any_of("nrq_questionnairepageid", page_ids));
 
     log::debug!("Loading pages with IDs: {:?}", page_ids);
     if let Some(ref filter) = query.filter {
@@ -206,7 +206,7 @@ async fn load_group_lines(client: &crate::api::DynamicsClient, page_ids: &[Strin
     }
 
     let mut query = Query::new("nrq_questiongrouplines");
-    query.filter = Some(build_or_filter("_nrq_questionnairepageid_value", page_ids));
+    query.filter = Some(Filter::any_of("_nrq_questionnairepageid_value", page_ids));
 
     let result = client.execute_query(&query)
         .await
@@ -222,7 +222,7 @@ async fn load_groups(client: &crate::api::DynamicsClient, group_ids: &[String]) 
     }
 
     let mut query = Query::new("nrq_questiongroups");
-    query.filter = Some(build_or_filter("nrq_questiongroupid", group_ids));
+    query.filter = Some(Filter::any_of("nrq_questiongroupid", group_ids));
 
     let result = client.execute_query(&query)
         .await
@@ -257,7 +257,7 @@ async fn load_template_lines(client: &crate::api::DynamicsClient, group_ids: &[S
     }
 
     let mut query = Query::new("nrq_questiontemplatelines");
-    query.filter = Some(build_or_filter("_nrq_questiongroupid_value", group_ids));
+    query.filter = Some(Filter::any_of("_nrq_questiongroupid_value", group_ids));
 
     let result = client.execute_query(&query)
         .await
@@ -273,7 +273,7 @@ async fn load_conditions(client: &crate::api::DynamicsClient, question_ids: &[St
     }
 
     let mut query = Query::new("nrq_questionconditions");
-    query.filter = Some(build_or_filter("_nrq_questionid_value", question_ids));
+    query.filter = Some(Filter::any_of("_nrq_questionid_value", question_ids));
 
     let result = client.execute_query(&query)
         .await
@@ -289,7 +289,7 @@ async fn load_condition_actions(client: &crate::api::DynamicsClient, condition_i
     }
 
     let mut query = Query::new("nrq_questionconditionactions");
-    query.filter = Some(build_or_filter("_nrq_questionconditionid_value", condition_ids));
+    query.filter = Some(Filter::any_of("_nrq_questionconditionid_value", condition_ids));
 
     let result = client.execute_query(&query)
         .await
@@ -389,23 +389,13 @@ async fn load_entities_by_ids(
     }
 
     let mut query = Query::new(entity_name);
-    query.filter = Some(build_or_filter(id_field, ids));
+    query.filter = Some(Filter::any_of(id_field, ids));
 
     let result = client.execute_query(&query)
         .await
         .map_err(|e| format!("Failed to load {} entities: {}", entity_name, e))?;
 
     Ok(result.data.map(|d| d.value).unwrap_or_default())
-}
-
-/// Build an OR filter for matching multiple IDs
-/// Example: field eq id1 or field eq id2 or field eq id3
-fn build_or_filter(field: &str, ids: &[String]) -> Filter {
-    let filters: Vec<Filter> = ids.iter()
-        .map(|id| Filter::eq(field, FilterValue::Guid(id.clone())))
-        .collect();
-
-    Filter::or(filters)
 }
 
 /// Convert raw snapshot into structured domain model
