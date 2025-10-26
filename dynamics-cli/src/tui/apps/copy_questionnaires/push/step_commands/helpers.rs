@@ -45,8 +45,28 @@ pub fn build_payload(
 
             match &spec.field_type {
                 FieldType::Value => {
-                    // Copy directly
-                    payload[spec.field_name] = value.clone();
+                    // FIXME: Validate option set values against metadata to handle cross-environment copies
+                    // For now, only validate known-problematic fields that may have orphaned option set values
+                    let final_value = if spec.field_name == "nrq_requeststatus" {
+                        if let Some(num) = value.as_i64() {
+                            // Valid values for nrq_requeststatus: 1, 875810001-875810016
+                            // Orphaned values like 170590008 should default to 1 (Draft)
+                            let is_valid = num == 1 || (num >= 875810001 && num <= 875810016);
+                            if !is_valid {
+                                log::warn!("Field {} has invalid option set value {}, defaulting to 1 (Draft)",
+                                    spec.field_name, num);
+                                json!(1)
+                            } else {
+                                value.clone()
+                            }
+                        } else {
+                            value.clone()
+                        }
+                    } else {
+                        value.clone()
+                    };
+
+                    payload[spec.field_name] = final_value;
                 }
                 FieldType::Lookup { target_entity } => {
                     let guid = value.as_str()
