@@ -419,11 +419,13 @@ fn render_failure_screen(
             spacer!(),
 
             if error.rollback_complete {
+                // Rollback succeeded
                 Element::styled_text(Line::from(vec![
                     Span::styled("✓ Rollback: ", Style::default().fg(theme.accent_success)),
                     Span::styled("Deleted all partially created entities", Style::default().fg(theme.text_primary)),
                 ])).build()
-            } else {
+            } else if error.orphaned_entities_csv.is_some() {
+                // Rollback failed - show manual cleanup instructions
                 Element::column(vec![
                     Element::styled_text(Line::from(vec![
                         Span::styled("⚠ ROLLBACK FAILED - MANUAL CLEANUP REQUIRED", Style::default().fg(theme.accent_error).bold()),
@@ -465,6 +467,12 @@ fn render_failure_screen(
                         Span::styled("  3. Or delete manually via Advanced Find", Style::default().fg(theme.text_secondary)),
                     ])).build(),
                 ]).build()
+            } else {
+                // Rollback in progress
+                Element::styled_text(Line::from(vec![
+                    Span::styled("⏳ Rollback in progress: ", Style::default().fg(theme.accent_warning)),
+                    Span::styled("Deleting partially created entities...", Style::default().fg(theme.text_primary)),
+                ])).build()
             },
         ]).build() => Fill(1),
 
