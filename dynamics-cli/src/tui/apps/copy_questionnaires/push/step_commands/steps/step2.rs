@@ -40,11 +40,11 @@ pub async fn step2_create_pages(
             let mut entity_info = Vec::new();
 
             for page in &q.pages {
-                let mut data = build_payload(&page.raw, field_specs::PAGE_FIELDS, &id_map, &shared_entities)
+                let data = build_payload(&page.raw, field_specs::PAGE_FIELDS, &id_map, &shared_entities)
                     .map_err(|e| format!("Failed to build page payload: {}", e))?;
 
-                // Set parent questionnaire reference
-                data["nrq_questionnaireid@odata.bind"] = json!(format!("/nrq_questionnaires({})", new_questionnaire_id));
+                // Note: Pages are standalone entities - relationship to questionnaire
+                // is established via page_lines junction table (step 3)
 
                 operations = operations.create(entity_sets::PAGES, data);
                 entity_info.push(EntityInfo {
