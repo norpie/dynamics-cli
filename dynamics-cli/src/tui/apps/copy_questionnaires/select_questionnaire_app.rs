@@ -73,6 +73,7 @@ pub enum Msg {
     QuestionnairesLoaded(Result<Vec<QuestionnaireItem>, String>),
     ListNavigate(KeyCode),
     SelectQuestionnaire,
+    Refresh,
     Back,
 }
 
@@ -214,6 +215,77 @@ impl App for SelectQuestionnaireApp {
                 }
                 Command::None
             }
+            Msg::Refresh => {
+                // Clear cache and re-fetch questionnaires
+                log::info!("Refreshing questionnaires list");
+                state.questionnaires = Resource::Loading;
+
+                let cmd = Command::perform_parallel()
+                    .add_task(
+                        "Refreshing questionnaires",
+                        async {
+                            // Get current environment
+                            let manager = crate::client_manager();
+                            let env_name = manager.get_current_environment_name().await
+                                .ok()
+                                .flatten()
+                                .ok_or_else(|| "No environment selected".to_string())?;
+
+                            let entity_name = "nrq_questionnaire";
+
+                            // Clear cache to force refresh
+                            let config = crate::global_config();
+                            let _ = config.delete_entity_data_cache(&env_name, entity_name).await;
+
+                            // Fetch from API
+                            log::info!("Fetching questionnaires from Dynamics 365 (bypassing cache)");
+                            let client = manager.get_client(&env_name).await
+                                .map_err(|e| e.to_string())?;
+
+                            // Build query for questionnaires
+                            use crate::api::query::{Query, OrderBy};
+                            let mut query = Query::new("nrq_questionnaires");
+                            query.select = Some(vec![
+                                "nrq_questionnaireid".to_string(),
+                                "nrq_name".to_string(),
+                                "nrq_code".to_string(),
+                            ]);
+                            query.orderby = query.orderby.add(OrderBy::asc("nrq_name"));
+
+                            let result = client.execute_query(&query).await
+                                .map_err(|e| e.to_string())?;
+
+                            let data_response = result.data
+                                .ok_or_else(|| "No data in response".to_string())?;
+
+                            let value_vec = data_response.value;
+
+                            let questionnaires: Vec<QuestionnaireItem> = value_vec.iter()
+                                .filter_map(|item| {
+                                    let id = item.get("nrq_questionnaireid")?.as_str()?.to_string();
+                                    let name = item.get("nrq_name")?.as_str()?.to_string();
+                                    let code = item.get("nrq_code").and_then(|v| v.as_str()).map(String::from);
+                                    Some(QuestionnaireItem { id, name, code })
+                                })
+                                .collect();
+
+                            log::info!("Refreshed {} questionnaires from API", questionnaires.len());
+
+                            // Cache the results
+                            let _ = config.set_entity_data_cache(&env_name, entity_name, &value_vec).await;
+
+                            Ok::<Vec<QuestionnaireItem>, String>(questionnaires)
+                        }
+                    )
+                    .with_title("Refreshing Questionnaires")
+                    .on_complete(AppId::SelectQuestionnaire)
+                    .build(|_task_idx, result| {
+                        let data = result.downcast::<Result<Vec<QuestionnaireItem>, String>>().unwrap();
+                        Msg::QuestionnairesLoaded(*data)
+                    });
+
+                cmd
+            }
             Msg::Back => {
                 Command::batch(vec![
                     Command::navigate_to(AppId::AppLauncher),
@@ -261,6 +333,7 @@ impl App for SelectQuestionnaireApp {
     fn subscriptions(state: &Self::State) -> Vec<Subscription<Self::Msg>> {
         let mut subs = vec![
             Subscription::keyboard(KeyCode::Esc, "Back to app launcher", Msg::Back),
+            Subscription::keyboard(KeyCode::F(5), "Refresh questionnaires", Msg::Refresh),
         ];
 
         // Only add Enter if we have questionnaires loaded
