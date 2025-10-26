@@ -299,8 +299,12 @@ struct EntityInfo {
     entity_set: String,       // Entity set name for tracking
 }
 
+/// Batch size for chunking large operations (Dynamics 365 limit is 1000, we use 75 for safety)
+const BATCH_CHUNK_SIZE: usize = 75;
+
 /// Generic helper for executing creation steps with common scaffolding
 /// This eliminates ~700 lines of duplication across steps 2-10
+/// Automatically chunks large batches to avoid Dynamics 365 limits
 async fn execute_creation_step<F>(
     questionnaire: Arc<Questionnaire>,
     id_map: HashMap<String, String>,
@@ -328,21 +332,58 @@ where
     let (operations, entity_info) = build_operations(questionnaire, id_map)
         .map_err(|e| build_error(e, phase.clone(), step, created_ids))?;
 
-    // 3. Execute operations (common scaffolding)
-    let results = operations.execute(&client, &resilience).await
-        .map_err(|e| build_error(e.to_string(), phase.clone(), step, created_ids))?;
+    // 3. Execute operations with automatic chunking
+    let all_operations = operations.operations();
+    let total_ops = all_operations.len();
+
+    if total_ops == 0 {
+        return Ok((vec![], entity_info));
+    }
+
+    let mut all_results = Vec::with_capacity(total_ops);
+
+    // Chunk operations if exceeds batch size
+    if total_ops > BATCH_CHUNK_SIZE {
+        log::info!("Chunking {} operations into batches of {} for {}",
+            total_ops, BATCH_CHUNK_SIZE, phase.name());
+
+        // Process in chunks
+        for (chunk_idx, chunk) in all_operations.chunks(BATCH_CHUNK_SIZE).enumerate() {
+            let chunk_ops = Operations::from_operations(chunk.to_vec());
+
+            log::debug!("Executing chunk {}/{} ({} operations) for {}",
+                chunk_idx + 1,
+                (total_ops + BATCH_CHUNK_SIZE - 1) / BATCH_CHUNK_SIZE,
+                chunk.len(),
+                phase.name());
+
+            let chunk_results = chunk_ops.execute(&client, &resilience).await
+                .map_err(|e| build_error(
+                    format!("Failed to execute chunk {}: {}", chunk_idx + 1, e),
+                    phase.clone(),
+                    step,
+                    created_ids
+                ))?;
+
+            all_results.extend(chunk_results);
+        }
+    } else {
+        // Single batch execution
+        all_results = operations.execute(&client, &resilience).await
+            .map_err(|e| build_error(e.to_string(), phase.clone(), step, created_ids))?;
+    }
 
     // 4. Validate result count (common scaffolding)
-    if results.len() != expected_count {
+    if all_results.len() != expected_count {
         return Err(build_error(
-            format!("Result count mismatch: expected {} entities, got {} results", expected_count, results.len()),
+            format!("Result count mismatch: expected {} entities, got {} results", expected_count, all_results.len()),
             phase,
             step,
             created_ids,
         ));
     }
 
-    Ok((results, entity_info))
+    Ok((all_results, entity_info))
 }
 
 /// Process results from creation operations - extracts IDs and handles errors
@@ -992,8 +1033,37 @@ pub async fn step10_create_classifications(
         .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingClassifications, 10, &created_ids))?;
 
     let resilience = ResilienceConfig::default();
-    let results = operations.execute(&client, &resilience).await
-        .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingClassifications, 10, &created_ids))?;
+
+    // Execute with automatic chunking (same as other steps)
+    let all_operations = operations.operations();
+    let mut results = Vec::with_capacity(classifications_count);
+
+    if classifications_count > BATCH_CHUNK_SIZE {
+        log::info!("Chunking {} classification associations into batches of {}",
+            classifications_count, BATCH_CHUNK_SIZE);
+
+        for (chunk_idx, chunk) in all_operations.chunks(BATCH_CHUNK_SIZE).enumerate() {
+            let chunk_ops = Operations::from_operations(chunk.to_vec());
+
+            log::debug!("Executing classification chunk {}/{} ({} operations)",
+                chunk_idx + 1,
+                (classifications_count + BATCH_CHUNK_SIZE - 1) / BATCH_CHUNK_SIZE,
+                chunk.len());
+
+            let chunk_results = chunk_ops.execute(&client, &resilience).await
+                .map_err(|e| build_error(
+                    format!("Failed to execute classification chunk {}: {}", chunk_idx + 1, e),
+                    CopyPhase::CreatingClassifications,
+                    10,
+                    &created_ids
+                ))?;
+
+            results.extend(chunk_results);
+        }
+    } else {
+        results = operations.execute(&client, &resilience).await
+            .map_err(|e| build_error(e.to_string(), CopyPhase::CreatingClassifications, 10, &created_ids))?;
+    }
 
     // Validate result count matches expected count
     if results.len() != classifications_count {
