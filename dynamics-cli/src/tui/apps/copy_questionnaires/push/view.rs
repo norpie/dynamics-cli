@@ -344,7 +344,9 @@ fn render_success_screen(
             Element::button("done_button", "Done")
                 .on_press(super::Msg::Done)
                 .build(),
-        ]).build() => Length(3),
+        ])
+        .spacing(2)
+        .build() => Length(3),
     ]
 }
 
