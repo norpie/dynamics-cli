@@ -10,6 +10,7 @@ mod step7;
 mod step8;
 mod step9;
 mod step10;
+mod step11;
 
 pub use step1::step1_create_questionnaire;
 pub use step2::step2_create_pages;
@@ -21,3 +22,4 @@ pub use step7::step7_create_template_lines;
 pub use step8::step8_create_conditions;
 pub use step9::step9_create_condition_actions;
 pub use step10::step10_create_classifications;
+pub use step11::step11_publish_conditions;

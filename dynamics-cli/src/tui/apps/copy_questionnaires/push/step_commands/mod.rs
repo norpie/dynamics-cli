@@ -1,6 +1,6 @@
 /// Step-by-step questionnaire copy implementation
 ///
-/// This module contains the 10-step copy process for duplicating questionnaires
+/// This module contains the 11-step copy process for duplicating questionnaires
 /// across Dynamics 365 environments. Each step creates a specific entity type
 /// and tracks created IDs for rollback support.
 ///
@@ -10,7 +10,7 @@
 /// - `error` - Error construction and handling
 /// - `execution` - Generic execution logic with automatic batching
 /// - `rollback` - Rollback operations for cleanup
-/// - `steps` - Individual step implementations (step1-step10)
+/// - `steps` - Individual step implementations (step1-step11)
 
 mod helpers;
 mod error;
@@ -33,6 +33,7 @@ pub use steps::{
     step8_create_conditions,
     step9_create_condition_actions,
     step10_create_classifications,
+    step11_publish_conditions,
 };
 
 pub use rollback::rollback_created_entities;

@@ -215,6 +215,7 @@ pub enum CopyPhase {
     CreatingConditions,       // Step 8
     CreatingConditionActions, // Step 9
     CreatingClassifications,  // Step 10
+    PublishingConditions,     // Step 11
 }
 
 impl CopyPhase {
@@ -230,6 +231,7 @@ impl CopyPhase {
             CopyPhase::CreatingConditions => 8,
             CopyPhase::CreatingConditionActions => 9,
             CopyPhase::CreatingClassifications => 10,
+            CopyPhase::PublishingConditions => 11,
         }
     }
 
@@ -245,6 +247,7 @@ impl CopyPhase {
             CopyPhase::CreatingConditions => "Creating Conditions",
             CopyPhase::CreatingConditionActions => "Creating Condition Actions",
             CopyPhase::CreatingClassifications => "Creating Classifications",
+            CopyPhase::PublishingConditions => "Restoring Condition Status",
         }
     }
 }
@@ -287,6 +290,7 @@ pub enum Msg {
     Step8Complete(Result<(HashMap<String, String>, Vec<(String, String)>), CopyError>),
     Step9Complete(Result<(HashMap<String, String>, Vec<(String, String)>), CopyError>),
     Step10Complete(Result<(HashMap<String, String>, Vec<(String, String)>), CopyError>),
+    Step11Complete(Result<(HashMap<String, String>, Vec<(String, String)>), CopyError>),
 
     // Screen 3: Results
     CopySuccess(CopyResult),

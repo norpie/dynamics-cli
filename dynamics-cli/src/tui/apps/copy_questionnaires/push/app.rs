@@ -306,6 +306,20 @@ impl App for PushQuestionnaireApp {
             }
 
             Msg::Step10Complete(result) => {
+                handle_step_complete(
+                    state,
+                    result,
+                    CopyPhase::PublishingConditions,
+                    11,
+                    |_progress| {
+                        // No new entity type for publishing - just updating existing conditions
+                    },
+                    |q, id_map, created_ids| Box::pin(super::step_commands::step11_publish_conditions(q, id_map, created_ids)),
+                    Msg::Step11Complete,
+                )
+            }
+
+            Msg::Step11Complete(result) => {
                 match result {
                     Ok((new_id_map, new_created_ids)) => {
                         state.id_map = new_id_map;

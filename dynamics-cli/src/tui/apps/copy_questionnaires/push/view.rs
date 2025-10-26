@@ -167,7 +167,7 @@ fn render_progress_screen(
     Element::column(vec![
         Element::styled_text(Line::from(vec![
             Span::styled("Step ", Style::default().fg(theme.text_secondary)),
-            Span::styled(format!("{}/10", progress.step), Style::default().fg(theme.accent_info).bold()),
+            Span::styled(format!("{}/11", progress.step), Style::default().fg(theme.accent_info).bold()),
             Span::styled(": ", Style::default().fg(theme.text_secondary)),
             Span::styled(progress.phase.name(), Style::default().fg(theme.text_primary).bold()),
         ])).build(),
@@ -369,7 +369,7 @@ fn render_failure_screen(
 
             Element::styled_text(Line::from(vec![
                 Span::styled("Failed at: ", Style::default().fg(theme.text_secondary)),
-                Span::styled(format!("Step {}/10 - {}", error.step, error.phase.name()), Style::default().fg(theme.text_primary).bold()),
+                Span::styled(format!("Step {}/11 - {}", error.step, error.phase.name()), Style::default().fg(theme.text_primary).bold()),
             ])).build(),
 
             spacer!(),
