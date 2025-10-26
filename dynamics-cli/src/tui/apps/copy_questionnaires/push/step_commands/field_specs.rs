@@ -55,8 +55,8 @@ pub const QUESTIONNAIRE_FIELDS: &[FieldSpec] = &[
     value_field!("nrq_copypostfix"),
     value_field!("nrq_pullquestionstrigger"),
 
-    lookup_field!("_nrq_deadline_value", "nrq_deadline", "nrq_deadlines"),
-    lookup_field!("_nrq_domain_value", "nrq_domain", "nrq_domains"),
+    lookup_field!("_nrq_deadline_value", "nrq_Deadline", "nrq_deadlines"),
+    lookup_field!("_nrq_domain_value", "nrq_Domain", "nrq_domains"),
 ];
 
 /// Step 2: Page fields
@@ -67,7 +67,7 @@ pub const PAGE_FIELDS: &[FieldSpec] = &[
     value_field!("nrq_isdeliverable"),
     value_field!("nrq_schijf"),
 
-    lookup_field!("_nrq_relatedquestionnaire_value", "nrq_relatedquestionnaire", "nrq_questionnaires"),
+    lookup_field!("_nrq_relatedquestionnaire_value", "nrq_RelatedQuestionnaire", "nrq_questionnaires"),
 ];
 
 /// Step 3: Page Line fields
