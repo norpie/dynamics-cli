@@ -55,6 +55,7 @@ where
                     error_message: "Copy cancelled by user".to_string(),
                     partial_counts: HashMap::new(),
                     rollback_complete: false,
+                    orphaned_entities_csv: None,
                 };
                 state.push_state = PushState::Failed(error);
                 state.cancel_requested = false;
@@ -147,6 +148,7 @@ impl App for PushQuestionnaireApp {
                                 error_message: "Copy cancelled by user".to_string(),
                                 partial_counts: HashMap::new(),
                                 rollback_complete: false,
+                                orphaned_entities_csv: None,
                             };
                             state.push_state = PushState::Failed(error);
                             state.cancel_requested = false;
@@ -371,14 +373,19 @@ impl App for PushQuestionnaireApp {
                 Command::None
             }
 
-            Msg::RollbackComplete(success) => {
+            Msg::RollbackComplete(result) => {
                 // Update the error state with rollback status
                 if let PushState::Failed(ref mut error) = state.push_state {
-                    error.rollback_complete = success;
-                    if success {
-                        log::info!("Rollback completed successfully");
-                    } else {
-                        log::error!("Rollback failed - some entities may remain");
+                    match result {
+                        Ok(_) => {
+                            error.rollback_complete = true;
+                            log::info!("Rollback completed successfully");
+                        }
+                        Err(csv_path) => {
+                            error.rollback_complete = false;
+                            error.orphaned_entities_csv = Some(csv_path.clone());
+                            log::error!("Rollback failed - orphaned entities exported to: {}", csv_path);
+                        }
                     }
                 }
                 Command::None

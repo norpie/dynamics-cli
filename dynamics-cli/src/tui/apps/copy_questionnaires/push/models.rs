@@ -270,6 +270,7 @@ pub struct CopyError {
     pub error_message: String,
     pub partial_counts: HashMap<String, usize>,
     pub rollback_complete: bool,
+    pub orphaned_entities_csv: Option<String>,  // Path to CSV if rollback failed
 }
 
 #[derive(Clone)]
@@ -295,7 +296,7 @@ pub enum Msg {
     CopyFailed(CopyError),
 
     // Rollback
-    RollbackComplete(bool),  // true if successful, false if failed
+    RollbackComplete(Result<(), String>),  // Ok if successful, Err(csv_path) if failed
 
     // Actions
     ViewCopy,

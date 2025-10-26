@@ -420,14 +420,51 @@ fn render_failure_screen(
 
             if error.rollback_complete {
                 Element::styled_text(Line::from(vec![
-                    Span::styled("⚠ Rollback: ", Style::default().fg(theme.accent_warning)),
+                    Span::styled("✓ Rollback: ", Style::default().fg(theme.accent_success)),
                     Span::styled("Deleted all partially created entities", Style::default().fg(theme.text_primary)),
                 ])).build()
             } else {
-                Element::styled_text(Line::from(vec![
-                    Span::styled("⚠ Warning: ", Style::default().fg(theme.accent_warning)),
-                    Span::styled("Rollback incomplete - some entities may remain", Style::default().fg(theme.accent_error)),
-                ])).build()
+                Element::column(vec![
+                    Element::styled_text(Line::from(vec![
+                        Span::styled("⚠ ROLLBACK FAILED - MANUAL CLEANUP REQUIRED", Style::default().fg(theme.accent_error).bold()),
+                    ])).build(),
+
+                    spacer!(),
+
+                    Element::styled_text(Line::from(vec![
+                        Span::styled("Rollback failed. Orphaned entities exported to:", Style::default().fg(theme.text_primary)),
+                    ])).build(),
+
+                    if let Some(csv_path) = &error.orphaned_entities_csv {
+                        Element::panel(
+                            Element::styled_text(Line::from(vec![
+                                Span::styled(csv_path.clone(), Style::default().fg(theme.accent_warning)),
+                            ])).build()
+                        ).build()
+                    } else {
+                        Element::styled_text(Line::from(vec![
+                            Span::styled("(CSV export also failed)", Style::default().fg(theme.accent_error)),
+                        ])).build()
+                    },
+
+                    spacer!(),
+
+                    Element::styled_text(Line::from(vec![
+                        Span::styled("To manually delete orphaned entities:", Style::default().fg(theme.text_secondary)),
+                    ])).build(),
+
+                    Element::styled_text(Line::from(vec![
+                        Span::styled("  1. Open CSV file from Downloads folder", Style::default().fg(theme.text_secondary)),
+                    ])).build(),
+
+                    Element::styled_text(Line::from(vec![
+                        Span::styled("  2. Use Dynamics bulk delete tool", Style::default().fg(theme.text_secondary)),
+                    ])).build(),
+
+                    Element::styled_text(Line::from(vec![
+                        Span::styled("  3. Or delete manually via Advanced Find", Style::default().fg(theme.text_secondary)),
+                    ])).build(),
+                ]).build()
             },
         ]).build() => Fill(1),
 

@@ -289,6 +289,7 @@ fn build_error(
         step,
         partial_counts,
         rollback_complete: false,
+        orphaned_entities_csv: None,
     }
 }
 
@@ -385,13 +386,45 @@ fn process_creation_results(
     Ok(())
 }
 
+/// Export orphaned entities to CSV for manual cleanup
+fn export_orphaned_entities_csv(entities: &[(String, String)]) -> Result<String, String> {
+    use std::fs::File;
+    use std::io::Write;
+
+    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+    let filename = format!("orphaned_entities_{}.csv", timestamp);
+
+    // Save to user's Downloads folder - visible and accessible when rollback fails
+    let downloads_dir = dirs::download_dir()
+        .ok_or_else(|| "Could not determine downloads directory".to_string())?;
+
+    let path = downloads_dir.join(&filename);
+
+    let mut file = File::create(&path)
+        .map_err(|e| format!("Failed to create CSV file: {}", e))?;
+
+    // Write CSV header
+    writeln!(file, "entity_set,entity_id")
+        .map_err(|e| format!("Failed to write CSV header: {}", e))?;
+
+    // Write entities in REVERSE order (deletion order: children before parents)
+    for (entity_set, entity_id) in entities.iter().rev() {
+        writeln!(file, "{},{}", entity_set, entity_id)
+            .map_err(|e| format!("Failed to write entity to CSV: {}", e))?;
+    }
+
+    log::info!("Exported {} orphaned entities to: {}", entities.len(), path.display());
+
+    Ok(path.to_string_lossy().to_string())
+}
+
 /// Rollback all created entities in reverse order
-/// Returns true if rollback succeeded, false if it failed
+/// Returns Ok(()) if rollback succeeded, Err(csv_path) if it failed
 pub async fn rollback_created_entities(
     created_ids: Vec<(String, String)>,
-) -> bool {
+) -> Result<(), String> {
     if created_ids.is_empty() {
-        return true; // Nothing to rollback
+        return Ok(()); // Nothing to rollback
     }
 
     log::info!("Starting rollback of {} entities", created_ids.len());
@@ -403,7 +436,9 @@ pub async fn rollback_created_entities(
         Ok(Some(name)) => name,
         _ => {
             log::error!("Rollback failed: Could not get environment name");
-            return false;
+            let csv_path = export_orphaned_entities_csv(&created_ids)
+                .unwrap_or_else(|e| format!("(CSV export also failed: {})", e));
+            return Err(csv_path);
         }
     };
 
@@ -411,7 +446,9 @@ pub async fn rollback_created_entities(
         Ok(c) => c,
         Err(e) => {
             log::error!("Rollback failed: Could not get client: {}", e);
-            return false;
+            let csv_path = export_orphaned_entities_csv(&created_ids)
+                .unwrap_or_else(|e| format!("(CSV export also failed: {})", e));
+            return Err(csv_path);
         }
     };
 
@@ -445,15 +482,19 @@ pub async fn rollback_created_entities(
 
             if all_success {
                 log::info!("Rollback completed successfully - deleted {} entities", created_ids.len());
+                Ok(())
             } else {
                 log::warn!("Rollback partially failed - some entities may remain");
+                let csv_path = export_orphaned_entities_csv(&created_ids)
+                    .unwrap_or_else(|e| format!("(CSV export also failed: {})", e));
+                Err(csv_path)
             }
-
-            all_success
         }
         Err(e) => {
             log::error!("Rollback batch operation failed: {}", e);
-            false
+            let csv_path = export_orphaned_entities_csv(&created_ids)
+                .unwrap_or_else(|e| format!("(CSV export also failed: {})", e));
+            Err(csv_path)
         }
     }
 }
