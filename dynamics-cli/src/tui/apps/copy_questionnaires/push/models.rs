@@ -190,13 +190,10 @@ impl CopyProgress {
         self.entity_progress.insert(entity_type, (done, total));
     }
 
-    /// Calculate overall percentage
+    /// Calculate overall percentage based on step progress (equal weight per step)
     pub fn percentage(&self) -> usize {
-        if self.total_entities == 0 {
-            0
-        } else {
-            ((self.total_created as f64 / self.total_entities as f64) * 100.0) as usize
-        }
+        // Each step = 10% (10 steps total)
+        (self.step * 100) / 10
     }
 
     /// Get elapsed time
