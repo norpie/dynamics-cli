@@ -152,7 +152,7 @@ impl App for CopyQuestionnaireApp {
 
                 // Extract the questionnaire from state
                 let questionnaire = match &state.questionnaire {
-                    Resource::Success(q) => q.clone(),
+                    Resource::Success(q) => std::sync::Arc::new(q.clone()),
                     _ => {
                         log::error!("Cannot continue: questionnaire not loaded");
                         return Command::None;

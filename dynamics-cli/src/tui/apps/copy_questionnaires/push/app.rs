@@ -12,6 +12,7 @@ use ratatui::text::Line;
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 
 pub struct PushQuestionnaireApp;
 
@@ -26,7 +27,7 @@ fn handle_step_complete<F>(
     next_phase: CopyPhase,
     next_step: usize,
     update_progress: F,
-    next_command: impl FnOnce(Questionnaire, HashMap<String, String>, Vec<(String, String)>) -> StepFuture,
+    next_command: impl FnOnce(Arc<Questionnaire>, HashMap<String, String>, Vec<(String, String)>) -> StepFuture,
     next_msg: fn(Result<(HashMap<String, String>, Vec<(String, String)>), CopyError>) -> Msg,
 ) -> Command<Msg>
 where
@@ -65,7 +66,7 @@ where
             }
 
             // Start next step
-            let questionnaire = state.questionnaire.clone();
+            let questionnaire = Arc::clone(&state.questionnaire);
             let id_map = state.id_map.clone();
             let created_ids = state.created_ids.clone();
 
@@ -124,7 +125,7 @@ impl App for PushQuestionnaireApp {
                 state.push_state = PushState::Copying(CopyProgress::new(&state.questionnaire));
 
                 // Start Step 1
-                let questionnaire = state.questionnaire.clone();
+                let questionnaire = Arc::clone(&state.questionnaire);
                 let copy_name = state.copy_name.clone();
                 let copy_code = state.copy_code.clone();
 
@@ -169,7 +170,7 @@ impl App for PushQuestionnaireApp {
                         }
 
                         // Start Step 2
-                        let questionnaire = state.questionnaire.clone();
+                        let questionnaire = Arc::clone(&state.questionnaire);
                         let id_map = state.id_map.clone();
                         let created_ids = state.created_ids.clone();
 

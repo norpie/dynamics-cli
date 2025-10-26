@@ -1,5 +1,6 @@
 use std::time::Instant;
 use std::collections::HashMap;
+use std::sync::Arc;
 use super::super::copy::domain::Questionnaire;
 
 #[derive(Clone)]
@@ -7,7 +8,7 @@ pub struct State {
     pub questionnaire_id: String,
     pub copy_name: String,
     pub copy_code: String,
-    pub questionnaire: Questionnaire,  // Already loaded from copy screen
+    pub questionnaire: Arc<Questionnaire>,  // Shared, not cloned
     pub push_state: PushState,
 
     // Copy engine state (persists across steps)
@@ -28,7 +29,7 @@ impl Default for State {
             questionnaire_id: String::new(),
             copy_name: String::new(),
             copy_code: String::new(),
-            questionnaire: Questionnaire {
+            questionnaire: Arc::new(Questionnaire {
                 id: String::new(),
                 name: String::new(),
                 raw: serde_json::Value::Null,
@@ -46,7 +47,7 @@ impl Default for State {
                     subcategories: vec![],
                     flemish_shares: vec![],
                 },
-            },
+            }),
             push_state: PushState::Confirming,
             id_map: HashMap::new(),
             created_ids: Vec::new(),
@@ -266,7 +267,7 @@ pub struct PushQuestionnaireParams {
     pub questionnaire_id: String,
     pub copy_name: String,
     pub copy_code: String,
-    pub questionnaire: Questionnaire,  // Pass the already-loaded questionnaire
+    pub questionnaire: Arc<Questionnaire>,  // Shared, not cloned
 }
 
 impl Default for PushQuestionnaireParams {
@@ -275,7 +276,7 @@ impl Default for PushQuestionnaireParams {
             questionnaire_id: String::new(),
             copy_name: String::new(),
             copy_code: String::new(),
-            questionnaire: Questionnaire {
+            questionnaire: Arc::new(Questionnaire {
                 id: String::new(),
                 name: String::new(),
                 raw: serde_json::Value::Null,
@@ -293,7 +294,7 @@ impl Default for PushQuestionnaireParams {
                     subcategories: vec![],
                     flemish_shares: vec![],
                 },
-            },
+            }),
         }
     }
 }

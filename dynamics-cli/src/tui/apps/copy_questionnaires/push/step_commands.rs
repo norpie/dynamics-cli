@@ -149,7 +149,7 @@ fn extract_entity_id(result: &crate::api::operations::OperationResult) -> Result
 }
 
 pub async fn step1_create_questionnaire(
-    questionnaire: Questionnaire,
+    questionnaire: Arc<Questionnaire>,
     copy_name: String,
     copy_code: String,
 ) -> Result<(String, Vec<(String, String)>), CopyError> {
@@ -200,7 +200,7 @@ pub async fn step1_create_questionnaire(
 }
 
 pub async fn step2_create_pages(
-    questionnaire: Questionnaire,
+    questionnaire: Arc<Questionnaire>,
     id_map: HashMap<String, String>,
     mut created_ids: Vec<(String, String)>,
 ) -> Result<(HashMap<String, String>, Vec<(String, String)>), CopyError> {
@@ -213,7 +213,7 @@ pub async fn step2_create_pages(
 
     // Execute creation using generic helper
     let (results, entity_info) = execute_creation_step(
-        questionnaire.clone(),
+        Arc::clone(&questionnaire),
         id_map,
         &mut created_ids,
         CopyPhase::CreatingPages,
@@ -301,7 +301,7 @@ struct EntityInfo {
 /// Generic helper for executing creation steps with common scaffolding
 /// This eliminates ~700 lines of duplication across steps 2-10
 async fn execute_creation_step<F>(
-    questionnaire: Questionnaire,
+    questionnaire: Arc<Questionnaire>,
     id_map: HashMap<String, String>,
     created_ids: &mut Vec<(String, String)>,
     phase: CopyPhase,
@@ -310,7 +310,7 @@ async fn execute_creation_step<F>(
     build_operations: F,
 ) -> Result<(Vec<crate::api::operations::OperationResult>, Vec<EntityInfo>), CopyError>
 where
-    F: FnOnce(Questionnaire, HashMap<String, String>) -> Result<(Operations, Vec<EntityInfo>), String>,
+    F: FnOnce(Arc<Questionnaire>, HashMap<String, String>) -> Result<(Operations, Vec<EntityInfo>), String>,
 {
     // 1. Get client (common scaffolding)
     let client_manager = crate::client_manager();
@@ -459,7 +459,7 @@ pub async fn rollback_created_entities(
 }
 
 pub async fn step3_create_page_lines(
-    questionnaire: Questionnaire,
+    questionnaire: Arc<Questionnaire>,
     id_map: HashMap<String, String>,
     mut created_ids: Vec<(String, String)>,
 ) -> Result<(HashMap<String, String>, Vec<(String, String)>), CopyError> {
@@ -471,7 +471,7 @@ pub async fn step3_create_page_lines(
     let mut new_id_map = id_map.clone();
 
     let (results, entity_info) = execute_creation_step(
-        questionnaire.clone(),
+        Arc::clone(&questionnaire),
         id_map,
         &mut created_ids,
         CopyPhase::CreatingPageLines,
@@ -512,7 +512,7 @@ pub async fn step3_create_page_lines(
 }
 
 pub async fn step4_create_groups(
-    questionnaire: Questionnaire,
+    questionnaire: Arc<Questionnaire>,
     id_map: HashMap<String, String>,
     mut created_ids: Vec<(String, String)>,
 ) -> Result<(HashMap<String, String>, Vec<(String, String)>), CopyError> {
@@ -525,7 +525,7 @@ pub async fn step4_create_groups(
     let mut new_id_map = id_map.clone();
 
     let (results, entity_info) = execute_creation_step(
-        questionnaire.clone(),
+        Arc::clone(&questionnaire),
         id_map,
         &mut created_ids,
         CopyPhase::CreatingGroups,
@@ -568,7 +568,7 @@ pub async fn step4_create_groups(
 }
 
 pub async fn step5_create_group_lines(
-    questionnaire: Questionnaire,
+    questionnaire: Arc<Questionnaire>,
     id_map: HashMap<String, String>,
     mut created_ids: Vec<(String, String)>,
 ) -> Result<(HashMap<String, String>, Vec<(String, String)>), CopyError> {
@@ -580,7 +580,7 @@ pub async fn step5_create_group_lines(
     let mut new_id_map = id_map.clone();
 
     let (results, entity_info) = execute_creation_step(
-        questionnaire.clone(),
+        Arc::clone(&questionnaire),
         id_map,
         &mut created_ids,
         CopyPhase::CreatingGroupLines,
@@ -621,7 +621,7 @@ pub async fn step5_create_group_lines(
 }
 
 pub async fn step6_create_questions(
-    questionnaire: Questionnaire,
+    questionnaire: Arc<Questionnaire>,
     id_map: HashMap<String, String>,
     mut created_ids: Vec<(String, String)>,
 ) -> Result<(HashMap<String, String>, Vec<(String, String)>), CopyError> {
@@ -637,7 +637,7 @@ pub async fn step6_create_questions(
     let mut new_id_map = id_map.clone();
 
     let (results, entity_info) = execute_creation_step(
-        questionnaire.clone(),
+        Arc::clone(&questionnaire),
         id_map,
         &mut created_ids,
         CopyPhase::CreatingQuestions,
@@ -682,7 +682,7 @@ pub async fn step6_create_questions(
 }
 
 pub async fn step7_create_template_lines(
-    questionnaire: Questionnaire,
+    questionnaire: Arc<Questionnaire>,
     id_map: HashMap<String, String>,
     mut created_ids: Vec<(String, String)>,
 ) -> Result<(HashMap<String, String>, Vec<(String, String)>), CopyError> {
@@ -694,7 +694,7 @@ pub async fn step7_create_template_lines(
     let mut new_id_map = id_map.clone();
 
     let (results, entity_info) = execute_creation_step(
-        questionnaire.clone(),
+        Arc::clone(&questionnaire),
         id_map,
         &mut created_ids,
         CopyPhase::CreatingTemplateLines,
@@ -735,7 +735,7 @@ pub async fn step7_create_template_lines(
 }
 
 pub async fn step8_create_conditions(
-    questionnaire: Questionnaire,
+    questionnaire: Arc<Questionnaire>,
     id_map: HashMap<String, String>,
     mut created_ids: Vec<(String, String)>,
 ) -> Result<(HashMap<String, String>, Vec<(String, String)>), CopyError> {
@@ -747,7 +747,7 @@ pub async fn step8_create_conditions(
     let mut new_id_map = id_map.clone();
 
     let (results, entity_info) = execute_creation_step(
-        questionnaire.clone(),
+        Arc::clone(&questionnaire),
         id_map,
         &mut created_ids,
         CopyPhase::CreatingConditions,
@@ -795,7 +795,7 @@ pub async fn step8_create_conditions(
 }
 
 pub async fn step9_create_condition_actions(
-    questionnaire: Questionnaire,
+    questionnaire: Arc<Questionnaire>,
     id_map: HashMap<String, String>,
     mut created_ids: Vec<(String, String)>,
 ) -> Result<(HashMap<String, String>, Vec<(String, String)>), CopyError> {
@@ -808,7 +808,7 @@ pub async fn step9_create_condition_actions(
     let mut new_id_map = id_map.clone();
 
     let (results, entity_info) = execute_creation_step(
-        questionnaire.clone(),
+        Arc::clone(&questionnaire),
         id_map,
         &mut created_ids,
         CopyPhase::CreatingConditionActions,
@@ -851,7 +851,7 @@ pub async fn step9_create_condition_actions(
 }
 
 pub async fn step10_create_classifications(
-    questionnaire: Questionnaire,
+    questionnaire: Arc<Questionnaire>,
     id_map: HashMap<String, String>,
     mut created_ids: Vec<(String, String)>,
 ) -> Result<(HashMap<String, String>, Vec<(String, String)>), CopyError> {
