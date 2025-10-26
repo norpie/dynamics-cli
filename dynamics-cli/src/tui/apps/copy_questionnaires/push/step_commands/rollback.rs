@@ -40,10 +40,12 @@ pub async fn rollback_created_entities(
     created_ids: Vec<(String, String)>,
 ) -> Result<(), String> {
     if created_ids.is_empty() {
+        log::info!("Rollback: No entities to delete");
         return Ok(()); // Nothing to rollback
     }
 
-    log::info!("Starting rollback of {} entities", created_ids.len());
+    log::info!("Starting rollback: deleting {} entities in reverse order", created_ids.len());
+    log::debug!("Entities to delete: {:?}", created_ids.iter().map(|(set, id)| format!("{}({})", set, id)).collect::<Vec<_>>());
 
     let client_manager = crate::client_manager();
 
@@ -72,7 +74,9 @@ pub async fn rollback_created_entities(
     let mut operations = Operations::new();
 
     // Delete in REVERSE order (bottom-up to respect dependencies)
-    for (entity_set, entity_id) in created_ids.iter().rev() {
+    log::debug!("Building delete operations in reverse order");
+    for (idx, (entity_set, entity_id)) in created_ids.iter().rev().enumerate() {
+        log::debug!("Queuing delete [{}/{}]: {} ({})", idx + 1, created_ids.len(), entity_id, entity_set);
         operations = operations.add(Operation::Delete {
             entity: entity_set.clone(),
             id: entity_id.clone(),
@@ -80,19 +84,32 @@ pub async fn rollback_created_entities(
     }
 
     // Execute batch delete
+    log::info!("Executing batch delete for {} entities", created_ids.len());
     match operations.execute(&client, &resilience).await {
         Ok(results) => {
+            log::debug!("Received {} deletion results", results.len());
+
             let mut all_success = true;
+            let mut success_count = 0;
+            let mut failure_count = 0;
+
             for (idx, result) in results.iter().enumerate() {
-                if !result.success {
-                    let (entity_set, entity_id) = &created_ids[created_ids.len() - 1 - idx];
+                let (entity_set, entity_id) = &created_ids[created_ids.len() - 1 - idx];
+
+                if result.success {
+                    log::debug!("Deleted [{}/{}]: {} ({})", idx + 1, results.len(), entity_id, entity_set);
+                    success_count += 1;
+                } else {
                     log::error!(
-                        "Failed to delete {} ({}): {:?}",
-                        entity_set,
+                        "Failed to delete [{}/{}]: {} ({}) - {:?}",
+                        idx + 1,
+                        results.len(),
                         entity_id,
+                        entity_set,
                         result.error
                     );
                     all_success = false;
+                    failure_count += 1;
                 }
             }
 
@@ -100,9 +117,10 @@ pub async fn rollback_created_entities(
                 log::info!("Rollback completed successfully - deleted {} entities", created_ids.len());
                 Ok(())
             } else {
-                log::warn!("Rollback partially failed - some entities may remain");
+                log::warn!("Rollback partially failed: {} succeeded, {} failed", success_count, failure_count);
                 let csv_path = export_orphaned_entities_csv(&created_ids)
                     .unwrap_or_else(|e| format!("(CSV export also failed: {})", e));
+                log::error!("Orphaned entities exported to: {}", csv_path);
                 Err(csv_path)
             }
         }
