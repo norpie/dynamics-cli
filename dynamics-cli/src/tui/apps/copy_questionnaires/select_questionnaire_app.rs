@@ -124,13 +124,15 @@ impl App for SelectQuestionnaireApp {
                         .map_err(|e| e.to_string())?;
 
                     // Build query for questionnaires
-                    use crate::api::query::{Query, OrderBy};
+                    use crate::api::query::{Query, OrderBy, Filter};
                     let mut query = Query::new("nrq_questionnaires");
                     query.select = Some(vec![
                         "nrq_questionnaireid".to_string(),
                         "nrq_name".to_string(),
                         "nrq_code".to_string(),
                     ]);
+                    // Only show Active questionnaires (statecode = 0) to avoid copying incomplete/orphaned data
+                    query.filter = Some(Filter::eq("statecode", 0));
                     query.orderby = query.orderby.add(OrderBy::asc("nrq_name"));
 
                     let result = client.execute_query(&query).await
@@ -243,13 +245,15 @@ impl App for SelectQuestionnaireApp {
                                 .map_err(|e| e.to_string())?;
 
                             // Build query for questionnaires
-                            use crate::api::query::{Query, OrderBy};
+                            use crate::api::query::{Query, OrderBy, Filter};
                             let mut query = Query::new("nrq_questionnaires");
                             query.select = Some(vec![
                                 "nrq_questionnaireid".to_string(),
                                 "nrq_name".to_string(),
                                 "nrq_code".to_string(),
                             ]);
+                            // Only show Active questionnaires (statecode = 0) to avoid copying incomplete/orphaned data
+                            query.filter = Some(Filter::eq("statecode", 0));
                             query.orderby = query.orderby.add(OrderBy::asc("nrq_name"));
 
                             let result = client.execute_query(&query).await
