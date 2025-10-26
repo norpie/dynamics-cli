@@ -1,10 +1,11 @@
 use super::super::entity_sets;
+use super::super::field_specs;
 /// Step 4: Create question groups
 
 use super::super::super::super::copy::domain::Questionnaire;
 use super::super::super::models::{CopyError, CopyPhase};
 use super::super::execution::{execute_creation_step, process_creation_results, EntityInfo};
-use super::super::helpers::{get_shared_entities, remap_lookup_fields, remove_system_fields};
+use super::super::helpers::{get_shared_entities, build_payload};
 use crate::api::operations::Operations;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -36,10 +37,8 @@ pub async fn step4_create_groups(
 
             for page in &q.pages {
                 for group in &page.groups {
-                    let mut data = remap_lookup_fields(&group.raw, &id_map, &shared_entities)
-                        .map_err(|e| format!("Failed to remap group lookup fields: {}", e))?;
-
-                    remove_system_fields(&mut data, "nrq_questiongroupid");
+                    let data = build_payload(&group.raw, field_specs::GROUP_FIELDS, &id_map, &shared_entities)
+                        .map_err(|e| format!("Failed to build group payload: {}", e))?;
 
                     operations = operations.create(entity_sets::GROUPS, data);
                     entity_info.push(EntityInfo {

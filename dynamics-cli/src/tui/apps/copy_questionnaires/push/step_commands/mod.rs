@@ -19,6 +19,7 @@ mod rollback;
 mod steps;
 
 pub mod entity_sets;
+pub mod field_specs;
 
 // Re-export public API
 pub use steps::{

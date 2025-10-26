@@ -1,14 +1,16 @@
 use super::super::entity_sets;
+use super::super::field_specs;
 /// Step 1: Create the questionnaire entity
 
 use super::super::super::super::copy::domain::Questionnaire;
 use super::super::super::models::{CopyError, CopyPhase};
 use super::super::error::build_error;
-use super::super::helpers::{extract_entity_id, remove_system_fields};
+use super::super::helpers::{extract_entity_id, build_payload, get_shared_entities};
 use crate::api::{ResilienceConfig};
 use crate::api::operations::Operations;
 use serde_json::{json, Value};
 use std::sync::Arc;
+use std::collections::HashMap;
 
 pub async fn step1_create_questionnaire(
     questionnaire: Arc<Questionnaire>,
@@ -30,9 +32,13 @@ pub async fn step1_create_questionnaire(
     let resilience = ResilienceConfig::default();
 
     log::debug!("Preparing questionnaire data");
-    let mut data = questionnaire.raw.clone();
-    remove_system_fields(&mut data, "nrq_questionnaireid");
+    let shared_entities = get_shared_entities();
+    let id_map = HashMap::new(); // Step 1 has no remapping yet
 
+    let mut data = build_payload(&questionnaire.raw, field_specs::QUESTIONNAIRE_FIELDS, &id_map, &shared_entities)
+        .map_err(|e| build_error(e, CopyPhase::CreatingQuestionnaire, 1, &[]))?;
+
+    // Override name and code with user-provided values
     data["nrq_name"] = json!(copy_name);
     data["nrq_copypostfix"] = json!(copy_code);
 

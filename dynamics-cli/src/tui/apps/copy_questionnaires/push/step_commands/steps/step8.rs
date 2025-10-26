@@ -1,10 +1,11 @@
 use super::super::entity_sets;
+use super::super::field_specs;
 /// Step 8: Create conditions
 
 use super::super::super::super::copy::domain::Questionnaire;
 use super::super::super::models::{CopyError, CopyPhase};
 use super::super::execution::{execute_creation_step, process_creation_results, EntityInfo};
-use super::super::helpers::{get_shared_entities, remap_lookup_fields, remap_condition_json, remove_system_fields};
+use super::super::helpers::{get_shared_entities, build_payload, remap_condition_json};
 use crate::api::operations::Operations;
 use serde_json::json;
 use std::collections::HashMap;
@@ -35,8 +36,8 @@ pub async fn step8_create_conditions(
             let mut entity_info = Vec::new();
 
             for condition in &q.conditions {
-                let mut data = remap_lookup_fields(&condition.raw, &id_map, &shared_entities)
-                    .map_err(|e| format!("Failed to remap condition lookup fields: {}", e))?;
+                let mut data = build_payload(&condition.raw, field_specs::CONDITION_FIELDS, &id_map, &shared_entities)
+                    .map_err(|e| format!("Failed to build condition payload: {}", e))?;
 
                 // CRITICAL: Remap condition JSON with embedded question IDs
                 if let Some(condition_json_str) = condition.raw.get("nrq_conditionjson").and_then(|v| v.as_str()) {
@@ -44,8 +45,6 @@ pub async fn step8_create_conditions(
                         .map_err(|e| format!("Failed to remap condition JSON: {}", e))?;
                     data["nrq_conditionjson"] = json!(remapped_json);
                 }
-
-                remove_system_fields(&mut data, "nrq_questionconditionid");
 
                 operations = operations.create(entity_sets::CONDITIONS, data);
                 entity_info.push(EntityInfo {

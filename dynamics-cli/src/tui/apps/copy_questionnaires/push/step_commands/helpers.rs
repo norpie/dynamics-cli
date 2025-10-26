@@ -1,6 +1,7 @@
 /// Helper functions for data transformation and field manipulation
 
 use super::entity_sets;
+use super::field_specs::{FieldSpec, FieldType};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 
@@ -19,8 +20,63 @@ pub fn get_shared_entities() -> HashSet<&'static str> {
     set
 }
 
+/// Build a clean payload from raw entity data using field specifications
+///
+/// This replaces the old remove_system_fields() + remap_lookup_fields() approach
+/// with an allowlist-based system that:
+/// 1. Only includes fields defined in the spec (avoiding OData annotations)
+/// 2. Transforms lookup fields to @odata.bind format
+/// 3. Applies ID remapping for copied entities vs shared entities
+pub fn build_payload(
+    raw: &Value,
+    fields: &[FieldSpec],
+    id_map: &HashMap<String, String>,
+    shared_entities: &HashSet<&str>,
+) -> Result<Value, String> {
+    let mut payload = json!({});
+
+    for spec in fields {
+        if let Some(value) = raw.get(spec.source_name) {
+            // Skip null values
+            if value.is_null() {
+                continue;
+            }
+
+            match &spec.field_type {
+                FieldType::Value => {
+                    // Copy directly
+                    payload[spec.field_name] = value.clone();
+                }
+                FieldType::Lookup { target_entity } => {
+                    let guid = value.as_str()
+                        .ok_or_else(|| format!("Lookup field {} is not a string", spec.source_name))?;
+
+                    // Check if this is a shared entity (don't remap)
+                    let is_shared = shared_entities.iter()
+                        .any(|&entity| spec.field_name.contains(entity));
+
+                    // Remap if not shared and mapping exists
+                    let final_guid = if is_shared {
+                        guid
+                    } else {
+                        id_map.get(guid).map(|s| s.as_str()).unwrap_or(guid)
+                    };
+
+                    // Transform to @odata.bind format
+                    let bind_key = format!("{}@odata.bind", spec.field_name);
+                    payload[bind_key] = json!(format!("/{}({})", target_entity, final_guid));
+                }
+            }
+        }
+    }
+
+    Ok(payload)
+}
+
+/// DEPRECATED: Old approach - kept for reference during migration
 /// Remove system-managed fields from entity data before creation
 /// These fields are read-only and will be populated by Dynamics
+#[allow(dead_code)]
 pub fn remove_system_fields(data: &mut Value, id_field: &str) {
     if let Value::Object(map) = data {
         // Remove primary key
@@ -51,8 +107,10 @@ pub fn entity_set_to_friendly_name(entity_set: &str) -> &str {
     }
 }
 
+/// DEPRECATED: Old approach - replaced by build_payload()
 /// Remap lookup fields from old entity IDs to new entity IDs
 /// Handles both copied entities (remapped) and shared entities (preserved)
+#[allow(dead_code)]
 pub fn remap_lookup_fields(
     raw_data: &Value,
     id_map: &HashMap<String, String>,
@@ -98,7 +156,8 @@ pub fn remap_lookup_fields(
     Ok(data)
 }
 
-/// Infer entity set name from field name pattern
+/// DEPRECATED: Infer entity set name from field name pattern
+#[allow(dead_code)]
 fn infer_entity_set_from_field(field_name: &str) -> Result<String, String> {
     if field_name.contains("questionnaireid") {
         Ok(entity_sets::QUESTIONNAIRES.to_string())

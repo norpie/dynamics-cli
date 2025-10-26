@@ -1,10 +1,11 @@
 use super::super::entity_sets;
+use super::super::field_specs;
 /// Step 7: Create template lines
 
 use super::super::super::super::copy::domain::Questionnaire;
 use super::super::super::models::{CopyError, CopyPhase};
 use super::super::execution::{execute_creation_step, process_creation_results, EntityInfo};
-use super::super::helpers::{get_shared_entities, remap_lookup_fields, remove_system_fields};
+use super::super::helpers::{get_shared_entities, build_payload};
 use crate::api::operations::Operations;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -34,10 +35,8 @@ pub async fn step7_create_template_lines(
             let mut entity_info = Vec::new();
 
             for template_line in &q.template_lines {
-                let mut data = remap_lookup_fields(&template_line.raw, &id_map, &shared_entities)
-                    .map_err(|e| format!("Failed to remap template line lookup fields: {}", e))?;
-
-                remove_system_fields(&mut data, "nrq_questiontemplatetogrouplineid");
+                let data = build_payload(&template_line.raw, field_specs::TEMPLATE_LINE_FIELDS, &id_map, &shared_entities)
+                    .map_err(|e| format!("Failed to build template line payload: {}", e))?;
 
                 operations = operations.create(entity_sets::TEMPLATE_LINES, data);
                 entity_info.push(EntityInfo {

@@ -1,10 +1,11 @@
 use super::super::entity_sets;
+use super::super::field_specs;
 /// Step 2: Create questionnaire pages
 
 use super::super::super::super::copy::domain::Questionnaire;
 use super::super::super::models::{CopyError, CopyPhase};
 use super::super::execution::{execute_creation_step, process_creation_results, EntityInfo};
-use super::super::helpers::{get_shared_entities, remap_lookup_fields, remove_system_fields};
+use super::super::helpers::{get_shared_entities, build_payload};
 use crate::api::operations::Operations;
 use serde_json::json;
 use std::collections::HashMap;
@@ -39,11 +40,11 @@ pub async fn step2_create_pages(
             let mut entity_info = Vec::new();
 
             for page in &q.pages {
-                let mut data = remap_lookup_fields(&page.raw, &id_map, &shared_entities)
-                    .map_err(|e| format!("Failed to remap page lookup fields: {}", e))?;
+                let mut data = build_payload(&page.raw, field_specs::PAGE_FIELDS, &id_map, &shared_entities)
+                    .map_err(|e| format!("Failed to build page payload: {}", e))?;
 
+                // Set parent questionnaire reference
                 data["nrq_questionnaireid@odata.bind"] = json!(format!("/nrq_questionnaires({})", new_questionnaire_id));
-                remove_system_fields(&mut data, "nrq_questionnairepageid");
 
                 operations = operations.create(entity_sets::PAGES, data);
                 entity_info.push(EntityInfo {

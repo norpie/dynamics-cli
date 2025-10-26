@@ -1,10 +1,11 @@
 use super::super::entity_sets;
+use super::super::field_specs;
 /// Step 5: Create group lines
 
 use super::super::super::super::copy::domain::Questionnaire;
 use super::super::super::models::{CopyError, CopyPhase};
 use super::super::execution::{execute_creation_step, process_creation_results, EntityInfo};
-use super::super::helpers::{get_shared_entities, remap_lookup_fields, remove_system_fields};
+use super::super::helpers::{get_shared_entities, build_payload};
 use crate::api::operations::Operations;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -34,10 +35,8 @@ pub async fn step5_create_group_lines(
             let mut entity_info = Vec::new();
 
             for group_line in &q.group_lines {
-                let mut data = remap_lookup_fields(group_line, &id_map, &shared_entities)
-                    .map_err(|e| format!("Failed to remap group line lookup fields: {}", e))?;
-
-                remove_system_fields(&mut data, "nrq_questiongrouplineid");
+                let data = build_payload(group_line, field_specs::GROUP_LINE_FIELDS, &id_map, &shared_entities)
+                    .map_err(|e| format!("Failed to build group line payload: {}", e))?;
 
                 operations = operations.create(entity_sets::GROUP_LINES, data);
                 entity_info.push(EntityInfo {

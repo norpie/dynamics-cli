@@ -1,10 +1,11 @@
 use super::super::entity_sets;
+use super::super::field_specs;
 /// Step 6: Create questions
 
 use super::super::super::super::copy::domain::Questionnaire;
 use super::super::super::models::{CopyError, CopyPhase};
 use super::super::execution::{execute_creation_step, process_creation_results, EntityInfo};
-use super::super::helpers::{get_shared_entities, remap_lookup_fields, remove_system_fields};
+use super::super::helpers::{get_shared_entities, build_payload};
 use crate::api::operations::Operations;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -40,10 +41,8 @@ pub async fn step6_create_questions(
             for page in &q.pages {
                 for group in &page.groups {
                     for question in &group.questions {
-                        let mut data = remap_lookup_fields(&question.raw, &id_map, &shared_entities)
-                            .map_err(|e| format!("Failed to remap question lookup fields: {}", e))?;
-
-                        remove_system_fields(&mut data, "nrq_questionid");
+                        let data = build_payload(&question.raw, field_specs::QUESTION_FIELDS, &id_map, &shared_entities)
+                            .map_err(|e| format!("Failed to build question payload: {}", e))?;
 
                         operations = operations.create(entity_sets::QUESTIONS, data);
                         entity_info.push(EntityInfo {
