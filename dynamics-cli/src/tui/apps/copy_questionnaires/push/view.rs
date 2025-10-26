@@ -1,4 +1,4 @@
-use super::models::{State, PushState, CopyProgress, CopyResult, CopyError, CopyPhase};
+use super::models::{State, PushState, CopyProgress, CopyResult, CopyError, CopyPhase, EntityType};
 use crate::tui::{Element, renderer::LayeredView, LayoutConstraint};
 use crate::{col, spacer, use_constraints};
 use ratatui::{
@@ -187,16 +187,16 @@ fn render_progress_screen(
         spacer!(),
 
         // Individual entity progress lines
-        render_entity_progress("Questionnaire", progress.questionnaire, theme, matches!(progress.phase, CopyPhase::CreatingQuestionnaire)),
-        render_entity_progress("Pages", progress.pages, theme, matches!(progress.phase, CopyPhase::CreatingPages)),
-        render_entity_progress("Page Lines", progress.page_lines, theme, matches!(progress.phase, CopyPhase::CreatingPageLines)),
-        render_entity_progress("Groups", progress.groups, theme, matches!(progress.phase, CopyPhase::CreatingGroups)),
-        render_entity_progress("Group Lines", progress.group_lines, theme, matches!(progress.phase, CopyPhase::CreatingGroupLines)),
-        render_entity_progress("Questions", progress.questions, theme, matches!(progress.phase, CopyPhase::CreatingQuestions)),
-        render_entity_progress("Template Lines", progress.template_lines, theme, matches!(progress.phase, CopyPhase::CreatingTemplateLines)),
-        render_entity_progress("Conditions", progress.conditions, theme, matches!(progress.phase, CopyPhase::CreatingConditions)),
-        render_entity_progress("Condition Actions", progress.condition_actions, theme, matches!(progress.phase, CopyPhase::CreatingConditionActions)),
-        render_entity_progress("Classifications", progress.classifications, theme, matches!(progress.phase, CopyPhase::CreatingClassifications)),
+        render_entity_progress("Questionnaire", progress.get(EntityType::Questionnaire), theme, matches!(progress.phase, CopyPhase::CreatingQuestionnaire)),
+        render_entity_progress("Pages", progress.get(EntityType::Pages), theme, matches!(progress.phase, CopyPhase::CreatingPages)),
+        render_entity_progress("Page Lines", progress.get(EntityType::PageLines), theme, matches!(progress.phase, CopyPhase::CreatingPageLines)),
+        render_entity_progress("Groups", progress.get(EntityType::Groups), theme, matches!(progress.phase, CopyPhase::CreatingGroups)),
+        render_entity_progress("Group Lines", progress.get(EntityType::GroupLines), theme, matches!(progress.phase, CopyPhase::CreatingGroupLines)),
+        render_entity_progress("Questions", progress.get(EntityType::Questions), theme, matches!(progress.phase, CopyPhase::CreatingQuestions)),
+        render_entity_progress("Template Lines", progress.get(EntityType::TemplateLines), theme, matches!(progress.phase, CopyPhase::CreatingTemplateLines)),
+        render_entity_progress("Conditions", progress.get(EntityType::Conditions), theme, matches!(progress.phase, CopyPhase::CreatingConditions)),
+        render_entity_progress("Condition Actions", progress.get(EntityType::ConditionActions), theme, matches!(progress.phase, CopyPhase::CreatingConditionActions)),
+        render_entity_progress("Classifications", progress.get(EntityType::Classifications), theme, matches!(progress.phase, CopyPhase::CreatingClassifications)),
 
         spacer!(),
 

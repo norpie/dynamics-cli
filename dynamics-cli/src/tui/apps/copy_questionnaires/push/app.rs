@@ -165,8 +165,7 @@ impl App for PushQuestionnaireApp {
                         if let PushState::Copying(ref mut progress) = state.push_state {
                             progress.phase = CopyPhase::CreatingPages;
                             progress.step = 2;
-                            progress.questionnaire = (1, 1);
-                            progress.total_created = 1;
+                            progress.complete(EntityType::Questionnaire);
                         }
 
                         // Start Step 2
@@ -198,8 +197,7 @@ impl App for PushQuestionnaireApp {
                     CopyPhase::CreatingPageLines,
                     3,
                     |progress| {
-                        progress.pages = (progress.pages.1, progress.pages.1);
-                        progress.total_created += progress.pages.1;
+                        progress.complete(EntityType::Pages);
                     },
                     |q, id_map, created_ids| Box::pin(super::step_commands::step3_create_page_lines(q, id_map, created_ids)),
                     Msg::Step3Complete,
@@ -213,8 +211,7 @@ impl App for PushQuestionnaireApp {
                     CopyPhase::CreatingGroups,
                     4,
                     |progress| {
-                        progress.page_lines = (progress.page_lines.1, progress.page_lines.1);
-                        progress.total_created += progress.page_lines.1;
+                        progress.complete(EntityType::PageLines);
                     },
                     |q, id_map, created_ids| Box::pin(super::step_commands::step4_create_groups(q, id_map, created_ids)),
                     Msg::Step4Complete,
@@ -228,8 +225,7 @@ impl App for PushQuestionnaireApp {
                     CopyPhase::CreatingGroupLines,
                     5,
                     |progress| {
-                        progress.groups = (progress.groups.1, progress.groups.1);
-                        progress.total_created += progress.groups.1;
+                        progress.complete(EntityType::Groups);
                     },
                     |q, id_map, created_ids| Box::pin(super::step_commands::step5_create_group_lines(q, id_map, created_ids)),
                     Msg::Step5Complete,
@@ -243,8 +239,7 @@ impl App for PushQuestionnaireApp {
                     CopyPhase::CreatingQuestions,
                     6,
                     |progress| {
-                        progress.group_lines = (progress.group_lines.1, progress.group_lines.1);
-                        progress.total_created += progress.group_lines.1;
+                        progress.complete(EntityType::GroupLines);
                     },
                     |q, id_map, created_ids| Box::pin(super::step_commands::step6_create_questions(q, id_map, created_ids)),
                     Msg::Step6Complete,
@@ -258,8 +253,7 @@ impl App for PushQuestionnaireApp {
                     CopyPhase::CreatingTemplateLines,
                     7,
                     |progress| {
-                        progress.questions = (progress.questions.1, progress.questions.1);
-                        progress.total_created += progress.questions.1;
+                        progress.complete(EntityType::Questions);
                     },
                     |q, id_map, created_ids| Box::pin(super::step_commands::step7_create_template_lines(q, id_map, created_ids)),
                     Msg::Step7Complete,
@@ -273,8 +267,7 @@ impl App for PushQuestionnaireApp {
                     CopyPhase::CreatingConditions,
                     8,
                     |progress| {
-                        progress.template_lines = (progress.template_lines.1, progress.template_lines.1);
-                        progress.total_created += progress.template_lines.1;
+                        progress.complete(EntityType::TemplateLines);
                     },
                     |q, id_map, created_ids| Box::pin(super::step_commands::step8_create_conditions(q, id_map, created_ids)),
                     Msg::Step8Complete,
@@ -288,8 +281,7 @@ impl App for PushQuestionnaireApp {
                     CopyPhase::CreatingConditionActions,
                     9,
                     |progress| {
-                        progress.conditions = (progress.conditions.1, progress.conditions.1);
-                        progress.total_created += progress.conditions.1;
+                        progress.complete(EntityType::Conditions);
                     },
                     |q, id_map, created_ids| Box::pin(super::step_commands::step9_create_condition_actions(q, id_map, created_ids)),
                     Msg::Step9Complete,
@@ -303,8 +295,7 @@ impl App for PushQuestionnaireApp {
                     CopyPhase::CreatingClassifications,
                     10,
                     |progress| {
-                        progress.condition_actions = (progress.condition_actions.1, progress.condition_actions.1);
-                        progress.total_created += progress.condition_actions.1;
+                        progress.complete(EntityType::ConditionActions);
                     },
                     |q, id_map, created_ids| Box::pin(super::step_commands::step10_create_classifications(q, id_map, created_ids)),
                     Msg::Step10Complete,

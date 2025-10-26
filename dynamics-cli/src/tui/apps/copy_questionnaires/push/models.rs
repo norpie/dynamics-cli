@@ -58,6 +58,39 @@ impl Default for State {
     }
 }
 
+/// Entity types for progress tracking
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
+pub enum EntityType {
+    Questionnaire,
+    Pages,
+    PageLines,
+    Groups,
+    GroupLines,
+    Questions,
+    TemplateLines,
+    Conditions,
+    ConditionActions,
+    Classifications,
+}
+
+impl EntityType {
+    /// Get a display name for this entity type
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            EntityType::Questionnaire => "Questionnaire",
+            EntityType::Pages => "Pages",
+            EntityType::PageLines => "Page Lines",
+            EntityType::Groups => "Groups",
+            EntityType::GroupLines => "Group Lines",
+            EntityType::Questions => "Questions",
+            EntityType::TemplateLines => "Template Lines",
+            EntityType::Conditions => "Conditions",
+            EntityType::ConditionActions => "Condition Actions",
+            EntityType::Classifications => "Classifications",
+        }
+    }
+}
+
 /// State machine for the push/copy process
 #[derive(Clone)]
 pub enum PushState {
@@ -80,17 +113,8 @@ pub struct CopyProgress {
     pub phase: CopyPhase,
     pub step: usize,  // 1-10 (10 steps total)
 
-    // Per-entity counts (done, total)
-    pub questionnaire: (usize, usize),
-    pub pages: (usize, usize),
-    pub page_lines: (usize, usize),
-    pub groups: (usize, usize),
-    pub group_lines: (usize, usize),
-    pub questions: (usize, usize),
-    pub template_lines: (usize, usize),
-    pub conditions: (usize, usize),
-    pub condition_actions: (usize, usize),
-    pub classifications: (usize, usize),
+    // Per-entity counts (done, total) - indexed by EntityType
+    pub entity_progress: HashMap<EntityType, (usize, usize)>,
 
     // Overall progress
     pub total_created: usize,
@@ -124,23 +148,46 @@ impl CopyProgress {
 
         let total_entities = questionnaire.total_entities();
 
+        // Initialize the HashMap with all entity types
+        let mut entity_progress = HashMap::new();
+        entity_progress.insert(EntityType::Questionnaire, (0, 1));
+        entity_progress.insert(EntityType::Pages, (0, pages_count));
+        entity_progress.insert(EntityType::PageLines, (0, page_lines_count));
+        entity_progress.insert(EntityType::Groups, (0, groups_count));
+        entity_progress.insert(EntityType::GroupLines, (0, group_lines_count));
+        entity_progress.insert(EntityType::Questions, (0, questions_count));
+        entity_progress.insert(EntityType::TemplateLines, (0, template_lines_count));
+        entity_progress.insert(EntityType::Conditions, (0, conditions_count));
+        entity_progress.insert(EntityType::ConditionActions, (0, condition_actions_count));
+        entity_progress.insert(EntityType::Classifications, (0, classifications_count));
+
         Self {
             phase: CopyPhase::CreatingQuestionnaire,
             step: 1,
-            questionnaire: (0, 1),
-            pages: (0, pages_count),
-            page_lines: (0, page_lines_count),
-            groups: (0, groups_count),
-            group_lines: (0, group_lines_count),
-            questions: (0, questions_count),
-            template_lines: (0, template_lines_count),
-            conditions: (0, conditions_count),
-            condition_actions: (0, condition_actions_count),
-            classifications: (0, classifications_count),
+            entity_progress,
             total_created: 0,
             total_entities,
             started_at: Instant::now(),
         }
+    }
+
+    /// Update progress for a specific entity type by marking it as complete
+    pub fn complete(&mut self, entity_type: EntityType) {
+        if let Some((done, total)) = self.entity_progress.get_mut(&entity_type) {
+            let created = *total - *done;
+            *done = *total;
+            self.total_created += created;
+        }
+    }
+
+    /// Get the progress counts for a specific entity type
+    pub fn get(&self, entity_type: EntityType) -> (usize, usize) {
+        self.entity_progress.get(&entity_type).copied().unwrap_or((0, 0))
+    }
+
+    /// Set progress for a specific entity type (mainly for testing or manual updates)
+    pub fn set(&mut self, entity_type: EntityType, done: usize, total: usize) {
+        self.entity_progress.insert(entity_type, (done, total));
     }
 
     /// Calculate overall percentage
