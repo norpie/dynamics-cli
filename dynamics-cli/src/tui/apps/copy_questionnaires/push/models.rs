@@ -194,8 +194,8 @@ impl CopyProgress {
 
     /// Calculate overall percentage based on step progress (equal weight per step)
     pub fn percentage(&self) -> usize {
-        // Each step = 10% (10 steps total)
-        (self.step * 100) / 10
+        // Each step ~9% (11 steps total)
+        (self.step * 100) / 11
     }
 
     /// Get elapsed time

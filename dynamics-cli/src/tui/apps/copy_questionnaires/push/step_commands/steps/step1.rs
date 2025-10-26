@@ -17,7 +17,7 @@ pub async fn step1_create_questionnaire(
     copy_name: String,
     copy_code: String,
 ) -> Result<(String, Vec<(String, String)>), CopyError> {
-    log::info!("Step 1/10: Starting Creating Questionnaire (expecting 1 entity)");
+    log::info!("Step 1/11: Starting Creating Questionnaire (expecting 1 entity)");
     log::debug!("Copy name: '{}', copy code: '{}', source ID: {}", copy_name, copy_code, questionnaire.id);
 
     let client_manager = crate::client_manager();
@@ -66,6 +66,6 @@ pub async fn step1_create_questionnaire(
 
     let created_ids = vec![(entity_sets::QUESTIONNAIRES.to_string(), new_id.clone())];
 
-    log::info!("Step 1/10: Completed Creating Questionnaire successfully (1 entity created)");
+    log::info!("Step 1/11: Completed Creating Questionnaire successfully (1 entity created)");
     Ok((new_id, created_ids))
 }
