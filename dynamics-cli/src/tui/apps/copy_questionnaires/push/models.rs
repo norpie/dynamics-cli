@@ -302,7 +302,6 @@ pub enum Msg {
     ViewCopy,
     CopyAnother,
     Retry,
-    ViewLogs,
     Done,
     Back,
     UndoCopy,  // Show undo confirmation

@@ -426,12 +426,6 @@ impl App for PushQuestionnaireApp {
                 ])
             }
 
-            Msg::ViewLogs => {
-                // TODO: Show detailed error logs
-                log::info!("View logs (not implemented)");
-                Command::None
-            }
-
             Msg::UndoCopy => {
                 // Show confirmation modal before undo
                 log::info!("Showing undo confirmation");
@@ -506,7 +500,6 @@ impl App for PushQuestionnaireApp {
             PushState::Failed(_) => {
                 vec![
                     Subscription::keyboard(KeyCode::Char('r'), "Retry", Msg::Retry),
-                    Subscription::keyboard(KeyCode::Char('l'), "View Logs", Msg::ViewLogs),
                     Subscription::keyboard(KeyCode::Esc, "Cancel", Msg::Cancel),
                 ]
             }
