@@ -20,6 +20,9 @@ pub struct RuntimeConfig {
 
     /// Global keybinds mapping action names to key combinations
     pub keybinds: HashMap<String, KeyBinding>,
+
+    /// Tab key debouncing duration in milliseconds
+    pub tab_debouncing_ms: u64,
 }
 
 impl Default for RuntimeConfig {
@@ -30,6 +33,7 @@ impl Default for RuntimeConfig {
             theme: Theme::new(ThemeVariant::default()),
             focus_mode: FocusMode::default(),
             keybinds: HashMap::new(),
+            tab_debouncing_ms: 150,
         }
     }
 }
@@ -37,7 +41,8 @@ impl Default for RuntimeConfig {
 impl RuntimeConfig {
     /// Create a new config with explicit settings
     pub fn new(theme: Theme, focus_mode: FocusMode, keybinds: HashMap<String, KeyBinding>) -> Self {
-        Self { theme, focus_mode, keybinds }
+        let default = Self::default();
+        Self { theme, focus_mode, keybinds, tab_debouncing_ms: default.tab_debouncing_ms }
     }
 
     /// Create config with custom theme variant and default focus mode
@@ -47,6 +52,7 @@ impl RuntimeConfig {
             theme: Theme::new(variant),
             focus_mode: FocusMode::default(),
             keybinds: default.keybinds,
+            tab_debouncing_ms: default.tab_debouncing_ms,
         }
     }
 
@@ -57,6 +63,7 @@ impl RuntimeConfig {
             theme: Theme::new(ThemeVariant::default()),
             focus_mode: mode,
             keybinds: default.keybinds,
+            tab_debouncing_ms: default.tab_debouncing_ms,
         }
     }
 
@@ -125,6 +132,10 @@ impl RuntimeConfig {
                 Theme::mocha()
             });
 
+        // Load tab debouncing from options (defaults to 150ms if not found)
+        let tab_debouncing_ms = config.options.get_uint("keys.tab.debouncing").await
+            .unwrap_or_else(|_| 150);
+
         // Load keybinds from options database (now app-scoped)
         let mut keybinds = HashMap::new();
         let apps = keybinds::list_apps(&config.options.registry());
@@ -165,6 +176,7 @@ impl RuntimeConfig {
             theme,
             focus_mode,
             keybinds,
+            tab_debouncing_ms,
         })
     }
 }

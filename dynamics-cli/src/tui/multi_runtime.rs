@@ -79,6 +79,9 @@ pub struct MultiAppRuntime {
     global_interaction_registry: crate::tui::InteractionRegistry<GlobalMsg>,
     global_focus_registry: crate::tui::renderer::FocusRegistry<GlobalMsg>,
     global_focused_id: Option<FocusId>,
+
+    /// Last time Tab key was pressed (for debouncing)
+    last_tab_press: Option<Instant>,
 }
 
 impl MultiAppRuntime {
@@ -122,6 +125,7 @@ impl MultiAppRuntime {
             global_interaction_registry: crate::tui::InteractionRegistry::new(),
             global_focus_registry: crate::tui::renderer::FocusRegistry::new(),
             global_focused_id: None,
+            last_tab_press: None,
         };
 
         // Eagerly create the AppLauncher since it's the starting app
@@ -273,10 +277,34 @@ impl MultiAppRuntime {
         if self.quit_modal.is_open() || self.help_modal.is_open() || self.app_overview_modal.is_open() {
             // Tab/Shift-Tab: Move focus within global modal
             if KeyBinding::new(KeyCode::Tab).matches(&key_event) {
+                // Check debouncing
+                let config = crate::global_runtime_config();
+                let now = Instant::now();
+                if let Some(last_press) = self.last_tab_press {
+                    let elapsed_ms = now.duration_since(last_press).as_millis() as u64;
+                    if elapsed_ms < config.tab_debouncing_ms {
+                        log::debug!("Tab press debounced in modal ({}ms < {}ms)", elapsed_ms, config.tab_debouncing_ms);
+                        return Ok(true);  // Debounced - ignore this press
+                    }
+                }
+                self.last_tab_press = Some(now);
+
                 self.move_global_focus(true);
                 return Ok(true);
             }
             if KeyBinding::shift(KeyCode::Tab).matches(&key_event) || key_event.code == KeyCode::BackTab {
+                // Check debouncing
+                let config = crate::global_runtime_config();
+                let now = Instant::now();
+                if let Some(last_press) = self.last_tab_press {
+                    let elapsed_ms = now.duration_since(last_press).as_millis() as u64;
+                    if elapsed_ms < config.tab_debouncing_ms {
+                        log::debug!("Shift-Tab press debounced in modal ({}ms < {}ms)", elapsed_ms, config.tab_debouncing_ms);
+                        return Ok(true);  // Debounced - ignore this press
+                    }
+                }
+                self.last_tab_press = Some(now);
+
                 self.move_global_focus(false);
                 return Ok(true);
             }
@@ -465,6 +493,18 @@ impl MultiAppRuntime {
 
         // Global Tab/Shift-Tab navigation (before app-specific handling)
         if KeyBinding::new(KeyCode::Tab).matches(&key_event) {
+            // Check debouncing
+            let config = crate::global_runtime_config();
+            let now = Instant::now();
+            if let Some(last_press) = self.last_tab_press {
+                let elapsed_ms = now.duration_since(last_press).as_millis() as u64;
+                if elapsed_ms < config.tab_debouncing_ms {
+                    log::debug!("Tab press debounced ({}ms < {}ms)", elapsed_ms, config.tab_debouncing_ms);
+                    return Ok(true);  // Debounced - ignore this press
+                }
+            }
+            self.last_tab_press = Some(now);
+
             let runtime = self.runtimes
                 .get_mut(&self.active_app)
                 .expect("Active app not found in runtimes");
@@ -472,6 +512,18 @@ impl MultiAppRuntime {
             return Ok(true);
         }
         if KeyBinding::shift(KeyCode::Tab).matches(&key_event) || key_event.code == KeyCode::BackTab {
+            // Check debouncing
+            let config = crate::global_runtime_config();
+            let now = Instant::now();
+            if let Some(last_press) = self.last_tab_press {
+                let elapsed_ms = now.duration_since(last_press).as_millis() as u64;
+                if elapsed_ms < config.tab_debouncing_ms {
+                    log::debug!("Shift-Tab press debounced ({}ms < {}ms)", elapsed_ms, config.tab_debouncing_ms);
+                    return Ok(true);  // Debounced - ignore this press
+                }
+            }
+            self.last_tab_press = Some(now);
+
             let runtime = self.runtimes
                 .get_mut(&self.active_app)
                 .expect("Active app not found in runtimes");

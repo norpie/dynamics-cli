@@ -4,6 +4,7 @@ pub mod api;
 pub mod tui;
 pub mod themes;
 pub mod keybinds;
+pub mod keys;
 pub mod update;
 
 use super::OptionsRegistry;
@@ -15,6 +16,7 @@ pub fn register_all(registry: &OptionsRegistry) -> Result<()> {
     tui::register(registry)?;
     themes::register(registry)?;
     keybinds::register(registry)?;
+    keys::register(registry)?;
     update::register(registry)?;
     Ok(())
 }
