@@ -10,6 +10,7 @@ pub fn get_shared_entities() -> HashSet<&'static str> {
     let mut set = HashSet::new();
     set.insert("questiontemplateid");
     set.insert("questiontagid");
+    set.insert("contactrole");
     set.insert("categoryid");
     set.insert("domainid");
     set.insert("fundid");

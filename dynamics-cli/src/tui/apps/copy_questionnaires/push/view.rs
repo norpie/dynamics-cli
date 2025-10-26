@@ -1,6 +1,6 @@
 use super::models::{State, PushState, CopyProgress, CopyResult, CopyError, CopyPhase, EntityType};
 use crate::tui::{Element, renderer::LayeredView, LayoutConstraint};
-use crate::{col, spacer, use_constraints};
+use crate::{button_row, col, spacer, use_constraints};
 use ratatui::{
     text::{Line, Span},
     style::Style,
@@ -337,16 +337,10 @@ fn render_success_screen(
             ])).build(),
         ]).build() => Fill(1),
 
-        Element::row(vec![
-            Element::button("undo_button", "Undo Copy (Delete)")
-                .on_press(super::Msg::UndoCopy)
-                .build(),
-            Element::button("done_button", "Done")
-                .on_press(super::Msg::Done)
-                .build(),
-        ])
-        .spacing(2)
-        .build() => Length(3),
+        button_row![
+            ("undo_button", "Undo Copy (Delete)", super::Msg::UndoCopy),
+            ("done_button", "Done", super::Msg::Done),
+        ] => Length(3),
     ]
 }
 

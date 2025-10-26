@@ -129,7 +129,7 @@ pub const QUESTION_FIELDS: &[FieldSpec] = &[
     lookup_field!("_nrq_questionnaireid_value", "nrq_QuestionnaireId", "nrq_questionnaires"),
     lookup_field!("_nrq_questiontagid_value", "nrq_QuestionTagId", "nrq_questiontags"),
     lookup_field!("_nrq_questiontemplateid_value", "nrq_QuestionTemplateId", "nrq_questiontemplates"),
-    lookup_field!("_nrq_contactrole_value", "nrq_contactrole", "contactroles"),
+    lookup_field!("_nrq_contactrole_value", "nrq_ContactRole", "nrq_roles"),
 ];
 
 /// Step 7: Template Line fields
