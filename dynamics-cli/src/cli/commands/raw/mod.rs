@@ -3,17 +3,21 @@ pub mod handler;
 use clap::{Args, ValueEnum};
 use std::path::PathBuf;
 
-pub use handler::handle_query_command;
+pub use handler::handle_raw_command;
 
 #[derive(Args)]
-pub struct QueryCommands {
-    /// FQL query string to execute (e.g., '.account | .name, .revenue | limit(10)')
-    #[arg(help = "FQL query string")]
-    pub query: Option<String>,
+pub struct RawCommands {
+    /// API endpoint path (e.g., "accounts?$select=name&$top=5")
+    #[arg(help = "API endpoint path")]
+    pub endpoint: String,
 
-    /// Execute FQL query from a file instead of command line
-    #[arg(short, long, help = "Path to file containing FQL query")]
-    pub file: Option<PathBuf>,
+    /// HTTP method
+    #[arg(long, default_value = "get", help = "HTTP method")]
+    pub method: HttpMethod,
+
+    /// Request body data (JSON)
+    #[arg(long, help = "Request body data (JSON string)")]
+    pub data: Option<String>,
 
     /// Output format
     #[arg(long, default_value = "json", help = "Output format")]
@@ -31,13 +35,21 @@ pub struct QueryCommands {
     #[arg(long, help = "Disable colored output")]
     pub no_color: bool,
 
-    /// Show generated FetchXML without executing the query
-    #[arg(long, help = "Show FetchXML without executing (dry run)")]
-    pub dry: bool,
-
-    /// Save query results to file
+    /// Save results to file
     #[arg(short, long, help = "Save results to file")]
     pub output: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, ValueEnum)]
+pub enum HttpMethod {
+    /// GET request
+    Get,
+    /// POST request
+    Post,
+    /// PATCH request
+    Patch,
+    /// DELETE request
+    Delete,
 }
 
 #[derive(Debug, Clone, ValueEnum)]

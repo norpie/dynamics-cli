@@ -3,6 +3,7 @@ use super::commands::deadlines::DeadlinesCommands;
 use super::commands::entity::EntityCommands;
 use super::commands::migration::MigrationCommands;
 use super::commands::query::QueryCommands;
+use super::commands::raw::RawCommands;
 use super::commands::settings::SettingsCommands;
 use super::commands::tui::TuiCommands;
 use super::commands::update::UpdateCommands;
@@ -22,6 +23,8 @@ pub enum Commands {
     Auth(AuthCommands),
     /// Execute FQL queries against Dynamics 365
     Query(QueryCommands),
+    /// Execute raw HTTP requests to Dynamics 365 API
+    Raw(RawCommands),
     /// Entity name mapping management
     Entity(EntityCommands),
     /// Application settings management

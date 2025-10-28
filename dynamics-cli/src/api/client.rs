@@ -246,6 +246,99 @@ impl DynamicsClient {
         self.parse_query_response(response).await
     }
 
+    /// Execute a raw HTTP request to the Dynamics API
+    ///
+    /// This method provides direct access to the Dynamics 365 Web API for any endpoint.
+    /// The endpoint parameter is automatically URL-encoded and prefixed with the API base path.
+    ///
+    /// # Arguments
+    /// * `method` - HTTP method (GET, POST, PATCH, DELETE)
+    /// * `endpoint` - API endpoint path (e.g., "accounts?$select=name&$top=5")
+    /// * `data` - Optional JSON data string for POST/PATCH requests
+    ///
+    /// # Returns
+    /// JSON response as `serde_json::Value`
+    pub async fn execute_raw(&self, method: &str, endpoint: &str, data: Option<&str>) -> anyhow::Result<Value> {
+        self.apply_rate_limiting().await?;
+
+        // Build full URL
+        let url = if endpoint.starts_with("http") {
+            // Absolute URL provided
+            endpoint.to_string()
+        } else {
+            // Relative path - construct full URL
+            let base = format!("{}{}", self.base_url, constants::api_path());
+            let trimmed_endpoint = endpoint.trim_start_matches('/');
+            format!("{}/{}", base, trimmed_endpoint)
+        };
+
+        // Parse JSON data if provided
+        let json_data: Option<Value> = if let Some(d) = data {
+            Some(serde_json::from_str(d)
+                .map_err(|e| anyhow::anyhow!("Failed to parse JSON data: {}", e))?)
+        } else {
+            None
+        };
+
+        // Validate HTTP method first
+        let method_upper = method.to_uppercase();
+        if !["GET", "POST", "PATCH", "DELETE"].contains(&method_upper.as_str()) {
+            return Err(anyhow::anyhow!("Unsupported HTTP method: {}", method));
+        }
+
+        // Execute request with retry policy
+        let response = self.retry_policy.execute(|| async {
+            let mut request = match method_upper.as_str() {
+                "GET" => self.http_client.get(&url),
+                "POST" => self.http_client.post(&url),
+                "PATCH" => self.http_client.patch(&url),
+                "DELETE" => self.http_client.delete(&url),
+                _ => unreachable!(), // Already validated above
+            };
+
+            request = request
+                .bearer_auth(&self.access_token)
+                .header("Accept", headers::CONTENT_TYPE_JSON)
+                .header("OData-Version", headers::ODATA_VERSION)
+                .header("OData-MaxVersion", headers::ODATA_VERSION);
+
+            // Add body for POST/PATCH
+            if let Some(ref json) = json_data {
+                request = request
+                    .header("Content-Type", headers::CONTENT_TYPE_JSON)
+                    .json(json);
+            }
+
+            request.send().await
+        }).await?;
+
+        let status = response.status();
+
+        // Handle different status codes
+        if status.is_success() {
+            // Try to parse as JSON, return empty object if no content
+            if status == reqwest::StatusCode::NO_CONTENT {
+                Ok(serde_json::json!({}))
+            } else {
+                let text = response.text().await?;
+                if text.is_empty() {
+                    Ok(serde_json::json!({}))
+                } else {
+                    serde_json::from_str(&text)
+                        .map_err(|e| anyhow::anyhow!("Failed to parse response as JSON: {}", e))
+                }
+            }
+        } else {
+            // Error response - try to extract error details
+            let error_text = response.text().await?;
+            Err(anyhow::anyhow!(
+                "API request failed with status {}: {}",
+                status,
+                error_text
+            ))
+        }
+    }
+
     /// Create a new record
     async fn create_record(&self, entity: &str, data: &Value, resilience: &ResilienceConfig) -> anyhow::Result<OperationResult> {
         let url = constants::entity_endpoint(&self.base_url, entity);

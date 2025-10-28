@@ -133,6 +133,9 @@ async fn main() -> Result<()> {
         Commands::Query(query_args) => {
             cli::commands::handle_query_command(query_args).await?;
         }
+        Commands::Raw(raw_args) => {
+            cli::commands::handle_raw_command(raw_args).await?;
+        }
         Commands::Tui(tui_args) => {
             cli::commands::tui_command(tui_args).await?;
         }
@@ -141,7 +144,7 @@ async fn main() -> Result<()> {
         }
         _ => {
             println!("Some commands are temporarily disabled during the config system rewrite.");
-            println!("Available commands: auth, query, tui, update");
+            println!("Available commands: auth, query, raw, tui, update");
             println!("Use --help with any command for more information.");
         }
     }
