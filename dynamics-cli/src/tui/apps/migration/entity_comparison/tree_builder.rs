@@ -20,13 +20,23 @@ pub fn build_tree_items(
     entity_name: &str,
     show_technical_names: bool,
     sort_mode: super::models::SortMode,
+    ignored_items: &std::collections::HashSet<String>,
 ) -> Vec<ComparisonTreeItem> {
+    let tab_prefix = match active_tab {
+        ActiveTab::Fields => "fields",
+        ActiveTab::Relationships => "relationships",
+        ActiveTab::Views => "views",
+        ActiveTab::Forms => "forms",
+        ActiveTab::Entities => "entities",
+    };
+    let side_prefix = if is_source { "source" } else { "target" };
+
     match active_tab {
-        ActiveTab::Fields => build_fields_tree(&metadata.fields, field_matches, examples, is_source, entity_name, show_technical_names, sort_mode),
-        ActiveTab::Relationships => build_relationships_tree(&metadata.relationships, relationship_matches, sort_mode),
-        ActiveTab::Views => build_views_tree(&metadata.views, field_matches, &metadata.fields, examples, is_source, entity_name, show_technical_names),
-        ActiveTab::Forms => build_forms_tree(&metadata.forms, field_matches, &metadata.fields, examples, is_source, entity_name, show_technical_names),
-        ActiveTab::Entities => build_entities_tree(entities, entity_matches, sort_mode),
+        ActiveTab::Fields => build_fields_tree(&metadata.fields, field_matches, examples, is_source, entity_name, show_technical_names, sort_mode, ignored_items, tab_prefix, side_prefix),
+        ActiveTab::Relationships => build_relationships_tree(&metadata.relationships, relationship_matches, sort_mode, ignored_items, tab_prefix, side_prefix),
+        ActiveTab::Views => build_views_tree(&metadata.views, field_matches, &metadata.fields, examples, is_source, entity_name, show_technical_names, ignored_items, tab_prefix, side_prefix),
+        ActiveTab::Forms => build_forms_tree(&metadata.forms, field_matches, &metadata.fields, examples, is_source, entity_name, show_technical_names, ignored_items, tab_prefix, side_prefix),
+        ActiveTab::Entities => build_entities_tree(entities, entity_matches, sort_mode, ignored_items, tab_prefix, side_prefix),
     }
 }
 
@@ -40,6 +50,9 @@ fn build_fields_tree(
     entity_name: &str,
     show_technical_names: bool,
     sort_mode: super::models::SortMode,
+    ignored_items: &std::collections::HashSet<String>,
+    tab_prefix: &str,
+    side_prefix: &str,
 ) -> Vec<ComparisonTreeItem> {
     let mut items: Vec<ComparisonTreeItem> = fields
         .iter()
@@ -51,11 +64,13 @@ fn build_fields_tree(
                 f.display_name.clone().unwrap_or_else(|| f.logical_name.clone())
             };
 
+            let item_id = format!("{}:{}:{}", tab_prefix, side_prefix, f.logical_name);
             ComparisonTreeItem::Field(FieldNode {
                 metadata: f.clone(),
                 match_info: field_matches.get(&f.logical_name).cloned(),
                 example_value: examples.get_field_value(&f.logical_name, is_source, entity_name),
                 display_name,
+                is_ignored: ignored_items.contains(&item_id),
             })
         })
         .collect();
@@ -69,13 +84,20 @@ fn build_relationships_tree(
     relationships: &[crate::api::metadata::RelationshipMetadata],
     relationship_matches: &HashMap<String, MatchInfo>,
     sort_mode: super::models::SortMode,
+    ignored_items: &std::collections::HashSet<String>,
+    tab_prefix: &str,
+    side_prefix: &str,
 ) -> Vec<ComparisonTreeItem> {
     let mut items: Vec<ComparisonTreeItem> = relationships
         .iter()
-        .map(|r| ComparisonTreeItem::Relationship(RelationshipNode {
-            metadata: r.clone(),
-            match_info: relationship_matches.get(&r.name).cloned(),
-        }))
+        .map(|r| {
+            let item_id = format!("{}:{}:{}", tab_prefix, side_prefix, r.name);
+            ComparisonTreeItem::Relationship(RelationshipNode {
+                metadata: r.clone(),
+                match_info: relationship_matches.get(&r.name).cloned(),
+                is_ignored: ignored_items.contains(&item_id),
+            })
+        })
         .collect();
 
     sort_items(&mut items, sort_mode);
@@ -93,6 +115,9 @@ fn build_views_tree(
     is_source: bool,
     entity_name: &str,
     show_technical_names: bool,
+    ignored_items: &std::collections::HashSet<String>,
+    tab_prefix: &str,
+    side_prefix: &str,
 ) -> Vec<ComparisonTreeItem> {
     // Group views by type
     let mut grouped: HashMap<String, Vec<&crate::api::metadata::ViewMetadata>> = HashMap::new();
@@ -179,6 +204,7 @@ fn build_views_tree(
                         match_info: field_matches.get(&matching_column_path).cloned(),
                         example_value: examples.get_field_value(&matching_column_path, is_source, entity_name),
                         display_name,
+                        is_ignored: false, // Views/forms columns not individually ignorable for now
                     })
                 })
                 .collect();
@@ -219,6 +245,9 @@ fn build_forms_tree(
     is_source: bool,
     entity_name: &str,
     show_technical_names: bool,
+    ignored_items: &std::collections::HashSet<String>,
+    tab_prefix: &str,
+    side_prefix: &str,
 ) -> Vec<ComparisonTreeItem> {
     // Group forms by type
     let mut grouped: HashMap<String, Vec<&crate::api::metadata::FormMetadata>> = HashMap::new();
@@ -330,6 +359,7 @@ fn build_forms_tree(
                                     match_info: field_matches.get(&matching_field_path).cloned(),
                                     example_value: examples.get_field_value(&matching_field_path, is_source, entity_name),
                                     display_name,
+                                    is_ignored: false, // Forms/views fields not individually ignorable for now
                                 })
                             })
                             .collect();
@@ -469,14 +499,21 @@ fn build_entities_tree(
     entities: &[(String, usize)],
     entity_matches: &HashMap<String, MatchInfo>,
     sort_mode: super::models::SortMode,
+    ignored_items: &std::collections::HashSet<String>,
+    tab_prefix: &str,
+    side_prefix: &str,
 ) -> Vec<ComparisonTreeItem> {
     let mut items: Vec<ComparisonTreeItem> = entities
         .iter()
-        .map(|(name, usage_count)| ComparisonTreeItem::Entity(EntityNode {
-            name: name.clone(),
-            match_info: entity_matches.get(name).cloned(),
-            usage_count: *usage_count,
-        }))
+        .map(|(name, usage_count)| {
+            let item_id = format!("{}:{}:{}", tab_prefix, side_prefix, name);
+            ComparisonTreeItem::Entity(EntityNode {
+                name: name.clone(),
+                match_info: entity_matches.get(name).cloned(),
+                usage_count: *usage_count,
+                is_ignored: ignored_items.contains(&item_id),
+            })
+        })
         .collect();
 
     sort_items(&mut items, sort_mode);

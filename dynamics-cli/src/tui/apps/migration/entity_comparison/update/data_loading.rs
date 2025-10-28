@@ -246,7 +246,8 @@ pub fn handle_mappings_loaded(
     prefix_mappings: HashMap<String, String>,
     imported_mappings: HashMap<String, String>,
     import_source_file: Option<String>,
-    example_pairs: Vec<ExamplePair>
+    example_pairs: Vec<ExamplePair>,
+    ignored_items: std::collections::HashSet<String>
 ) -> Command<Msg> {
     // Update state with loaded mappings and examples
     state.field_mappings = field_mappings;
@@ -254,6 +255,7 @@ pub fn handle_mappings_loaded(
     state.imported_mappings = imported_mappings;
     state.import_source_file = import_source_file;
     state.examples.pairs = example_pairs.clone();
+    state.ignored_items = ignored_items;
 
     // Set first pair as active if any exist
     if !state.examples.pairs.is_empty() {

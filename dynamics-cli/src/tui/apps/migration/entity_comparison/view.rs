@@ -37,6 +37,7 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
             &state.source_entity,
             state.show_technical_names,
             sort_mode,
+            &state.ignored_items,
         )
     } else {
         vec![]
@@ -91,6 +92,7 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
             &state.target_entity,
             state.show_technical_names,
             sort_mode,
+            &state.ignored_items,
         )
     } else {
         vec![]
@@ -223,6 +225,43 @@ pub fn render_prefix_mappings_modal(state: &State) -> Element<Msg> {
 }
 
 /// Filter out matched items from tree based on hide_matched setting
+/// Filter out ignored items from the tree
+pub fn filter_ignored_items(
+    items: Vec<super::tree_items::ComparisonTreeItem>,
+    ignored_items: &std::collections::HashSet<String>,
+    active_tab: ActiveTab,
+    is_source: bool,
+) -> Vec<super::tree_items::ComparisonTreeItem> {
+    use super::tree_items::ComparisonTreeItem;
+
+    let tab_prefix = match active_tab {
+        ActiveTab::Fields => "fields",
+        ActiveTab::Relationships => "relationships",
+        ActiveTab::Views => "views",
+        ActiveTab::Forms => "forms",
+        ActiveTab::Entities => "entities",
+    };
+    let side_prefix = if is_source { "source" } else { "target" };
+
+    items.into_iter().filter(|item| {
+        let node_id = match item {
+            ComparisonTreeItem::Field(node) => Some(&node.metadata.logical_name),
+            ComparisonTreeItem::Relationship(node) => Some(&node.metadata.name),
+            ComparisonTreeItem::View(node) => Some(&node.metadata.id),
+            ComparisonTreeItem::Form(node) => Some(&node.metadata.id),
+            ComparisonTreeItem::Entity(node) => Some(&node.name),
+            _ => None,
+        };
+
+        if let Some(id) = node_id {
+            let full_id = format!("{}:{}:{}", tab_prefix, side_prefix, id);
+            !ignored_items.contains(&full_id)
+        } else {
+            true // Keep containers and other items
+        }
+    }).collect()
+}
+
 pub fn filter_matched_items(items: Vec<super::tree_items::ComparisonTreeItem>) -> Vec<super::tree_items::ComparisonTreeItem> {
     use super::tree_items::ComparisonTreeItem;
 
@@ -579,5 +618,116 @@ pub fn render_import_modal(state: &mut State) -> Element<Msg> {
         .title("Import C# Field Mappings")
         .width(90)
         .height(35)
+        .build()
+}
+
+/// Render the ignore manager modal
+pub fn render_ignore_modal(state: &mut State) -> Element<Msg> {
+    let theme = &crate::global_runtime_config().theme;
+    use crate::tui::element::LayoutConstraint::*;
+    use crate::{col, spacer, button_row};
+    use ratatui::text::{Line, Span};
+    use ratatui::style::{Style, Stylize};
+    use crate::tui::widgets::ListItem;
+
+    // Convert HashSet to Vec for consistent ordering
+    let ignored_items: Vec<String> = state.ignored_items.iter().cloned().collect();
+
+    // Build list items
+    #[derive(Clone)]
+    struct IgnoredItemLine {
+        text: String,
+        style: Style,
+    }
+
+    impl ListItem for IgnoredItemLine {
+        type Msg = Msg;
+
+        fn to_element(&self, is_selected: bool, _is_hovered: bool) -> Element<Self::Msg> {
+            let style = if is_selected {
+                self.style.bg(crate::global_runtime_config().theme.bg_surface)
+            } else {
+                self.style
+            };
+            Element::styled_text(Line::from(Span::styled(self.text.clone(), style))).build()
+        }
+    }
+
+    let list_items: Vec<IgnoredItemLine> = ignored_items.iter()
+        .map(|item| {
+            // Parse item ID: "tab:side:node_id"
+            let parts: Vec<&str> = item.split(':').collect();
+            let display = if parts.len() == 3 {
+                format!("[{}/{}] {}", parts[0], parts[1], parts[2])
+            } else {
+                item.clone()
+            };
+
+            IgnoredItemLine {
+                text: display,
+                style: Style::default().fg(theme.text_primary),
+            }
+        })
+        .collect();
+
+    // Help text
+    let help_text = if ignored_items.is_empty() {
+        Element::styled_text(Line::from(vec![
+            Span::styled("No ignored items. ", Style::default().fg(theme.text_secondary)),
+            Span::styled("Press ", Style::default().fg(theme.text_secondary)),
+            Span::styled("Esc", Style::default().fg(theme.accent_primary).bold()),
+            Span::styled(" to close.", Style::default().fg(theme.text_secondary)),
+        ])).build()
+    } else {
+        Element::styled_text(Line::from(vec![
+            Span::styled("↑↓", Style::default().fg(theme.accent_primary).bold()),
+            Span::styled(" Navigate  ", Style::default().fg(theme.text_secondary)),
+            Span::styled("d", Style::default().fg(theme.accent_primary).bold()),
+            Span::styled(" Delete  ", Style::default().fg(theme.text_secondary)),
+            Span::styled("C", Style::default().fg(theme.accent_primary).bold()),
+            Span::styled(" Clear All  ", Style::default().fg(theme.text_secondary)),
+            Span::styled("Esc", Style::default().fg(theme.accent_primary).bold()),
+            Span::styled(" Close", Style::default().fg(theme.text_secondary)),
+        ])).build()
+    };
+
+    // List panel
+    let list_panel = Element::list(
+        "ignore-list",
+        &list_items,
+        &state.ignore_list_state,
+        theme,
+    )
+    .on_render(|height| Msg::IgnoreSetViewportHeight(height))
+    .build();
+
+    // Buttons
+    let buttons = button_row![
+        ("ignore-delete", "Delete (d)", Msg::DeleteIgnoredItem),
+        ("ignore-clear", "Clear All (C)", Msg::ClearAllIgnored),
+        ("ignore-close", "Close (Esc)", Msg::CloseIgnoreModal),
+    ];
+
+    // Count info
+    let count_info = Element::styled_text(Line::from(vec![
+        Span::styled("Total ignored items: ", Style::default().fg(theme.text_secondary)),
+        Span::styled(ignored_items.len().to_string(), Style::default().fg(theme.accent_primary).bold()),
+    ])).build();
+
+    // Layout
+    let content = col![
+        help_text => Length(1),
+        spacer!() => Length(1),
+        count_info => Length(1),
+        spacer!() => Length(1),
+        list_panel => Fill(1),
+        spacer!() => Length(1),
+        buttons => Length(3),
+    ];
+
+    Element::panel(Element::container(content).padding(2).build())
+        .title("Ignore Manager")
+        .width(80)
+        .height(30)
         .build()
 }

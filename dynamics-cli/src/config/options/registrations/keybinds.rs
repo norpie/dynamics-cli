@@ -297,7 +297,23 @@ pub fn register(registry: &OptionsRegistry) -> Result<()> {
         OptionDefBuilder::new("keybind", "entity_comparison.import_cs")
             .display_name("Import C# Mappings")
             .description("Import field mappings from C# file")
+            .keybind_type(KeyCode::Char('c'))
+            .build()?
+    )?;
+
+    registry.register(
+        OptionDefBuilder::new("keybind", "entity_comparison.ignore_item")
+            .display_name("Ignore Item")
+            .description("Ignore currently selected item")
             .keybind_type(KeyCode::Char('i'))
+            .build()?
+    )?;
+
+    registry.register(
+        OptionDefBuilder::new("keybind", "entity_comparison.ignore_manager")
+            .display_name("Ignore Manager")
+            .description("Open ignore manager modal")
+            .keybind_type(KeyCode::Char('I'))
             .build()?
     )?;
 

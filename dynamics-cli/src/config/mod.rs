@@ -380,6 +380,21 @@ impl Config {
         repository::mappings::clear_imported_mappings(&self.pool, source_entity, target_entity).await
     }
 
+    /// Get ignored items for entity comparison
+    pub async fn get_ignored_items(&self, source_entity: &str, target_entity: &str) -> Result<std::collections::HashSet<String>> {
+        repository::mappings::get_ignored_items(&self.pool, source_entity, target_entity).await
+    }
+
+    /// Set ignored items for entity comparison
+    pub async fn set_ignored_items(&self, source_entity: &str, target_entity: &str, ignored: &std::collections::HashSet<String>) -> Result<()> {
+        repository::mappings::set_ignored_items(&self.pool, source_entity, target_entity, ignored).await
+    }
+
+    /// Clear all ignored items for entity comparison
+    pub async fn clear_ignored_items(&self, source_entity: &str, target_entity: &str) -> Result<()> {
+        repository::mappings::clear_ignored_items(&self.pool, source_entity, target_entity).await
+    }
+
     /// Get example pairs for entity comparison
     pub async fn get_example_pairs(&self, source_entity: &str, target_entity: &str) -> Result<Vec<crate::tui::apps::migration::entity_comparison::ExamplePair>> {
         repository::examples::get_example_pairs(&self.pool, source_entity, target_entity).await

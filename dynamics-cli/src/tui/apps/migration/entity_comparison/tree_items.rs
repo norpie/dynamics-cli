@@ -155,6 +155,7 @@ pub struct FieldNode {
     pub match_info: Option<MatchInfo>,
     pub example_value: Option<String>,
     pub display_name: String, // Computed name to display (technical or friendly)
+    pub is_ignored: bool,
 }
 
 impl TreeItem for FieldNode {
@@ -188,7 +189,10 @@ impl TreeItem for FieldNode {
         }
 
         // Field name - colored by match state (keep color even when selected)
-        let field_name_color = if let Some(match_info) = &self.match_info {
+        // If ignored, override with gray
+        let field_name_color = if self.is_ignored {
+            theme.text_tertiary  // Gray for ignored items
+        } else if let Some(match_info) = &self.match_info {
             match match_info.match_type {
                 MatchType::Exact => theme.accent_success,        // Exact name + type match
                 MatchType::Prefix => theme.accent_success,       // Prefix name + type match
@@ -269,6 +273,7 @@ impl TreeItem for FieldNode {
 pub struct RelationshipNode {
     pub metadata: RelationshipMetadata,
     pub match_info: Option<MatchInfo>,
+    pub is_ignored: bool,
 }
 
 impl TreeItem for RelationshipNode {
@@ -302,7 +307,10 @@ impl TreeItem for RelationshipNode {
         }
 
         // Relationship name - colored by match state
-        let rel_name_color = if let Some(match_info) = &self.match_info {
+        // If ignored, override with gray
+        let rel_name_color = if self.is_ignored {
+            theme.text_tertiary  // Gray for ignored items
+        } else if let Some(match_info) = &self.match_info {
             match match_info.match_type {
                 MatchType::Exact => theme.accent_success,        // Exact name + type match
                 MatchType::Prefix => theme.accent_success,       // Prefix name + type match
@@ -370,6 +378,7 @@ impl TreeItem for RelationshipNode {
 #[derive(Clone)]
 pub struct ViewNode {
     pub metadata: ViewMetadata,
+    pub is_ignored: bool,
 }
 
 impl TreeItem for ViewNode {
@@ -420,6 +429,7 @@ impl TreeItem for ViewNode {
 #[derive(Clone)]
 pub struct FormNode {
     pub metadata: FormMetadata,
+    pub is_ignored: bool,
 }
 
 impl TreeItem for FormNode {
@@ -472,6 +482,7 @@ pub struct EntityNode {
     pub name: String,
     pub match_info: Option<MatchInfo>,
     pub usage_count: usize,
+    pub is_ignored: bool,
 }
 
 impl TreeItem for EntityNode {
@@ -505,7 +516,10 @@ impl TreeItem for EntityNode {
         }
 
         // Entity name - colored by match state (keep color even when selected)
-        let entity_name_color = if let Some(match_info) = &self.match_info {
+        // If ignored, override with gray
+        let entity_name_color = if self.is_ignored {
+            theme.text_tertiary  // Gray for ignored items
+        } else if let Some(match_info) = &self.match_info {
             match match_info.match_type {
                 MatchType::Exact => theme.accent_success,        // Exact name match
                 MatchType::Prefix => theme.accent_success,       // Prefix name match

@@ -6,6 +6,7 @@ pub mod prefix_mappings;
 pub mod manual_mappings;
 pub mod data_loading;
 pub mod import;
+pub mod ignore;
 
 use crate::tui::command::Command;
 use super::Msg;
@@ -29,7 +30,7 @@ pub fn update(state: &mut State, msg: Msg) -> Command<Msg> {
 
         // Data loading
         Msg::ParallelDataLoaded(idx, result) => data_loading::handle_parallel_data_loaded(state, idx, result),
-        Msg::MappingsLoaded(fm, pm, im, isf, ep) => data_loading::handle_mappings_loaded(state, fm, pm, im, isf, ep),
+        Msg::MappingsLoaded(fm, pm, im, isf, ep, ig) => data_loading::handle_mappings_loaded(state, fm, pm, im, isf, ep, ig),
         Msg::Refresh => data_loading::handle_refresh(state),
 
         // Mappings
@@ -85,5 +86,16 @@ pub fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         Msg::ImportResultsNavigate(key) => import::handle_results_navigate(state, key),
         Msg::ImportResultsSelect(idx) => import::handle_results_select(state, idx),
         Msg::ImportResultsSetViewportHeight(h) => import::handle_results_set_viewport_height(state, h),
+
+        // Ignore functionality
+        Msg::IgnoreItem => ignore::handle_ignore_item(state),
+        Msg::OpenIgnoreModal => ignore::handle_open_modal(state),
+        Msg::CloseIgnoreModal => ignore::handle_close_modal(state),
+        Msg::IgnoreListNavigate(key) => ignore::handle_navigate(state, key),
+        Msg::IgnoreListSelect(idx) => ignore::handle_select(state, idx),
+        Msg::DeleteIgnoredItem => ignore::handle_delete_item(state),
+        Msg::ClearAllIgnored => ignore::handle_clear_all(state),
+        Msg::IgnoreSetViewportHeight(h) => ignore::handle_set_viewport_height(state, h),
+        Msg::IgnoredItemsSaved => Command::None, // No-op message
     }
 }

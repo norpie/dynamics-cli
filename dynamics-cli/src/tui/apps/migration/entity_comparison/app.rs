@@ -107,6 +107,11 @@ pub struct State {
     pub(super) import_results: Option<ImportResults>,
     pub(super) import_results_list: crate::tui::widgets::ListState,
 
+    // Ignore state
+    pub(super) ignored_items: std::collections::HashSet<String>,
+    pub(super) show_ignore_modal: bool,
+    pub(super) ignore_list_state: crate::tui::widgets::ListState,
+
     // Modal state
     pub(super) show_back_confirmation: bool,
 }
@@ -186,6 +191,9 @@ impl Default for State {
             show_import_results_modal: false,
             import_results: None,
             import_results_list: crate::tui::widgets::ListState::new(),
+            ignored_items: std::collections::HashSet::new(),
+            show_ignore_modal: false,
+            ignore_list_state: crate::tui::widgets::ListState::new(),
             show_back_confirmation: false,
         }
     }
@@ -272,6 +280,9 @@ impl App for EntityComparisonApp {
             show_import_results_modal: false,
             import_results: None,
             import_results_list: crate::tui::widgets::ListState::new(),
+            ignored_items: std::collections::HashSet::new(),
+            show_ignore_modal: false,
+            ignore_list_state: crate::tui::widgets::ListState::new(),
             show_back_confirmation: false,
         };
 
@@ -301,10 +312,15 @@ impl App for EntityComparisonApp {
                         log::error!("Failed to load example pairs: {}", e);
                         Vec::new()
                     });
-                (field_mappings, prefix_mappings, imported_mappings, import_source_file, example_pairs)
+                let ignored_items = config.get_ignored_items(&source_entity, &target_entity).await
+                    .unwrap_or_else(|e| {
+                        log::error!("Failed to load ignored items: {}", e);
+                        std::collections::HashSet::new()
+                    });
+                (field_mappings, prefix_mappings, imported_mappings, import_source_file, example_pairs, ignored_items)
             }
-        }, |(field_mappings, prefix_mappings, imported_mappings, import_source_file, example_pairs)| {
-            Msg::MappingsLoaded(field_mappings, prefix_mappings, imported_mappings, import_source_file, example_pairs)
+        }, |(field_mappings, prefix_mappings, imported_mappings, import_source_file, example_pairs, ignored_items)| {
+            Msg::MappingsLoaded(field_mappings, prefix_mappings, imported_mappings, import_source_file, example_pairs, ignored_items)
         });
 
         (state, init_cmd)
@@ -340,6 +356,10 @@ impl App for EntityComparisonApp {
 
         if state.show_import_results_modal {
             view = view.with_app_modal(super::view::render_import_results_modal(state), LayerAlignment::Center);
+        }
+
+        if state.show_ignore_modal {
+            view = view.with_app_modal(super::view::render_ignore_modal(state), LayerAlignment::Center);
         }
 
         view
@@ -389,6 +409,10 @@ impl App for EntityComparisonApp {
             // Import from C# file
             Subscription::keyboard(config.get_keybind("entity_comparison.import_cs"), "Import from C# file", Msg::OpenImportModal),
 
+            // Ignore functionality
+            Subscription::keyboard(config.get_keybind("entity_comparison.ignore_item"), "Ignore item", Msg::IgnoreItem),
+            Subscription::keyboard(config.get_keybind("entity_comparison.ignore_manager"), "Ignore manager", Msg::OpenIgnoreModal),
+
             // Export
             Subscription::keyboard(config.get_keybind("entity_comparison.export"), "Export to Excel", Msg::ExportToExcel),
         ];
@@ -437,6 +461,15 @@ impl App for EntityComparisonApp {
             subs.push(Subscription::keyboard(KeyCode::Down, "Navigate down", Msg::ImportResultsNavigate(KeyCode::Down)));
             subs.push(Subscription::keyboard(KeyCode::Char('c'), "Clear imports", Msg::ClearImportedMappings));
             subs.push(Subscription::keyboard(KeyCode::Esc, "Close modal", Msg::CloseImportResultsModal));
+        }
+
+        // When showing ignore modal, add hotkeys
+        if state.show_ignore_modal {
+            subs.push(Subscription::keyboard(KeyCode::Up, "Navigate up", Msg::IgnoreListNavigate(KeyCode::Up)));
+            subs.push(Subscription::keyboard(KeyCode::Down, "Navigate down", Msg::IgnoreListNavigate(KeyCode::Down)));
+            subs.push(Subscription::keyboard(KeyCode::Char('d'), "Delete ignored item", Msg::DeleteIgnoredItem));
+            subs.push(Subscription::keyboard(KeyCode::Char('C'), "Clear all ignored", Msg::ClearAllIgnored));
+            subs.push(Subscription::keyboard(KeyCode::Esc, "Close modal", Msg::CloseIgnoreModal));
         }
 
         subs

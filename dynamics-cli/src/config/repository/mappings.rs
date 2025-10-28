@@ -223,3 +223,72 @@ pub async fn clear_imported_mappings(
 
     Ok(())
 }
+
+/// Get ignored items for entity comparison
+pub async fn get_ignored_items(
+    pool: &SqlitePool,
+    source_entity: &str,
+    target_entity: &str,
+) -> Result<std::collections::HashSet<String>> {
+    let rows: Vec<(String,)> = sqlx::query_as(
+        "SELECT item_id FROM ignored_items
+         WHERE source_entity = ? AND target_entity = ?",
+    )
+    .bind(source_entity)
+    .bind(target_entity)
+    .fetch_all(pool)
+    .await
+    .context("Failed to fetch ignored items")?;
+
+    let ignored: std::collections::HashSet<String> = rows.into_iter()
+        .map(|(item_id,)| item_id)
+        .collect();
+
+    Ok(ignored)
+}
+
+/// Set ignored items for entity comparison
+pub async fn set_ignored_items(
+    pool: &SqlitePool,
+    source_entity: &str,
+    target_entity: &str,
+    ignored: &std::collections::HashSet<String>,
+) -> Result<()> {
+    // Clear existing ignored items
+    clear_ignored_items(pool, source_entity, target_entity).await?;
+
+    // Insert new ignored items
+    for item_id in ignored {
+        sqlx::query(
+            "INSERT INTO ignored_items (source_entity, target_entity, item_id)
+             VALUES (?, ?, ?)",
+        )
+        .bind(source_entity)
+        .bind(target_entity)
+        .bind(item_id)
+        .execute(pool)
+        .await
+        .context("Failed to insert ignored item")?;
+    }
+
+    Ok(())
+}
+
+/// Clear all ignored items for entity comparison
+pub async fn clear_ignored_items(
+    pool: &SqlitePool,
+    source_entity: &str,
+    target_entity: &str,
+) -> Result<()> {
+    sqlx::query(
+        "DELETE FROM ignored_items
+         WHERE source_entity = ? AND target_entity = ?",
+    )
+    .bind(source_entity)
+    .bind(target_entity)
+    .execute(pool)
+    .await
+    .context("Failed to clear ignored items")?;
+
+    Ok(())
+}

@@ -33,7 +33,7 @@ pub enum Msg {
     ToggleHideMatched,    // Toggle showing/hiding matched items in trees
     ToggleSortMode,       // Toggle between Alphabetical and MatchesFirst sorting
     ToggleTechnicalNames, // Toggle between technical (logical) and display names
-    MappingsLoaded(std::collections::HashMap<String, String>, std::collections::HashMap<String, String>, std::collections::HashMap<String, String>, Option<String>, Vec<ExamplePair>), // field_mappings, prefix_mappings, imported_mappings, import_source_file, example_pairs
+    MappingsLoaded(std::collections::HashMap<String, String>, std::collections::HashMap<String, String>, std::collections::HashMap<String, String>, Option<String>, Vec<ExamplePair>, std::collections::HashSet<String>), // field_mappings, prefix_mappings, imported_mappings, import_source_file, example_pairs, ignored_items
 
     // Examples modal messages
     OpenExamplesModal,
@@ -81,6 +81,17 @@ pub enum Msg {
     ImportResultsNavigate(crossterm::event::KeyCode),
     ImportResultsSelect(usize),
     ImportResultsSetViewportHeight(usize),
+
+    // Ignore functionality
+    IgnoreItem,
+    OpenIgnoreModal,
+    CloseIgnoreModal,
+    IgnoreListNavigate(crossterm::event::KeyCode),
+    IgnoreListSelect(usize),
+    DeleteIgnoredItem,
+    ClearAllIgnored,
+    IgnoreSetViewportHeight(usize),
+    IgnoredItemsSaved, // Dummy message after async save completes
 }
 
 #[derive(Clone)]
