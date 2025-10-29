@@ -33,7 +33,7 @@ pub enum Msg {
     CycleHideMode,        // Cycle through hide modes (Off -> HideMatched -> HideIgnored -> HideBoth)
     ToggleSortMode,       // Toggle between Alphabetical and MatchesFirst sorting
     ToggleTechnicalNames, // Toggle between technical (logical) and display names
-    MappingsLoaded(std::collections::HashMap<String, String>, std::collections::HashMap<String, String>, std::collections::HashMap<String, String>, Option<String>, Vec<ExamplePair>, std::collections::HashSet<String>), // field_mappings, prefix_mappings, imported_mappings, import_source_file, example_pairs, ignored_items
+    MappingsLoaded(std::collections::HashMap<String, Vec<String>>, std::collections::HashMap<String, Vec<String>>, std::collections::HashMap<String, Vec<String>>, Option<String>, Vec<ExamplePair>, std::collections::HashSet<String>), // field_mappings, prefix_mappings, imported_mappings, import_source_file, example_pairs, ignored_items
 
     // Examples modal messages
     OpenExamplesModal,
@@ -86,7 +86,7 @@ pub enum Msg {
     OpenImportModal,
     CloseImportModal,
     ImportFileSelected(std::path::PathBuf),
-    ImportMappingsLoaded(std::collections::HashMap<String, String>, String), // mappings, filename (for .cs files)
+    ImportMappingsLoaded(std::collections::HashMap<String, String>, String), // mappings, filename (for .cs files - gets converted to Vec in handler)
     ImportCsvLoaded(crate::csv_parser::CsvImportData, String), // csv_data, filename (for .csv files)
     ClearImportedMappings,
     ImportNavigate(crossterm::event::KeyCode),

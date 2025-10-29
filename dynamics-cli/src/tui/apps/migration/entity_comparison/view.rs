@@ -369,11 +369,11 @@ pub fn render_prefix_mappings_modal(state: &State) -> Element<Msg> {
     let theme = &crate::global_runtime_config().theme;
     use crate::tui::modals::{PrefixMappingsModal, PrefixMappingItem};
 
-    // Convert prefix mappings to list items
-    let mapping_items: Vec<PrefixMappingItem<Msg>> = state.prefix_mappings.iter().map(|(source, target)| {
+    // Convert prefix mappings to list items (join multiple targets with comma)
+    let mapping_items: Vec<PrefixMappingItem<Msg>> = state.prefix_mappings.iter().map(|(source, targets)| {
         PrefixMappingItem {
             source_prefix: source.clone(),
-            target_prefix: target.clone(),
+            target_prefix: targets.join(", "),
             on_delete: Msg::DeletePrefixMapping,
         }
     }).collect();
@@ -797,11 +797,11 @@ pub fn render_manual_mappings_modal(state: &State) -> Element<Msg> {
     let theme = &crate::global_runtime_config().theme;
     use crate::tui::modals::{ManualMappingsModal, ManualMappingItem};
 
-    // Convert manual field mappings to list items
-    let mapping_items: Vec<ManualMappingItem<Msg>> = state.field_mappings.iter().map(|(source, target)| {
+    // Convert manual field mappings to list items (join multiple targets with comma)
+    let mapping_items: Vec<ManualMappingItem<Msg>> = state.field_mappings.iter().map(|(source, targets)| {
         ManualMappingItem {
             source_field: source.clone(),
-            target_field: target.clone(),
+            target_field: targets.join(", "),
             on_delete: Msg::DeleteManualMappingFromModal,
         }
     }).collect();

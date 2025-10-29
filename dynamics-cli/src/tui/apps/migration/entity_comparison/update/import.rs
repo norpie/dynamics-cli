@@ -159,41 +159,56 @@ pub fn handle_csv_loaded(state: &mut State, csv_data: crate::csv_parser::CsvImpo
     let mut all_updated = Vec::new();
     let mut all_removed = Vec::new(); // CSV import doesn't remove, but keep for consistency
 
-    // Process manual mappings (MERGE)
+    // Process manual mappings (MERGE) - convert single values to Vec for 1-to-N support
     for (src, tgt) in &csv_data.manual_mappings {
-        if let Some(old_tgt) = state.field_mappings.get(src) {
-            if old_tgt != tgt {
+        if let Some(old_tgts) = state.field_mappings.get(src) {
+            // Check if this target already exists in the vector
+            if !old_tgts.contains(tgt) {
                 all_updated.push((format!("[manual] {}", src), tgt.clone()));
             }
         } else {
             all_added.push((format!("[manual] {}", src), tgt.clone()));
         }
     }
-    state.field_mappings.extend(csv_data.manual_mappings.clone());
+    // Convert HashMap<String, String> to HashMap<String, Vec<String>> and merge
+    let converted: HashMap<String, Vec<String>> = csv_data.manual_mappings.iter()
+        .map(|(k, v)| (k.clone(), vec![v.clone()]))
+        .collect();
+    state.field_mappings.extend(converted);
 
-    // Process prefix mappings (MERGE)
+    // Process prefix mappings (MERGE) - convert single values to Vec for 1-to-N support
     for (src, tgt) in &csv_data.prefix_mappings {
-        if let Some(old_tgt) = state.prefix_mappings.get(src) {
-            if old_tgt != tgt {
+        if let Some(old_tgts) = state.prefix_mappings.get(src) {
+            // Check if this target already exists in the vector
+            if !old_tgts.contains(tgt) {
                 all_updated.push((format!("[prefix] {}", src), tgt.clone()));
             }
         } else {
             all_added.push((format!("[prefix] {}", src), tgt.clone()));
         }
     }
-    state.prefix_mappings.extend(csv_data.prefix_mappings.clone());
+    // Convert HashMap<String, String> to HashMap<String, Vec<String>> and merge
+    let converted: HashMap<String, Vec<String>> = csv_data.prefix_mappings.iter()
+        .map(|(k, v)| (k.clone(), vec![v.clone()]))
+        .collect();
+    state.prefix_mappings.extend(converted);
 
-    // Process imported mappings (MERGE)
+    // Process imported mappings (MERGE) - convert single values to Vec for 1-to-N support
     for (src, tgt) in &csv_data.imported_mappings {
-        if let Some(old_tgt) = state.imported_mappings.get(src) {
-            if old_tgt != tgt {
+        if let Some(old_tgts) = state.imported_mappings.get(src) {
+            // Check if this target already exists in the vector
+            if !old_tgts.contains(tgt) {
                 all_updated.push((format!("[import] {}", src), tgt.clone()));
             }
         } else {
             all_added.push((format!("[import] {}", src), tgt.clone()));
         }
     }
-    state.imported_mappings.extend(csv_data.imported_mappings.clone());
+    // Convert HashMap<String, String> to HashMap<String, Vec<String>> and merge
+    let converted: HashMap<String, Vec<String>> = csv_data.imported_mappings.iter()
+        .map(|(k, v)| (k.clone(), vec![v.clone()]))
+        .collect();
+    state.imported_mappings.extend(converted);
 
     // Update import source file (append if exists)
     if let Some(existing_file) = &state.import_source_file {
@@ -265,17 +280,21 @@ pub fn handle_csv_loaded(state: &mut State, csv_data: crate::csv_parser::CsvImpo
         async move {
             let config = crate::global_config();
 
-            // Save field mappings (loop through and save one by one)
-            for (src, tgt) in field_mappings {
-                if let Err(e) = config.set_field_mapping(&source_entity, &target_entity, &src, &tgt).await {
-                    log::error!("Failed to save field mapping {} -> {}: {}", src, tgt, e);
+            // Save field mappings (loop through source->targets pairs, save each target individually)
+            for (src, tgts) in field_mappings {
+                for tgt in tgts {
+                    if let Err(e) = config.set_field_mapping(&source_entity, &target_entity, &src, &tgt).await {
+                        log::error!("Failed to save field mapping {} -> {}: {}", src, tgt, e);
+                    }
                 }
             }
 
-            // Save prefix mappings (loop through and save one by one)
-            for (src, tgt) in prefix_mappings {
-                if let Err(e) = config.set_prefix_mapping(&source_entity, &target_entity, &src, &tgt).await {
-                    log::error!("Failed to save prefix mapping {} -> {}: {}", src, tgt, e);
+            // Save prefix mappings (loop through source->targets pairs, save each target individually)
+            for (src, tgts) in prefix_mappings {
+                for tgt in tgts {
+                    if let Err(e) = config.set_prefix_mapping(&source_entity, &target_entity, &src, &tgt).await {
+                        log::error!("Failed to save prefix mapping {} -> {}: {}", src, tgt, e);
+                    }
                 }
             }
 
@@ -296,9 +315,15 @@ pub fn handle_csv_loaded(state: &mut State, csv_data: crate::csv_parser::CsvImpo
 }
 
 /// Handle imported mappings loaded - update state and recompute matches
+/// Note: C# parser returns HashMap<String, String>, convert to HashMap<String, Vec<String>> for 1-to-N support
 pub fn handle_mappings_loaded(state: &mut State, mappings: HashMap<String, String>, filename: String) -> Command<Msg> {
     log::info!("Loading {} imported mappings from {}", mappings.len(), filename);
     log::debug!("Old mappings count: {}", state.imported_mappings.len());
+
+    // Convert HashMap<String, String> to HashMap<String, Vec<String>> for 1-to-N support
+    let mappings_vec: HashMap<String, Vec<String>> = mappings.iter()
+        .map(|(k, v)| (k.clone(), vec![v.clone()]))
+        .collect();
 
     // Compute results by comparing old vs new mappings
     let old_mappings = &state.imported_mappings;
@@ -306,10 +331,11 @@ pub fn handle_mappings_loaded(state: &mut State, mappings: HashMap<String, Strin
     let mut updated = Vec::new();
     let mut removed = Vec::new();
 
-    // Find added and updated mappings
+    // Find added and updated mappings (iterate over single-value imports)
     for (src, tgt) in &mappings {
-        if let Some(old_tgt) = old_mappings.get(src) {
-            if old_tgt != tgt {
+        if let Some(old_tgts) = old_mappings.get(src) {
+            // Check if this specific target already exists
+            if !old_tgts.contains(tgt) {
                 updated.push((src.clone(), tgt.clone()));
             }
         } else {
@@ -317,10 +343,13 @@ pub fn handle_mappings_loaded(state: &mut State, mappings: HashMap<String, Strin
         }
     }
 
-    // Find removed mappings
-    for (src, tgt) in old_mappings {
+    // Find removed mappings (sources that existed but are now gone)
+    for (src, old_tgts) in old_mappings {
         if !mappings.contains_key(src) {
-            removed.push((src.clone(), tgt.clone()));
+            // All targets for this source were removed
+            for old_tgt in old_tgts {
+                removed.push((src.clone(), old_tgt.clone()));
+            }
         }
     }
 
@@ -336,7 +365,7 @@ pub fn handle_mappings_loaded(state: &mut State, mappings: HashMap<String, Strin
     });
     state.show_import_results_modal = true;
 
-    state.imported_mappings = mappings;
+    state.imported_mappings = mappings_vec;
     state.import_source_file = Some(filename.clone());
     state.show_import_modal = false;
 

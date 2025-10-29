@@ -5,14 +5,16 @@ use sqlx::SqlitePool;
 use std::collections::HashMap;
 
 /// Get all field mappings for a source/target entity pair
+/// Returns HashMap<source_field, Vec<target_fields>> to support 1-to-N mappings
 pub async fn get_field_mappings(
     pool: &SqlitePool,
     source_entity: &str,
     target_entity: &str,
-) -> Result<HashMap<String, String>> {
+) -> Result<HashMap<String, Vec<String>>> {
     let rows: Vec<(String, String)> = sqlx::query_as(
         "SELECT source_field, target_field FROM field_mappings
-         WHERE source_entity = ? AND target_entity = ?",
+         WHERE source_entity = ? AND target_entity = ?
+         ORDER BY source_field, target_field",
     )
     .bind(source_entity)
     .bind(target_entity)
@@ -20,10 +22,19 @@ pub async fn get_field_mappings(
     .await
     .context("Failed to get field mappings")?;
 
-    Ok(rows.into_iter().collect())
+    // Group by source_field to support 1-to-N mappings
+    let mut mappings: HashMap<String, Vec<String>> = HashMap::new();
+    for (source_field, target_field) in rows {
+        mappings.entry(source_field)
+            .or_insert_with(Vec::new)
+            .push(target_field);
+    }
+
+    Ok(mappings)
 }
 
-/// Set a field mapping (insert or update)
+/// Set a field mapping (insert new source->target pair)
+/// With 1-to-N support, this adds a new target to a source (or does nothing if already exists)
 pub async fn set_field_mapping(
     pool: &SqlitePool,
     source_entity: &str,
@@ -34,8 +45,8 @@ pub async fn set_field_mapping(
     sqlx::query(
         "INSERT INTO field_mappings (source_entity, target_entity, source_field, target_field)
          VALUES (?, ?, ?, ?)
-         ON CONFLICT(source_entity, target_entity, source_field)
-         DO UPDATE SET target_field = excluded.target_field",
+         ON CONFLICT(source_entity, target_entity, source_field, target_field)
+         DO NOTHING",
     )
     .bind(source_entity)
     .bind(target_entity)
@@ -48,7 +59,7 @@ pub async fn set_field_mapping(
     Ok(())
 }
 
-/// Delete a field mapping
+/// Delete all mappings for a source field (removes all targets)
 pub async fn delete_field_mapping(
     pool: &SqlitePool,
     source_entity: &str,
@@ -69,15 +80,42 @@ pub async fn delete_field_mapping(
     Ok(())
 }
 
+/// Delete a specific source->target mapping (for 1-to-N support)
+/// Use this when removing one target from a source that maps to multiple targets
+pub async fn delete_specific_field_mapping(
+    pool: &SqlitePool,
+    source_entity: &str,
+    target_entity: &str,
+    source_field: &str,
+    target_field: &str,
+) -> Result<()> {
+    sqlx::query(
+        "DELETE FROM field_mappings
+         WHERE source_entity = ? AND target_entity = ?
+           AND source_field = ? AND target_field = ?",
+    )
+    .bind(source_entity)
+    .bind(target_entity)
+    .bind(source_field)
+    .bind(target_field)
+    .execute(pool)
+    .await
+    .context("Failed to delete specific field mapping")?;
+
+    Ok(())
+}
+
 /// Get all prefix mappings for a source/target entity pair
+/// Returns HashMap<source_prefix, Vec<target_prefixes>> to support 1-to-N mappings
 pub async fn get_prefix_mappings(
     pool: &SqlitePool,
     source_entity: &str,
     target_entity: &str,
-) -> Result<HashMap<String, String>> {
+) -> Result<HashMap<String, Vec<String>>> {
     let rows: Vec<(String, String)> = sqlx::query_as(
         "SELECT source_prefix, target_prefix FROM prefix_mappings
-         WHERE source_entity = ? AND target_entity = ?",
+         WHERE source_entity = ? AND target_entity = ?
+         ORDER BY source_prefix, target_prefix",
     )
     .bind(source_entity)
     .bind(target_entity)
@@ -85,10 +123,19 @@ pub async fn get_prefix_mappings(
     .await
     .context("Failed to get prefix mappings")?;
 
-    Ok(rows.into_iter().collect())
+    // Group by source_prefix to support 1-to-N mappings
+    let mut mappings: HashMap<String, Vec<String>> = HashMap::new();
+    for (source_prefix, target_prefix) in rows {
+        mappings.entry(source_prefix)
+            .or_insert_with(Vec::new)
+            .push(target_prefix);
+    }
+
+    Ok(mappings)
 }
 
-/// Set a prefix mapping (insert or update)
+/// Set a prefix mapping (insert new source->target pair)
+/// With 1-to-N support, this adds a new target to a source (or does nothing if already exists)
 pub async fn set_prefix_mapping(
     pool: &SqlitePool,
     source_entity: &str,
@@ -99,8 +146,8 @@ pub async fn set_prefix_mapping(
     sqlx::query(
         "INSERT INTO prefix_mappings (source_entity, target_entity, source_prefix, target_prefix)
          VALUES (?, ?, ?, ?)
-         ON CONFLICT(source_entity, target_entity, source_prefix)
-         DO UPDATE SET target_prefix = excluded.target_prefix",
+         ON CONFLICT(source_entity, target_entity, source_prefix, target_prefix)
+         DO NOTHING",
     )
     .bind(source_entity)
     .bind(target_entity)
@@ -113,7 +160,7 @@ pub async fn set_prefix_mapping(
     Ok(())
 }
 
-/// Delete a prefix mapping
+/// Delete all mappings for a source prefix (removes all targets)
 pub async fn delete_prefix_mapping(
     pool: &SqlitePool,
     source_entity: &str,
@@ -134,15 +181,42 @@ pub async fn delete_prefix_mapping(
     Ok(())
 }
 
+/// Delete a specific source->target prefix mapping (for 1-to-N support)
+/// Use this when removing one target from a source that maps to multiple targets
+pub async fn delete_specific_prefix_mapping(
+    pool: &SqlitePool,
+    source_entity: &str,
+    target_entity: &str,
+    source_prefix: &str,
+    target_prefix: &str,
+) -> Result<()> {
+    sqlx::query(
+        "DELETE FROM prefix_mappings
+         WHERE source_entity = ? AND target_entity = ?
+           AND source_prefix = ? AND target_prefix = ?",
+    )
+    .bind(source_entity)
+    .bind(target_entity)
+    .bind(source_prefix)
+    .bind(target_prefix)
+    .execute(pool)
+    .await
+    .context("Failed to delete specific prefix mapping")?;
+
+    Ok(())
+}
+
 /// Get imported mappings for a source/target entity pair
+/// Returns HashMap<source_field, Vec<target_fields>> to support 1-to-N mappings
 pub async fn get_imported_mappings(
     pool: &SqlitePool,
     source_entity: &str,
     target_entity: &str,
-) -> Result<(HashMap<String, String>, Option<String>)> {
+) -> Result<(HashMap<String, Vec<String>>, Option<String>)> {
     let rows: Vec<(String, String, String)> = sqlx::query_as(
         "SELECT source_field, target_field, source_file FROM imported_mappings
-         WHERE source_entity = ? AND target_entity = ?",
+         WHERE source_entity = ? AND target_entity = ?
+         ORDER BY source_field, target_field",
     )
     .bind(source_entity)
     .bind(target_entity)
@@ -150,10 +224,13 @@ pub async fn get_imported_mappings(
     .await
     .context("Failed to get imported mappings")?;
 
-    // Extract mappings and source file
-    let mappings: HashMap<String, String> = rows.iter()
-        .map(|(src, tgt, _)| (src.clone(), tgt.clone()))
-        .collect();
+    // Group by source_field to support 1-to-N mappings
+    let mut mappings: HashMap<String, Vec<String>> = HashMap::new();
+    for (source_field, target_field, _) in &rows {
+        mappings.entry(source_field.clone())
+            .or_insert_with(Vec::new)
+            .push(target_field.clone());
+    }
 
     // Get the source file from the first row (all rows should have the same source_file)
     let source_file = rows.first().map(|(_, _, file)| file.clone());
@@ -162,11 +239,12 @@ pub async fn get_imported_mappings(
 }
 
 /// Set imported mappings (clears existing imports for this entity pair and inserts new ones)
+/// Accepts HashMap<source_field, Vec<target_fields>> to support 1-to-N mappings
 pub async fn set_imported_mappings(
     pool: &SqlitePool,
     source_entity: &str,
     target_entity: &str,
-    mappings: &HashMap<String, String>,
+    mappings: &HashMap<String, Vec<String>>,
     source_file: &str,
 ) -> Result<()> {
     // Start transaction
@@ -183,20 +261,22 @@ pub async fn set_imported_mappings(
     .await
     .context("Failed to clear existing imported mappings")?;
 
-    // Insert new mappings
-    for (source_field, target_field) in mappings {
-        sqlx::query(
-            "INSERT INTO imported_mappings (source_entity, target_entity, source_field, target_field, source_file)
-             VALUES (?, ?, ?, ?, ?)",
-        )
-        .bind(source_entity)
-        .bind(target_entity)
-        .bind(source_field)
-        .bind(target_field)
-        .bind(source_file)
-        .execute(&mut *tx)
-        .await
-        .context("Failed to insert imported mapping")?;
+    // Insert new mappings (one row per source->target pair)
+    for (source_field, target_fields) in mappings {
+        for target_field in target_fields {
+            sqlx::query(
+                "INSERT INTO imported_mappings (source_entity, target_entity, source_field, target_field, source_file)
+                 VALUES (?, ?, ?, ?, ?)",
+            )
+            .bind(source_entity)
+            .bind(target_entity)
+            .bind(source_field)
+            .bind(target_field)
+            .bind(source_file)
+            .execute(&mut *tx)
+            .await
+            .context("Failed to insert imported mapping")?;
+        }
     }
 
     // Commit transaction

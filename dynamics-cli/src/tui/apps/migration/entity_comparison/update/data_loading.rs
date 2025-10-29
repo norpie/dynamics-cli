@@ -242,9 +242,9 @@ pub fn handle_parallel_data_loaded(
 
 pub fn handle_mappings_loaded(
     state: &mut State,
-    field_mappings: HashMap<String, String>,
-    prefix_mappings: HashMap<String, String>,
-    imported_mappings: HashMap<String, String>,
+    field_mappings: HashMap<String, Vec<String>>,
+    prefix_mappings: HashMap<String, Vec<String>>,
+    imported_mappings: HashMap<String, Vec<String>>,
     import_source_file: Option<String>,
     example_pairs: Vec<ExamplePair>,
     ignored_items: std::collections::HashSet<String>

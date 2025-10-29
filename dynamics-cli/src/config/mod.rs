@@ -344,7 +344,7 @@ impl Config {
     }
 
     // Field and prefix mapping methods
-    pub async fn get_field_mappings(&self, source_entity: &str, target_entity: &str) -> Result<std::collections::HashMap<String, String>> {
+    pub async fn get_field_mappings(&self, source_entity: &str, target_entity: &str) -> Result<std::collections::HashMap<String, Vec<String>>> {
         repository::mappings::get_field_mappings(&self.pool, source_entity, target_entity).await
     }
 
@@ -356,7 +356,7 @@ impl Config {
         repository::mappings::delete_field_mapping(&self.pool, source_entity, target_entity, source_field).await
     }
 
-    pub async fn get_prefix_mappings(&self, source_entity: &str, target_entity: &str) -> Result<std::collections::HashMap<String, String>> {
+    pub async fn get_prefix_mappings(&self, source_entity: &str, target_entity: &str) -> Result<std::collections::HashMap<String, Vec<String>>> {
         repository::mappings::get_prefix_mappings(&self.pool, source_entity, target_entity).await
     }
 
@@ -368,11 +368,11 @@ impl Config {
         repository::mappings::delete_prefix_mapping(&self.pool, source_entity, target_entity, source_prefix).await
     }
 
-    pub async fn get_imported_mappings(&self, source_entity: &str, target_entity: &str) -> Result<(std::collections::HashMap<String, String>, Option<String>)> {
+    pub async fn get_imported_mappings(&self, source_entity: &str, target_entity: &str) -> Result<(std::collections::HashMap<String, Vec<String>>, Option<String>)> {
         repository::mappings::get_imported_mappings(&self.pool, source_entity, target_entity).await
     }
 
-    pub async fn set_imported_mappings(&self, source_entity: &str, target_entity: &str, mappings: &std::collections::HashMap<String, String>, source_file: &str) -> Result<()> {
+    pub async fn set_imported_mappings(&self, source_entity: &str, target_entity: &str, mappings: &std::collections::HashMap<String, Vec<String>>, source_file: &str) -> Result<()> {
         repository::mappings::set_imported_mappings(&self.pool, source_entity, target_entity, mappings, source_file).await
     }
 

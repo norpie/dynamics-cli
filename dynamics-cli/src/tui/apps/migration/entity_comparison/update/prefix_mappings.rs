@@ -54,8 +54,8 @@ pub fn handle_add_prefix_mapping(state: &mut State) -> Command<Msg> {
         return Command::None;
     }
 
-    // Add to state
-    state.prefix_mappings.insert(source_prefix.clone(), target_prefix.clone());
+    // Add to state (wrap single target in Vec for 1-to-N support)
+    state.prefix_mappings.insert(source_prefix.clone(), vec![target_prefix.clone()]);
 
     // Recompute matches
     if let (Resource::Success(source), Resource::Success(target)) =

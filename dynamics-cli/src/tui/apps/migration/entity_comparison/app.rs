@@ -50,9 +50,9 @@ pub struct State {
     pub(super) target_metadata: Resource<EntityMetadata>,
 
     // Mapping state
-    pub(super) field_mappings: HashMap<String, String>,  // source -> target (manual)
-    pub(super) prefix_mappings: HashMap<String, String>, // source_prefix -> target_prefix
-    pub(super) imported_mappings: HashMap<String, String>, // source -> target (from C# file)
+    pub(super) field_mappings: HashMap<String, Vec<String>>,  // source -> targets (manual, 1-to-N support)
+    pub(super) prefix_mappings: HashMap<String, Vec<String>>, // source_prefix -> target_prefixes (1-to-N support)
+    pub(super) imported_mappings: HashMap<String, Vec<String>>, // source -> targets (from C# file, 1-to-N support)
     pub(super) import_source_file: Option<String>,       // filename of imported C# file
     pub(super) hide_mode: super::models::HideMode,
     pub(super) sort_mode: super::models::SortMode,
@@ -400,8 +400,8 @@ impl App for EntityComparisonApp {
             // Refresh metadata
             Subscription::keyboard(config.get_keybind("entity_comparison.refresh"), "Refresh metadata", Msg::Refresh),
 
-            // Manual mapping actions
-            Subscription::keyboard(config.get_keybind("entity_comparison.create_mapping"), "Create manual mapping", Msg::CreateManualMapping),
+            // Manual mapping actions (supports 1-to-N and N-to-1 via multi-select)
+            Subscription::keyboard(config.get_keybind("entity_comparison.create_mapping"), "Create manual mapping (multi-select supported)", Msg::CreateManualMapping),
             Subscription::keyboard(config.get_keybind("entity_comparison.delete_mapping"), "Delete manual mapping", Msg::DeleteManualMapping),
 
             // Cycle hide mode

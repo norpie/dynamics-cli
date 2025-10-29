@@ -10,8 +10,8 @@ use std::collections::HashMap;
 pub fn compute_entity_matches(
     source_entities: &[(String, usize)],
     target_entities: &[(String, usize)],
-    manual_mappings: &HashMap<String, String>,
-    prefix_mappings: &HashMap<String, String>,
+    manual_mappings: &HashMap<String, Vec<String>>,
+    prefix_mappings: &HashMap<String, Vec<String>>,
 ) -> HashMap<String, MatchInfo> {
     let mut matches = HashMap::new();
 
@@ -23,12 +23,24 @@ pub fn compute_entity_matches(
 
     for (source_name, _count) in source_entities {
         // 1. Check manual mappings first (highest priority)
-        if let Some(target_name) = manual_mappings.get(source_name) {
-            if target_lookup.contains_key(target_name) {
-                matches.insert(
-                    source_name.clone(),
-                    MatchInfo::single(target_name.clone(), MatchType::Manual, 1.0),
-                );
+        if let Some(target_names) = manual_mappings.get(source_name) {
+            // Filter targets that exist in target_entities
+            let valid_targets: Vec<String> = target_names.iter()
+                .filter(|tn| target_lookup.contains_key(*tn))
+                .cloned()
+                .collect();
+
+            if !valid_targets.is_empty() {
+                let mut match_info = MatchInfo {
+                    target_fields: valid_targets.clone(),
+                    match_types: HashMap::new(),
+                    confidences: HashMap::new(),
+                };
+                for target in valid_targets {
+                    match_info.match_types.insert(target.clone(), MatchType::Manual);
+                    match_info.confidences.insert(target, 1.0);
+                }
+                matches.insert(source_name.clone(), match_info);
                 continue;
             }
         }
@@ -42,15 +54,25 @@ pub fn compute_entity_matches(
             continue;
         }
 
-        // 3. Check prefix-transformed matches
-        if let Some(transformed) = apply_prefix_transform(source_name, prefix_mappings) {
-            if target_lookup.contains_key(&transformed) {
-                matches.insert(
-                    source_name.clone(),
-                    MatchInfo::single(transformed, MatchType::Prefix, 0.9),
-                );
-                continue;
+        // 3. Check prefix-transformed matches (1-to-N support)
+        let transformed_names = apply_prefix_transform(source_name, prefix_mappings);
+        let valid_transformed: Vec<String> = transformed_names.iter()
+            .filter(|tn| target_lookup.contains_key(*tn))
+            .cloned()
+            .collect();
+
+        if !valid_transformed.is_empty() {
+            let mut match_info = MatchInfo {
+                target_fields: valid_transformed.clone(),
+                match_types: HashMap::new(),
+                confidences: HashMap::new(),
+            };
+            for target in valid_transformed {
+                match_info.match_types.insert(target.clone(), MatchType::Prefix);
+                match_info.confidences.insert(target, 0.9);
             }
+            matches.insert(source_name.clone(), match_info);
+            continue;
         }
 
         // No match found - don't insert anything
@@ -108,9 +130,9 @@ fn find_example_value_match(
 pub fn compute_field_matches(
     source_fields: &[FieldMetadata],
     target_fields: &[FieldMetadata],
-    manual_mappings: &HashMap<String, String>,
-    imported_mappings: &HashMap<String, String>,
-    prefix_mappings: &HashMap<String, String>,
+    manual_mappings: &HashMap<String, Vec<String>>,
+    imported_mappings: &HashMap<String, Vec<String>>,
+    prefix_mappings: &HashMap<String, Vec<String>>,
     examples: &super::ExamplesState,
     source_entity: &str,
     target_entity: &str,
@@ -135,28 +157,51 @@ pub fn compute_field_matches(
     for source_field in source_fields {
         let source_name = &source_field.logical_name;
 
-        // 1. Check manual mappings first (highest priority)
-        if let Some(target_name) = manual_mappings.get(source_name) {
-            if target_lookup.contains_key(target_name) {
-                matches.insert(
-                    source_name.clone(),
-                    MatchInfo::single(target_name.clone(), MatchType::Manual, 1.0),
-                );
-                already_matched.insert(target_name.clone());
+        // 1. Check manual mappings first (highest priority, 1-to-N support)
+        if let Some(target_names) = manual_mappings.get(source_name) {
+            let valid_targets: Vec<String> = target_names.iter()
+                .filter(|tn| target_lookup.contains_key(*tn))
+                .cloned()
+                .collect();
+
+            if !valid_targets.is_empty() {
+                let mut match_info = MatchInfo {
+                    target_fields: valid_targets.clone(),
+                    match_types: HashMap::new(),
+                    confidences: HashMap::new(),
+                };
+                for target in &valid_targets {
+                    match_info.match_types.insert(target.clone(), MatchType::Manual);
+                    match_info.confidences.insert(target.clone(), 1.0);
+                    already_matched.insert(target.clone());
+                }
+                matches.insert(source_name.clone(), match_info);
                 continue;
             }
         }
 
-        // 2. Check imported mappings (second highest priority)
+        // 2. Check imported mappings (second highest priority, 1-to-N support)
         // Use case-insensitive lookup since C# code uses PascalCase but API returns lowercase
-        if let Some(target_name_cs) = imported_mappings.get(source_name) {
-            if let Some(target_field) = target_lookup_lowercase.get(&target_name_cs.to_lowercase()) {
-                let actual_target_name = &target_field.logical_name;
-                matches.insert(
-                    source_name.clone(),
-                    MatchInfo::single(actual_target_name.clone(), MatchType::Import, 1.0),
-                );
-                already_matched.insert(actual_target_name.clone());
+        if let Some(target_names_cs) = imported_mappings.get(source_name) {
+            let mut valid_targets = Vec::new();
+            for target_name_cs in target_names_cs {
+                if let Some(target_field) = target_lookup_lowercase.get(&target_name_cs.to_lowercase()) {
+                    valid_targets.push(target_field.logical_name.clone());
+                }
+            }
+
+            if !valid_targets.is_empty() {
+                let mut match_info = MatchInfo {
+                    target_fields: valid_targets.clone(),
+                    match_types: HashMap::new(),
+                    confidences: HashMap::new(),
+                };
+                for target in &valid_targets {
+                    match_info.match_types.insert(target.clone(), MatchType::Import);
+                    match_info.confidences.insert(target.clone(), 1.0);
+                    already_matched.insert(target.clone());
+                }
+                matches.insert(source_name.clone(), match_info);
                 continue;
             }
         }
@@ -176,21 +221,33 @@ pub fn compute_field_matches(
             continue;
         }
 
-        // 4. Check prefix-transformed matches
-        if let Some(transformed) = apply_prefix_transform(source_name, prefix_mappings) {
+        // 4. Check prefix-transformed matches (1-to-N support)
+        let transformed_names = apply_prefix_transform(source_name, prefix_mappings);
+        let mut valid_transformed = Vec::new();
+        for transformed in transformed_names {
             if let Some(target_field) = target_lookup.get(&transformed) {
                 let types_match = source_field.field_type == target_field.field_type;
-                matches.insert(
-                    source_name.clone(),
-                    MatchInfo::single(
-                        transformed.clone(),
-                        if types_match { MatchType::Prefix } else { MatchType::TypeMismatch },
-                        if types_match { 0.9 } else { 0.6 },
-                    ),
-                );
-                already_matched.insert(transformed);
-                continue;
+                valid_transformed.push((
+                    transformed.clone(),
+                    if types_match { MatchType::Prefix } else { MatchType::TypeMismatch },
+                    if types_match { 0.9 } else { 0.6 },
+                ));
             }
+        }
+
+        if !valid_transformed.is_empty() {
+            let mut match_info = MatchInfo {
+                target_fields: valid_transformed.iter().map(|(name, _, _)| name.clone()).collect(),
+                match_types: HashMap::new(),
+                confidences: HashMap::new(),
+            };
+            for (target, match_type, confidence) in valid_transformed {
+                match_info.match_types.insert(target.clone(), match_type);
+                match_info.confidences.insert(target.clone(), confidence);
+                already_matched.insert(target);
+            }
+            matches.insert(source_name.clone(), match_info);
+            continue;
         }
 
         // 5. Check example-based matching (only for unmatched fields)
@@ -236,8 +293,8 @@ fn entities_match(
 pub fn compute_relationship_matches(
     source_relationships: &[RelationshipMetadata],
     target_relationships: &[RelationshipMetadata],
-    manual_mappings: &HashMap<String, String>,
-    prefix_mappings: &HashMap<String, String>,
+    manual_mappings: &HashMap<String, Vec<String>>,
+    prefix_mappings: &HashMap<String, Vec<String>>,
     entity_matches: &HashMap<String, MatchInfo>,
 ) -> HashMap<String, MatchInfo> {
     let mut matches = HashMap::new();
@@ -251,13 +308,24 @@ pub fn compute_relationship_matches(
     for source_rel in source_relationships {
         let source_name = &source_rel.name;
 
-        // 1. Check manual mappings first
-        if let Some(target_name) = manual_mappings.get(source_name) {
-            if target_lookup.contains_key(target_name) {
-                matches.insert(
-                    source_name.clone(),
-                    MatchInfo::single(target_name.clone(), MatchType::Manual, 1.0),
-                );
+        // 1. Check manual mappings first (1-to-N support)
+        if let Some(target_names) = manual_mappings.get(source_name) {
+            let valid_targets: Vec<String> = target_names.iter()
+                .filter(|tn| target_lookup.contains_key(*tn))
+                .cloned()
+                .collect();
+
+            if !valid_targets.is_empty() {
+                let mut match_info = MatchInfo {
+                    target_fields: valid_targets.clone(),
+                    match_types: HashMap::new(),
+                    confidences: HashMap::new(),
+                };
+                for target in valid_targets {
+                    match_info.match_types.insert(target.clone(), MatchType::Manual);
+                    match_info.confidences.insert(target, 1.0);
+                }
+                matches.insert(source_name.clone(), match_info);
                 continue;
             }
         }
@@ -278,22 +346,34 @@ pub fn compute_relationship_matches(
             continue;
         }
 
-        // 3. Check prefix-transformed matches
-        if let Some(transformed) = apply_prefix_transform(source_name, prefix_mappings) {
+        // 3. Check prefix-transformed matches (1-to-N support)
+        let transformed_names = apply_prefix_transform(source_name, prefix_mappings);
+        let mut valid_transformed = Vec::new();
+        for transformed in transformed_names {
             if let Some(target_rel) = target_lookup.get(&transformed) {
                 // Compare relationship type and related entity (entity-aware)
                 let types_match = source_rel.relationship_type == target_rel.relationship_type
                     && entities_match(&source_rel.related_entity, &target_rel.related_entity, entity_matches);
-                matches.insert(
-                    source_name.clone(),
-                    MatchInfo::single(
-                        transformed,
-                        if types_match { MatchType::Prefix } else { MatchType::TypeMismatch },
-                        if types_match { 0.9 } else { 0.6 },
-                    ),
-                );
-                continue;
+                valid_transformed.push((
+                    transformed.clone(),
+                    if types_match { MatchType::Prefix } else { MatchType::TypeMismatch },
+                    if types_match { 0.9 } else { 0.6 },
+                ));
             }
+        }
+
+        if !valid_transformed.is_empty() {
+            let mut match_info = MatchInfo {
+                target_fields: valid_transformed.iter().map(|(name, _, _)| name.clone()).collect(),
+                match_types: HashMap::new(),
+                confidences: HashMap::new(),
+            };
+            for (target, match_type, confidence) in valid_transformed {
+                match_info.match_types.insert(target.clone(), match_type);
+                match_info.confidences.insert(target, confidence);
+            }
+            matches.insert(source_name.clone(), match_info);
+            continue;
         }
     }
 
@@ -304,14 +384,18 @@ pub fn compute_relationship_matches(
 /// Returns transformed name if any prefix mapping applies
 fn apply_prefix_transform(
     name: &str,
-    prefix_mappings: &HashMap<String, String>,
-) -> Option<String> {
-    for (source_prefix, target_prefix) in prefix_mappings {
+    prefix_mappings: &HashMap<String, Vec<String>>,
+) -> Vec<String> {
+    let mut results = Vec::new();
+    for (source_prefix, target_prefixes) in prefix_mappings {
         if let Some(suffix) = name.strip_prefix(source_prefix) {
-            return Some(format!("{}{}", target_prefix, suffix));
+            // Generate transformed name for each target prefix (1-to-N support)
+            for target_prefix in target_prefixes {
+                results.push(format!("{}{}", target_prefix, suffix));
+            }
         }
     }
-    None
+    results
 }
 
 /// Match container names (Forms, Views, Tabs, Sections, etc.)
@@ -344,9 +428,9 @@ pub fn match_container_names(
 pub fn compute_hierarchical_field_matches(
     source_metadata: &crate::api::EntityMetadata,
     target_metadata: &crate::api::EntityMetadata,
-    manual_mappings: &HashMap<String, String>,
-    imported_mappings: &HashMap<String, String>,
-    prefix_mappings: &HashMap<String, String>,
+    manual_mappings: &HashMap<String, Vec<String>>,
+    imported_mappings: &HashMap<String, Vec<String>>,
+    prefix_mappings: &HashMap<String, Vec<String>>,
     tab_type: &str, // "forms" or "views"
 ) -> HashMap<String, MatchInfo> {
     let mut matches = HashMap::new();
@@ -394,13 +478,24 @@ pub fn compute_hierarchical_field_matches(
     for source_container in &source_containers {
         let source_path = &source_container.path;
 
-        // Check manual mapping for container
-        if let Some(target_path) = manual_mappings.get(source_path) {
-            if target_container_lookup.contains_key(target_path) {
-                matches.insert(
-                    source_path.clone(),
-                    MatchInfo::single(target_path.clone(), MatchType::Manual, 1.0),
-                );
+        // Check manual mapping for container (1-to-N support)
+        if let Some(target_paths) = manual_mappings.get(source_path) {
+            let valid_targets: Vec<String> = target_paths.iter()
+                .filter(|tp| target_container_lookup.contains_key(*tp))
+                .cloned()
+                .collect();
+
+            if !valid_targets.is_empty() {
+                let mut match_info = MatchInfo {
+                    target_fields: valid_targets.clone(),
+                    match_types: HashMap::new(),
+                    confidences: HashMap::new(),
+                };
+                for target in valid_targets {
+                    match_info.match_types.insert(target.clone(), MatchType::Manual);
+                    match_info.confidences.insert(target, 1.0);
+                }
+                matches.insert(source_path.clone(), match_info);
                 continue;
             }
         }
@@ -450,23 +545,42 @@ pub fn compute_hierarchical_field_matches(
         for source_field in source_fields {
             let source_field_name = source_field.path.rfind('/').map(|i| &source_field.path[i+1..]).unwrap_or(&source_field.path);
 
-            // 1. Check manual mapping
-            if let Some(target_path) = manual_mappings.get(&source_field.path) {
-                matches.insert(
-                    source_field.path.clone(),
-                    MatchInfo::single(target_path.clone(), MatchType::Manual, 1.0),
-                );
+            // 1. Check manual mapping (1-to-N support)
+            if let Some(target_paths) = manual_mappings.get(&source_field.path) {
+                let mut match_info = MatchInfo {
+                    target_fields: target_paths.clone(),
+                    match_types: HashMap::new(),
+                    confidences: HashMap::new(),
+                };
+                for target in target_paths {
+                    match_info.match_types.insert(target.clone(), MatchType::Manual);
+                    match_info.confidences.insert(target.clone(), 1.0);
+                }
+                matches.insert(source_field.path.clone(), match_info);
                 continue;
             }
 
-            // 2. Check imported mapping (by field name only, not full path)
+            // 2. Check imported mapping (by field name only, not full path, 1-to-N support)
             // Use case-insensitive lookup since C# code uses PascalCase but API returns lowercase
-            if let Some(target_name_cs) = imported_mappings.get(source_field_name as &str) {
-                if let Some(target_field) = target_field_lookup_lowercase.get(&target_name_cs.to_lowercase()) {
-                    matches.insert(
-                        source_field.path.clone(),
-                        MatchInfo::single(target_field.path.clone(), MatchType::Import, 1.0),
-                    );
+            if let Some(target_names_cs) = imported_mappings.get(source_field_name as &str) {
+                let mut valid_targets = Vec::new();
+                for target_name_cs in target_names_cs {
+                    if let Some(target_field) = target_field_lookup_lowercase.get(&target_name_cs.to_lowercase()) {
+                        valid_targets.push(target_field.path.clone());
+                    }
+                }
+
+                if !valid_targets.is_empty() {
+                    let mut match_info = MatchInfo {
+                        target_fields: valid_targets.clone(),
+                        match_types: HashMap::new(),
+                        confidences: HashMap::new(),
+                    };
+                    for target in &valid_targets {
+                        match_info.match_types.insert(target.clone(), MatchType::Import);
+                        match_info.confidences.insert(target.clone(), 1.0);
+                    }
+                    matches.insert(source_field.path.clone(), match_info);
                     continue;
                 }
             }
@@ -485,19 +599,31 @@ pub fn compute_hierarchical_field_matches(
                 continue;
             }
 
-            // 4. Check prefix-transformed matches
-            if let Some(transformed_name) = apply_prefix_transform(source_field_name, prefix_mappings) {
+            // 4. Check prefix-transformed matches (1-to-N support)
+            let transformed_names = apply_prefix_transform(source_field_name, prefix_mappings);
+            let mut valid_transformed = Vec::new();
+            for transformed_name in transformed_names {
                 if let Some(target_field) = target_field_lookup.get(&transformed_name) {
                     let types_match = source_field.field_type == target_field.field_type;
-                    matches.insert(
-                        source_field.path.clone(),
-                        MatchInfo::single(
-                            target_field.path.clone(),
-                            if types_match { MatchType::Prefix } else { MatchType::TypeMismatch },
-                            if types_match { 0.9 } else { 0.6 },
-                        ),
-                    );
+                    valid_transformed.push((
+                        target_field.path.clone(),
+                        if types_match { MatchType::Prefix } else { MatchType::TypeMismatch },
+                        if types_match { 0.9 } else { 0.6 },
+                    ));
                 }
+            }
+
+            if !valid_transformed.is_empty() {
+                let mut match_info = MatchInfo {
+                    target_fields: valid_transformed.iter().map(|(path, _, _)| path.clone()).collect(),
+                    match_types: HashMap::new(),
+                    confidences: HashMap::new(),
+                };
+                for (target_path, match_type, confidence) in valid_transformed {
+                    match_info.match_types.insert(target_path.clone(), match_type);
+                    match_info.confidences.insert(target_path, confidence);
+                }
+                matches.insert(source_field.path.clone(), match_info);
             }
         }
     }
@@ -611,9 +737,9 @@ fn build_metadata_paths(metadata: &crate::api::EntityMetadata, tab_type: &str) -
 pub fn recompute_all_matches(
     source_metadata: &crate::api::EntityMetadata,
     target_metadata: &crate::api::EntityMetadata,
-    field_mappings: &HashMap<String, String>,
-    imported_mappings: &HashMap<String, String>,
-    prefix_mappings: &HashMap<String, String>,
+    field_mappings: &HashMap<String, Vec<String>>,
+    imported_mappings: &HashMap<String, Vec<String>>,
+    prefix_mappings: &HashMap<String, Vec<String>>,
     examples: &super::ExamplesState,
     source_entity: &str,
     target_entity: &str,
