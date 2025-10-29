@@ -74,11 +74,12 @@ pub fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         // Export
         Msg::ExportToExcel => mappings::handle_export_to_excel(state),
 
-        // Import from C# file
+        // Import from C# file or CSV
         Msg::OpenImportModal => import::handle_open_modal(state),
         Msg::CloseImportModal => import::handle_close_modal(state),
         Msg::ImportFileSelected(path) => import::handle_file_selected(state, path),
         Msg::ImportMappingsLoaded(mappings, file) => import::handle_mappings_loaded(state, mappings, file),
+        Msg::ImportCsvLoaded(csv_data, file) => import::handle_csv_loaded(state, csv_data, file),
         Msg::ClearImportedMappings => import::handle_clear_imported(state),
         Msg::ImportNavigate(key) => import::handle_navigate(state, key),
         Msg::ImportSetViewportHeight(h) => import::handle_set_viewport_height(state, h),

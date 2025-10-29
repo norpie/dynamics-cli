@@ -73,7 +73,8 @@ pub enum Msg {
     OpenImportModal,
     CloseImportModal,
     ImportFileSelected(std::path::PathBuf),
-    ImportMappingsLoaded(std::collections::HashMap<String, String>, String), // mappings, filename
+    ImportMappingsLoaded(std::collections::HashMap<String, String>, String), // mappings, filename (for .cs files)
+    ImportCsvLoaded(crate::csv_parser::CsvImportData, String), // csv_data, filename (for .csv files)
     ClearImportedMappings,
     ImportNavigate(crossterm::event::KeyCode),
     ImportSetViewportHeight(usize),
