@@ -804,30 +804,28 @@ pub fn render_ignore_modal(state: &mut State) -> Element<Msg> {
         .build()
 }
 
-/// Filter tree items based on fuzzy search query
+/// Filter tree items based on case-insensitive substring search
 /// Searches both logical names and display names
 fn filter_tree_items_by_search(
     items: Vec<super::tree_items::ComparisonTreeItem>,
     query: &str,
 ) -> Vec<super::tree_items::ComparisonTreeItem> {
-    use fuzzy_matcher::skim::SkimMatcherV2;
-    use fuzzy_matcher::FuzzyMatcher;
     use super::tree_items::ComparisonTreeItem;
 
     if query.is_empty() {
         return items;
     }
 
-    let matcher = SkimMatcherV2::default();
+    let query_lower = query.to_lowercase();
 
     items.into_iter().filter_map(|item| {
         match &item {
             ComparisonTreeItem::Field(node) => {
                 // Search both logical name and display name
-                let logical_match = matcher.fuzzy_match(&node.metadata.logical_name, query);
-                let display_match = matcher.fuzzy_match(&node.display_name, query);
+                let logical_match = node.metadata.logical_name.to_lowercase().contains(&query_lower);
+                let display_match = node.display_name.to_lowercase().contains(&query_lower);
 
-                if logical_match.is_some() || display_match.is_some() {
+                if logical_match || display_match {
                     Some(item)
                 } else {
                     None
@@ -835,10 +833,10 @@ fn filter_tree_items_by_search(
             }
             ComparisonTreeItem::Relationship(node) => {
                 // Search relationship name and related entity
-                let name_match = matcher.fuzzy_match(&node.metadata.name, query);
-                let entity_match = matcher.fuzzy_match(&node.metadata.related_entity, query);
+                let name_match = node.metadata.name.to_lowercase().contains(&query_lower);
+                let entity_match = node.metadata.related_entity.to_lowercase().contains(&query_lower);
 
-                if name_match.is_some() || entity_match.is_some() {
+                if name_match || entity_match {
                     Some(item)
                 } else {
                     None
@@ -846,7 +844,7 @@ fn filter_tree_items_by_search(
             }
             ComparisonTreeItem::Entity(node) => {
                 // Search entity name
-                if matcher.fuzzy_match(&node.name, query).is_some() {
+                if node.name.to_lowercase().contains(&query_lower) {
                     Some(item)
                 } else {
                     None
@@ -857,9 +855,9 @@ fn filter_tree_items_by_search(
                 let filtered_children = filter_tree_items_by_search(node.children.clone(), query);
 
                 // Keep container if it has matching children OR if container label matches
-                let label_match = matcher.fuzzy_match(&node.label, query);
+                let label_match = node.label.to_lowercase().contains(&query_lower);
 
-                if !filtered_children.is_empty() || label_match.is_some() {
+                if !filtered_children.is_empty() || label_match {
                     Some(ComparisonTreeItem::Container(super::tree_items::ContainerNode {
                         id: node.id.clone(),
                         label: node.label.clone(),
@@ -873,7 +871,7 @@ fn filter_tree_items_by_search(
             }
             ComparisonTreeItem::View(node) => {
                 // Search view name
-                if matcher.fuzzy_match(&node.metadata.name, query).is_some() {
+                if node.metadata.name.to_lowercase().contains(&query_lower) {
                     Some(item)
                 } else {
                     None
@@ -881,7 +879,7 @@ fn filter_tree_items_by_search(
             }
             ComparisonTreeItem::Form(node) => {
                 // Search form name
-                if matcher.fuzzy_match(&node.metadata.name, query).is_some() {
+                if node.metadata.name.to_lowercase().contains(&query_lower) {
                     Some(item)
                 } else {
                     None
