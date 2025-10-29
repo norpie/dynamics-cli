@@ -117,7 +117,7 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
     };
 
     // Apply search filter if there's a search query
-    if !search_query.is_empty() {
+    if search_active {
         target_items = filter_tree_items_by_search(target_items, &search_query);
     }
 
@@ -141,6 +141,13 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
         ActiveTab::Forms => (&mut state.source_forms_tree, &mut state.target_forms_tree),
         ActiveTab::Entities => (&mut state.source_entities_tree, &mut state.target_entities_tree),
     };
+
+    // Auto-expand containers with matching children when searching
+    // This ensures filtered children are visible even if containers were collapsed
+    if search_active {
+        auto_expand_containers_with_children(&source_items, source_tree_state);
+        auto_expand_containers_with_children(&target_items, target_tree_state);
+    }
 
     // Invalidate tree cache when search or hide mode filtering is active
     // This ensures visible_order reflects the actual filtered items
@@ -894,6 +901,29 @@ pub fn render_ignore_modal(state: &mut State) -> Element<Msg> {
         .width(80)
         .height(30)
         .build()
+}
+
+/// Auto-expand containers that have children (after filtering)
+/// This ensures that filtered children are visible even if the container was previously collapsed
+fn auto_expand_containers_with_children(
+    items: &[super::tree_items::ComparisonTreeItem],
+    tree_state: &mut TreeState,
+) {
+    use super::tree_items::ComparisonTreeItem;
+
+    for item in items {
+        match item {
+            ComparisonTreeItem::Container(node) => {
+                // If container has children, expand it
+                if !node.children.is_empty() {
+                    tree_state.expand(&node.id);
+                    // Recursively expand nested containers
+                    auto_expand_containers_with_children(&node.children, tree_state);
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 /// Filter tree items based on case-insensitive substring search
