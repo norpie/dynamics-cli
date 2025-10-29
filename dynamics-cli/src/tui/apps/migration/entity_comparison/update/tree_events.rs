@@ -2,7 +2,7 @@ use crate::tui::command::Command;
 use crate::tui::widgets::TreeEvent;
 use super::super::{Msg, ActiveTab};
 use super::super::app::State;
-use super::super::tree_sync::{update_mirrored_selection, mirror_container_toggle};
+use super::super::tree_sync::{update_mirrored_selection, update_mirrored_navigation, mirror_container_toggle};
 
 pub fn handle_source_tree_event(state: &mut State, event: TreeEvent) -> Command<Msg> {
     // Handle source tree navigation/interaction
@@ -43,11 +43,12 @@ pub fn handle_source_tree_event(state: &mut State, event: TreeEvent) -> Command<
         mirror_container_toggle(state, &toggled_id, is_expanded);
     }
 
-    // NOTE: We do NOT mirror selection on keyboard navigation events.
-    // Mirrored selection only happens on:
-    // 1. Mouse clicks (see handle_source_node_clicked)
-    // 2. Tab switches (see app init)
-    // This prevents the target tree from constantly updating while navigating the source tree.
+    // Mirror navigation (cursor position) to target tree WITHOUT modifying multi-selection
+    // This allows the target tree to show the matched item as you navigate the source tree,
+    // but selection only happens on explicit user actions (clicks, Space key for multi-select)
+    if let Some(source_id) = selected_id {
+        update_mirrored_navigation(state, &source_id);
+    }
 
     Command::None
 }

@@ -2,6 +2,73 @@ use crate::tui::widgets::TreeState;
 use super::ActiveTab;
 use super::app::State;
 
+/// Update target tree navigation to mirror source tree navigation (without selection)
+/// Only updates the navigation cursor, does NOT modify multi-selection
+pub fn update_mirrored_navigation(state: &mut State, source_id: &str) {
+    // Extract the key to lookup in match maps (strip prefixes for relationships/entities)
+    let source_key = match state.active_tab {
+        ActiveTab::Fields => source_id.to_string(),
+        ActiveTab::Relationships => {
+            source_id.strip_prefix("rel_").unwrap_or(source_id).to_string()
+        }
+        ActiveTab::Entities => {
+            source_id.strip_prefix("entity_").unwrap_or(source_id).to_string()
+        }
+        ActiveTab::Forms | ActiveTab::Views => {
+            // For hierarchical tabs, use full path as key
+            source_id.to_string()
+        }
+    };
+
+    // Lookup matched target node IDs based on active tab (supports 1-to-N mappings)
+    let target_ids: Vec<String> = match state.active_tab {
+        ActiveTab::Fields | ActiveTab::Forms | ActiveTab::Views => {
+            // Use field_matches for Fields and hierarchical tabs
+            state.field_matches.get(&source_key)
+                .map(|m| m.target_fields.clone())
+                .unwrap_or_default()
+        }
+        ActiveTab::Relationships => {
+            // Use relationship_matches
+            state.relationship_matches.get(&source_key)
+                .map(|m| {
+                    // Add back the "rel_" prefix for target tree ID
+                    m.target_fields.iter().map(|tf| format!("rel_{}", tf)).collect()
+                })
+                .unwrap_or_default()
+        }
+        ActiveTab::Entities => {
+            // Use entity_matches
+            state.entity_matches.get(&source_key)
+                .map(|m| {
+                    // Add back the "entity_" prefix for target tree ID
+                    m.target_fields.iter().map(|tf| format!("entity_{}", tf)).collect()
+                })
+                .unwrap_or_default()
+        }
+    };
+
+    // Update target tree NAVIGATION (not selection) if matches exist
+    if !target_ids.is_empty() {
+        // Check if we need to expand hierarchical paths before getting mutable borrow
+        let is_hierarchical = matches!(state.active_tab, ActiveTab::Forms | ActiveTab::Views);
+
+        let target_tree = state.target_tree_for_tab();
+
+        // For hierarchical tabs (Forms/Views), expand all parent containers for each target
+        if is_hierarchical {
+            for target_id in &target_ids {
+                expand_parent_path(target_tree, target_id);
+            }
+        }
+
+        // Navigate to first target WITHOUT modifying multi-selection
+        if let Some(first_target) = target_ids.first() {
+            target_tree.select_and_scroll(Some(first_target.clone()));
+        }
+    }
+}
+
 /// Update target tree selection to mirror source tree selection
 /// Only updates if source item has a match in the target tree
 pub fn update_mirrored_selection(state: &mut State, source_id: &str) {

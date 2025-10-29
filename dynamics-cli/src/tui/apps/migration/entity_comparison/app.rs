@@ -456,34 +456,67 @@ impl App for EntityComparisonApp {
             };
             log::debug!("✓ Registering multi-select shortcuts (search_value='{}')", search_value);
 
-            // Multi-select shortcuts for source side only
-            // Space: Toggle multi-select on current node
-            subs.push(Subscription::keyboard(
-                KeyCode::Char(' '),
-                "Toggle multi-select",
-                Msg::SourceTreeEvent(TreeEvent::ToggleMultiSelect)
-            ));
+            // Multi-select shortcuts - route to focused tree based on state.focused_side
+            match state.focused_side {
+                Side::Source => {
+                    // Space: Toggle multi-select on current node
+                    subs.push(Subscription::keyboard(
+                        KeyCode::Char(' '),
+                        "Toggle multi-select",
+                        Msg::SourceTreeEvent(TreeEvent::ToggleMultiSelect)
+                    ));
 
-            // Ctrl+D: Clear multi-selection
-            subs.push(Subscription::ctrl_key(
-                KeyCode::Char('d'),
-                "Clear selection",
-                Msg::SourceTreeEvent(TreeEvent::ClearMultiSelection)
-            ));
+                    // Ctrl+D: Clear multi-selection
+                    subs.push(Subscription::ctrl_key(
+                        KeyCode::Char('d'),
+                        "Clear selection",
+                        Msg::SourceTreeEvent(TreeEvent::ClearMultiSelection)
+                    ));
 
-            // Shift+Up: Extend selection up
-            subs.push(Subscription::shift_key(
-                KeyCode::Up,
-                "Extend selection up",
-                Msg::SourceTreeEvent(TreeEvent::ExtendSelectionUp)
-            ));
+                    // Shift+Up: Extend selection up
+                    subs.push(Subscription::shift_key(
+                        KeyCode::Up,
+                        "Extend selection up",
+                        Msg::SourceTreeEvent(TreeEvent::ExtendSelectionUp)
+                    ));
 
-            // Shift+Down: Extend selection down
-            subs.push(Subscription::shift_key(
-                KeyCode::Down,
-                "Extend selection down",
-                Msg::SourceTreeEvent(TreeEvent::ExtendSelectionDown)
-            ));
+                    // Shift+Down: Extend selection down
+                    subs.push(Subscription::shift_key(
+                        KeyCode::Down,
+                        "Extend selection down",
+                        Msg::SourceTreeEvent(TreeEvent::ExtendSelectionDown)
+                    ));
+                }
+                Side::Target => {
+                    // Space: Toggle multi-select on current node
+                    subs.push(Subscription::keyboard(
+                        KeyCode::Char(' '),
+                        "Toggle multi-select",
+                        Msg::TargetTreeEvent(TreeEvent::ToggleMultiSelect)
+                    ));
+
+                    // Ctrl+D: Clear multi-selection
+                    subs.push(Subscription::ctrl_key(
+                        KeyCode::Char('d'),
+                        "Clear selection",
+                        Msg::TargetTreeEvent(TreeEvent::ClearMultiSelection)
+                    ));
+
+                    // Shift+Up: Extend selection up
+                    subs.push(Subscription::shift_key(
+                        KeyCode::Up,
+                        "Extend selection up",
+                        Msg::TargetTreeEvent(TreeEvent::ExtendSelectionUp)
+                    ));
+
+                    // Shift+Down: Extend selection down
+                    subs.push(Subscription::shift_key(
+                        KeyCode::Down,
+                        "Extend selection down",
+                        Msg::TargetTreeEvent(TreeEvent::ExtendSelectionDown)
+                    ));
+                }
+            }
         } else {
             let search_value = match state.search_mode {
                 super::models::SearchMode::Unified => state.unified_search.value(),
