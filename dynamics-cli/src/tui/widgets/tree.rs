@@ -142,6 +142,11 @@ impl TreeState {
         self.scroll_offset
     }
 
+    /// Reset scroll offset to 0 (useful when filtering changes the item list)
+    pub fn reset_scroll(&mut self) {
+        self.scroll_offset = 0;
+    }
+
     /// Set selected node by ID
     /// Note: This does NOT adjust scroll. Use select_and_scroll() if you need
     /// to ensure the selected item is visible.

@@ -147,6 +147,12 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
     if search_active {
         auto_expand_containers_with_children(&source_items, source_tree_state);
         auto_expand_containers_with_children(&target_items, target_tree_state);
+
+        // CRITICAL: Reset scroll offset when search is active
+        // Otherwise if user scrolled before searching, the scroll offset may be beyond
+        // the filtered items, causing empty tree display
+        source_tree_state.reset_scroll();
+        target_tree_state.reset_scroll();
     }
 
     // Invalidate tree cache when search or hide mode filtering is active
