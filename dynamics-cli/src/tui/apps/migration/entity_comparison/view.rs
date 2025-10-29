@@ -57,7 +57,13 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
     let target_search_active = target_search_query.is_some();
 
     if let Some(query) = source_search_query {
-        source_items = filter_tree_items_by_search(source_items, query);
+        source_items = filter_tree_items_by_search(
+            source_items,
+            query,
+            &state.examples,
+            true, // is_source
+            &state.source_entity,
+        );
     }
 
     let mut target_items = if let Resource::Success(ref metadata) = state.target_metadata {
@@ -120,7 +126,13 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
 
     // Apply search filter if there's a search query
     if let Some(query) = target_search_query {
-        target_items = filter_tree_items_by_search(target_items, query);
+        target_items = filter_tree_items_by_search(
+            target_items,
+            query,
+            &state.examples,
+            false, // is_source
+            &state.target_entity,
+        );
     }
 
     // Apply SourceMatches sorting to target side if enabled
@@ -992,10 +1004,13 @@ fn auto_expand_containers_with_children(
 }
 
 /// Filter tree items based on fuzzy search query
-/// Searches both logical names and display names
+/// Searches logical names, display names, and example values (if enabled)
 fn filter_tree_items_by_search(
     items: Vec<super::tree_items::ComparisonTreeItem>,
     query: &str,
+    examples: &super::models::ExamplesState,
+    is_source: bool,
+    entity_name: &str,
 ) -> Vec<super::tree_items::ComparisonTreeItem> {
     use fuzzy_matcher::skim::SkimMatcherV2;
     use fuzzy_matcher::FuzzyMatcher;
@@ -1014,7 +1029,15 @@ fn filter_tree_items_by_search(
                 let logical_match = matcher.fuzzy_match(&node.metadata.logical_name, query);
                 let display_match = matcher.fuzzy_match(&node.display_name, query);
 
-                if logical_match.is_some() || display_match.is_some() {
+                // Search example value if examples are enabled
+                let example_match = if examples.enabled {
+                    examples.get_field_value(&node.metadata.logical_name, is_source, entity_name)
+                        .and_then(|value| matcher.fuzzy_match(&value, query))
+                } else {
+                    None
+                };
+
+                if logical_match.is_some() || display_match.is_some() || example_match.is_some() {
                     Some(item)
                 } else {
                     None
@@ -1041,7 +1064,13 @@ fn filter_tree_items_by_search(
             }
             ComparisonTreeItem::Container(node) => {
                 // Recursively filter container children
-                let filtered_children = filter_tree_items_by_search(node.children.clone(), query);
+                let filtered_children = filter_tree_items_by_search(
+                    node.children.clone(),
+                    query,
+                    examples,
+                    is_source,
+                    entity_name,
+                );
 
                 // Keep container if it has matching children OR if container label matches
                 let label_match = matcher.fuzzy_match(&node.label, query);
