@@ -62,6 +62,7 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
         source_items = filter_tree_items_by_search(
             source_items,
             query,
+            state.match_mode,
             &state.examples,
             true, // is_source
             &state.source_entity,
@@ -133,6 +134,7 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
         target_items = filter_tree_items_by_search(
             target_items,
             query,
+            state.match_mode,
             &state.examples,
             false, // is_source
             &state.target_entity,
@@ -1163,11 +1165,12 @@ fn auto_expand_containers_with_children(
     }
 }
 
-/// Filter tree items based on fuzzy search query
+/// Filter tree items based on search query using the selected match mode
 /// Searches logical names, display names, and example values (if enabled)
 fn filter_tree_items_by_search(
     items: Vec<super::tree_items::ComparisonTreeItem>,
     query: &str,
+    match_mode: super::models::MatchMode,
     examples: &super::models::ExamplesState,
     is_source: bool,
     entity_name: &str,
@@ -1180,24 +1183,43 @@ fn filter_tree_items_by_search(
         return items;
     }
 
-    let matcher = SkimMatcherV2::default();
+    // Create matcher based on mode
+    let fuzzy_matcher = if matches!(match_mode, super::models::MatchMode::Fuzzy) {
+        Some(SkimMatcherV2::default())
+    } else {
+        None
+    };
+    let query_lower = query.to_lowercase();
+
+    // Helper function to check if text matches query based on mode
+    let text_matches = |text: &str| -> bool {
+        match match_mode {
+            super::models::MatchMode::Fuzzy => {
+                fuzzy_matcher.as_ref().unwrap().fuzzy_match(text, query).is_some()
+            }
+            super::models::MatchMode::Substring => {
+                text.to_lowercase().contains(&query_lower)
+            }
+        }
+    };
 
     items.into_iter().filter_map(|item| {
         match &item {
             ComparisonTreeItem::Field(node) => {
                 // Search both logical name and display name
-                let logical_match = matcher.fuzzy_match(&node.metadata.logical_name, query);
-                let display_match = matcher.fuzzy_match(&node.display_name, query);
+                let logical_match = text_matches(&node.metadata.logical_name);
+                let display_match = text_matches(&node.display_name);
 
                 // Search example value if examples are enabled
                 let example_match = if examples.enabled {
                     examples.get_field_value(&node.metadata.logical_name, is_source, entity_name)
-                        .and_then(|value| matcher.fuzzy_match(&value, query))
+                        .map(|value| text_matches(&value))
+                        .unwrap_or(false)
                 } else {
-                    None
+                    false
                 };
 
-                if logical_match.is_some() || display_match.is_some() || example_match.is_some() {
+                if logical_match || display_match || example_match {
                     Some(item)
                 } else {
                     None
@@ -1205,10 +1227,10 @@ fn filter_tree_items_by_search(
             }
             ComparisonTreeItem::Relationship(node) => {
                 // Search relationship name and related entity
-                let name_match = matcher.fuzzy_match(&node.metadata.name, query);
-                let entity_match = matcher.fuzzy_match(&node.metadata.related_entity, query);
+                let name_match = text_matches(&node.metadata.name);
+                let entity_match = text_matches(&node.metadata.related_entity);
 
-                if name_match.is_some() || entity_match.is_some() {
+                if name_match || entity_match {
                     Some(item)
                 } else {
                     None
@@ -1216,7 +1238,7 @@ fn filter_tree_items_by_search(
             }
             ComparisonTreeItem::Entity(node) => {
                 // Search entity name
-                if matcher.fuzzy_match(&node.name, query).is_some() {
+                if text_matches(&node.name) {
                     Some(item)
                 } else {
                     None
@@ -1227,15 +1249,16 @@ fn filter_tree_items_by_search(
                 let filtered_children = filter_tree_items_by_search(
                     node.children.clone(),
                     query,
+                    match_mode,
                     examples,
                     is_source,
                     entity_name,
                 );
 
                 // Keep container if it has matching children OR if container label matches
-                let label_match = matcher.fuzzy_match(&node.label, query);
+                let label_match = text_matches(&node.label);
 
-                if !filtered_children.is_empty() || label_match.is_some() {
+                if !filtered_children.is_empty() || label_match {
                     Some(ComparisonTreeItem::Container(super::tree_items::ContainerNode {
                         id: node.id.clone(),
                         label: node.label.clone(),
@@ -1249,7 +1272,7 @@ fn filter_tree_items_by_search(
             }
             ComparisonTreeItem::View(node) => {
                 // Search view name
-                if matcher.fuzzy_match(&node.metadata.name, query).is_some() {
+                if text_matches(&node.metadata.name) {
                     Some(item)
                 } else {
                     None
@@ -1257,7 +1280,7 @@ fn filter_tree_items_by_search(
             }
             ComparisonTreeItem::Form(node) => {
                 // Search form name
-                if matcher.fuzzy_match(&node.metadata.name, query).is_some() {
+                if text_matches(&node.metadata.name) {
                     Some(item)
                 } else {
                     None

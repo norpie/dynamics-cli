@@ -55,6 +55,20 @@ pub fn handle_toggle_search_mode(state: &mut State) -> Command<Msg> {
     }
 }
 
+/// Handle toggle match mode - switch between Fuzzy and Substring match algorithms
+pub fn handle_toggle_match_mode(state: &mut State) -> Command<Msg> {
+    // Toggle the match mode
+    state.match_mode = state.match_mode.toggle();
+
+    // Clear multi-selection since filtered items may change
+    clear_all_multi_selections(state);
+
+    // Invalidate tree caches so they rebuild with new filtering algorithm
+    invalidate_all_tree_caches(state);
+
+    Command::None
+}
+
 /// Handle unified search input event
 pub fn handle_search_input_event(state: &mut State, event: TextInputEvent) -> Command<Msg> {
     let old_value = state.unified_search.value().to_string();

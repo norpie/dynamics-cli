@@ -69,6 +69,7 @@ pub enum Msg {
     // Search messages
     ToggleSearch,              // Focus search (triggered by `/`)
     ToggleSearchMode,          // Toggle between Unified and Independent modes (Ctrl+/)
+    ToggleMatchMode,           // Toggle between Fuzzy and Substring match modes (f)
     SearchInputEvent(crate::tui::widgets::TextInputEvent),  // Unified search
     SourceSearchEvent(crate::tui::widgets::TextInputEvent), // Independent: source search
     TargetSearchEvent(crate::tui::widgets::TextInputEvent), // Independent: target search

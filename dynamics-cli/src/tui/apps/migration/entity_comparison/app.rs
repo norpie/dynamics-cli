@@ -114,6 +114,7 @@ pub struct State {
 
     // Search state
     pub(super) search_mode: super::models::SearchMode,
+    pub(super) match_mode: super::models::MatchMode,
     pub(super) unified_search: crate::tui::widgets::TextInputField,
     pub(super) source_search: crate::tui::widgets::TextInputField,
     pub(super) target_search: crate::tui::widgets::TextInputField,
@@ -201,6 +202,7 @@ impl Default for State {
             show_ignore_modal: false,
             ignore_list_state: crate::tui::widgets::ListState::new(),
             search_mode: super::models::SearchMode::default(),
+            match_mode: super::models::MatchMode::default(),
             unified_search: crate::tui::widgets::TextInputField::new(),
             source_search: crate::tui::widgets::TextInputField::new(),
             target_search: crate::tui::widgets::TextInputField::new(),
@@ -294,6 +296,7 @@ impl App for EntityComparisonApp {
             show_ignore_modal: false,
             ignore_list_state: crate::tui::widgets::ListState::new(),
             search_mode: super::models::SearchMode::default(),
+            match_mode: super::models::MatchMode::default(),
             unified_search: crate::tui::widgets::TextInputField::new(),
             source_search: crate::tui::widgets::TextInputField::new(),
             target_search: crate::tui::widgets::TextInputField::new(),
@@ -506,6 +509,9 @@ impl App for EntityComparisonApp {
             subs.push(Subscription::keyboard(KeyCode::Char('?'), "Toggle search mode", Msg::ToggleSearchMode));
         }
 
+        // Match mode toggle - always available
+        subs.push(Subscription::keyboard(KeyCode::Char('f'), "Toggle match mode", Msg::ToggleMatchMode));
+
         // When showing confirmation modal, add y/n hotkeys
         if state.show_back_confirmation {
             subs.push(Subscription::keyboard(KeyCode::Char('y'), "Confirm", Msg::ConfirmBack));
@@ -612,6 +618,13 @@ impl App for EntityComparisonApp {
         spans.push(Span::styled(" | ", Style::default().fg(theme.border_primary)));
         spans.push(Span::styled(
             format!("Sort: {}", state.sort_mode.label()),
+            Style::default().fg(theme.text_secondary),
+        ));
+
+        // Match mode
+        spans.push(Span::styled(" | ", Style::default().fg(theme.border_primary)));
+        spans.push(Span::styled(
+            format!("Match: {}", state.match_mode.label()),
             Style::default().fg(theme.text_secondary),
         ));
 

@@ -138,6 +138,30 @@ impl SearchMode {
     }
 }
 
+/// Match mode for search filtering algorithm
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MatchMode {
+    #[default]
+    Fuzzy,      // Fuzzy matching (typo-tolerant, approximate)
+    Substring,  // Case-insensitive substring matching (exact)
+}
+
+impl MatchMode {
+    pub fn label(&self) -> &'static str {
+        match self {
+            MatchMode::Fuzzy => "Fuzzy",
+            MatchMode::Substring => "Substring",
+        }
+    }
+
+    pub fn toggle(&self) -> Self {
+        match self {
+            MatchMode::Fuzzy => MatchMode::Substring,
+            MatchMode::Substring => MatchMode::Fuzzy,
+        }
+    }
+}
+
 /// Example record pair for live data preview
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExamplePair {
