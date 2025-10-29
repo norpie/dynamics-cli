@@ -22,7 +22,7 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
 
     // Build tree items for the active tab from metadata
     let active_tab = state.active_tab;
-    let hide_matched = state.hide_matched;
+    let hide_mode = state.hide_mode;
     let sort_mode = state.sort_mode;
     let mut source_items = if let Resource::Success(ref metadata) = state.source_metadata {
         build_tree_items(
@@ -43,10 +43,13 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
         vec![]
     };
 
-    // Filter out matched items if hide_matched is enabled
-    if hide_matched {
-        source_items = filter_matched_items(source_items);
-    }
+    // Apply hide mode filtering
+    source_items = match hide_mode {
+        super::models::HideMode::Off => source_items,
+        super::models::HideMode::HideMatched => filter_matched_items(source_items),
+        super::models::HideMode::HideIgnored => filter_ignored_items(source_items),
+        super::models::HideMode::HideBoth => filter_both_items(source_items),
+    };
 
     // Apply search filter if there's a search query
     let search_query = state.search_input.value();
@@ -105,10 +108,13 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
         vec![]
     };
 
-    // Filter out matched items if hide_matched is enabled
-    if hide_matched {
-        target_items = filter_matched_items(target_items);
-    }
+    // Apply hide mode filtering
+    target_items = match hide_mode {
+        super::models::HideMode::Off => target_items,
+        super::models::HideMode::HideMatched => filter_matched_items(target_items),
+        super::models::HideMode::HideIgnored => filter_ignored_items(target_items),
+        super::models::HideMode::HideBoth => filter_both_items(target_items),
+    };
 
     // Apply search filter if there's a search query
     if !search_query.is_empty() {
@@ -136,9 +142,9 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
         ActiveTab::Entities => (&mut state.source_entities_tree, &mut state.target_entities_tree),
     };
 
-    // Invalidate tree cache when search or hide_matched filtering is active
+    // Invalidate tree cache when search or hide mode filtering is active
     // This ensures visible_order reflects the actual filtered items
-    if search_active || hide_matched {
+    if search_active || hide_mode != super::models::HideMode::Off {
         source_tree_state.invalidate_cache();
         target_tree_state.invalidate_cache();
     }
@@ -285,44 +291,7 @@ pub fn render_prefix_mappings_modal(state: &State) -> Element<Msg> {
         .build()
 }
 
-/// Filter out matched items from tree based on hide_matched setting
-/// Filter out ignored items from the tree
-pub fn filter_ignored_items(
-    items: Vec<super::tree_items::ComparisonTreeItem>,
-    ignored_items: &std::collections::HashSet<String>,
-    active_tab: ActiveTab,
-    is_source: bool,
-) -> Vec<super::tree_items::ComparisonTreeItem> {
-    use super::tree_items::ComparisonTreeItem;
-
-    let tab_prefix = match active_tab {
-        ActiveTab::Fields => "fields",
-        ActiveTab::Relationships => "relationships",
-        ActiveTab::Views => "views",
-        ActiveTab::Forms => "forms",
-        ActiveTab::Entities => "entities",
-    };
-    let side_prefix = if is_source { "source" } else { "target" };
-
-    items.into_iter().filter(|item| {
-        let node_id = match item {
-            ComparisonTreeItem::Field(node) => Some(&node.metadata.logical_name),
-            ComparisonTreeItem::Relationship(node) => Some(&node.metadata.name),
-            ComparisonTreeItem::View(node) => Some(&node.metadata.id),
-            ComparisonTreeItem::Form(node) => Some(&node.metadata.id),
-            ComparisonTreeItem::Entity(node) => Some(&node.name),
-            _ => None,
-        };
-
-        if let Some(id) = node_id {
-            let full_id = format!("{}:{}:{}", tab_prefix, side_prefix, id);
-            !ignored_items.contains(&full_id)
-        } else {
-            true // Keep containers and other items
-        }
-    }).collect()
-}
-
+/// Filter out matched items from tree (hide unmatched, show matched)
 pub fn filter_matched_items(items: Vec<super::tree_items::ComparisonTreeItem>) -> Vec<super::tree_items::ComparisonTreeItem> {
     use super::tree_items::ComparisonTreeItem;
 
@@ -371,6 +340,140 @@ pub fn filter_matched_items(items: Vec<super::tree_items::ComparisonTreeItem>) -
             }
             // Keep View and Form nodes (they don't have match info)
             ComparisonTreeItem::View(_) | ComparisonTreeItem::Form(_) => Some(item),
+        }
+    }).collect()
+}
+
+/// Filter out ignored items
+pub fn filter_ignored_items(items: Vec<super::tree_items::ComparisonTreeItem>) -> Vec<super::tree_items::ComparisonTreeItem> {
+    use super::tree_items::ComparisonTreeItem;
+
+    items.into_iter().filter_map(|item| {
+        match item {
+            ComparisonTreeItem::Field(ref node) => {
+                // Keep if not ignored
+                if !node.is_ignored {
+                    Some(item)
+                } else {
+                    None
+                }
+            }
+            ComparisonTreeItem::Relationship(ref node) => {
+                // Keep if not ignored
+                if !node.is_ignored {
+                    Some(item)
+                } else {
+                    None
+                }
+            }
+            ComparisonTreeItem::Entity(ref node) => {
+                // Keep if not ignored
+                if !node.is_ignored {
+                    Some(item)
+                } else {
+                    None
+                }
+            }
+            ComparisonTreeItem::Container(node) => {
+                // Recursively filter container children
+                let filtered_children = filter_ignored_items(node.children.clone());
+
+                // Keep container if it has any non-ignored children
+                if !filtered_children.is_empty() {
+                    Some(ComparisonTreeItem::Container(super::tree_items::ContainerNode {
+                        id: node.id,
+                        label: node.label,
+                        children: filtered_children,
+                        container_match_type: node.container_match_type,
+                        match_info: node.match_info,
+                    }))
+                } else {
+                    None
+                }
+            }
+            ComparisonTreeItem::View(ref node) => {
+                // Keep if not ignored
+                if !node.is_ignored {
+                    Some(item)
+                } else {
+                    None
+                }
+            }
+            ComparisonTreeItem::Form(ref node) => {
+                // Keep if not ignored
+                if !node.is_ignored {
+                    Some(item)
+                } else {
+                    None
+                }
+            }
+        }
+    }).collect()
+}
+
+/// Filter out both matched AND ignored items
+pub fn filter_both_items(items: Vec<super::tree_items::ComparisonTreeItem>) -> Vec<super::tree_items::ComparisonTreeItem> {
+    use super::tree_items::ComparisonTreeItem;
+
+    items.into_iter().filter_map(|item| {
+        match item {
+            ComparisonTreeItem::Field(ref node) => {
+                // Keep if not ignored AND no match
+                if !node.is_ignored && node.match_info.is_none() {
+                    Some(item)
+                } else {
+                    None
+                }
+            }
+            ComparisonTreeItem::Relationship(ref node) => {
+                // Keep if not ignored AND no match
+                if !node.is_ignored && node.match_info.is_none() {
+                    Some(item)
+                } else {
+                    None
+                }
+            }
+            ComparisonTreeItem::Entity(ref node) => {
+                // Keep if not ignored AND no match
+                if !node.is_ignored && node.match_info.is_none() {
+                    Some(item)
+                } else {
+                    None
+                }
+            }
+            ComparisonTreeItem::Container(node) => {
+                // Recursively filter container children
+                let filtered_children = filter_both_items(node.children.clone());
+
+                // Keep container if it has any children that are not ignored and not matched
+                if !filtered_children.is_empty() {
+                    Some(ComparisonTreeItem::Container(super::tree_items::ContainerNode {
+                        id: node.id,
+                        label: node.label,
+                        children: filtered_children,
+                        container_match_type: node.container_match_type,
+                        match_info: node.match_info,
+                    }))
+                } else {
+                    None
+                }
+            }
+            ComparisonTreeItem::View(ref node) => {
+                // Keep if not ignored (Views don't have match info)
+                if !node.is_ignored {
+                    Some(item)
+                } else {
+                    None
+                }
+            }
+            ComparisonTreeItem::Form(ref node) => {
+                // Keep if not ignored (Forms don't have match info)
+                if !node.is_ignored {
+                    Some(item)
+                } else {
+                    None
+                }
+            }
         }
     }).collect()
 }

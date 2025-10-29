@@ -152,8 +152,8 @@ pub fn handle_delete_manual_mapping(state: &mut State) -> Command<Msg> {
     Command::None
 }
 
-pub fn handle_toggle_hide_matched(state: &mut State) -> Command<Msg> {
-    state.hide_matched = !state.hide_matched;
+pub fn handle_cycle_hide_mode(state: &mut State) -> Command<Msg> {
+    state.hide_mode = state.hide_mode.toggle();
     Command::None
 }
 

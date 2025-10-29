@@ -54,7 +54,7 @@ pub struct State {
     pub(super) prefix_mappings: HashMap<String, String>, // source_prefix -> target_prefix
     pub(super) imported_mappings: HashMap<String, String>, // source -> target (from C# file)
     pub(super) import_source_file: Option<String>,       // filename of imported C# file
-    pub(super) hide_matched: bool,
+    pub(super) hide_mode: super::models::HideMode,
     pub(super) sort_mode: super::models::SortMode,
     pub(super) show_technical_names: bool, // true = logical names, false = display names
 
@@ -156,7 +156,7 @@ impl Default for State {
             prefix_mappings: HashMap::new(),
             imported_mappings: HashMap::new(),
             import_source_file: None,
-            hide_matched: false,
+            hide_mode: super::models::HideMode::default(),
             sort_mode: super::models::SortMode::default(),
             show_technical_names: true,
             field_matches: HashMap::new(),
@@ -246,7 +246,7 @@ impl App for EntityComparisonApp {
             prefix_mappings: HashMap::new(),
             imported_mappings: HashMap::new(),
             import_source_file: None,
-            hide_matched: false,
+            hide_mode: super::models::HideMode::default(),
             sort_mode: super::models::SortMode::default(),
             show_technical_names: true, // Default to showing logical/technical names
             field_matches: HashMap::new(),
@@ -392,8 +392,8 @@ impl App for EntityComparisonApp {
             Subscription::keyboard(config.get_keybind("entity_comparison.create_mapping"), "Create manual mapping", Msg::CreateManualMapping),
             Subscription::keyboard(config.get_keybind("entity_comparison.delete_mapping"), "Delete manual mapping", Msg::DeleteManualMapping),
 
-            // Hide matched toggle
-            Subscription::keyboard(config.get_keybind("entity_comparison.toggle_hide_matched"), "Toggle hide matched", Msg::ToggleHideMatched),
+            // Cycle hide mode
+            Subscription::keyboard(config.get_keybind("entity_comparison.toggle_hide_matched"), "Cycle hide mode", Msg::CycleHideMode),
 
             // Sort mode toggle
             Subscription::keyboard(config.get_keybind("entity_comparison.toggle_sort"), "Toggle sort mode", Msg::ToggleSortMode),
@@ -580,18 +580,11 @@ impl App for EntityComparisonApp {
         // Add separator
         spans.push(Span::styled(" | ", Style::default().fg(theme.border_primary)));
 
-        // Hide matched status
-        if state.hide_matched {
-            spans.push(Span::styled(
-                "Hide Matched: ON",
-                Style::default().fg(theme.accent_success),
-            ));
-        } else {
-            spans.push(Span::styled(
-                "Hide Matched: OFF",
-                Style::default().fg(theme.text_secondary),
-            ));
-        }
+        // Hide mode
+        spans.push(Span::styled(
+            format!("Hide: {}", state.hide_mode.label()),
+            Style::default().fg(theme.text_secondary),
+        ));
 
         // Sort mode
         spans.push(Span::styled(" | ", Style::default().fg(theme.border_primary)));

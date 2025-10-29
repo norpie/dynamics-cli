@@ -30,7 +30,7 @@ pub enum Msg {
     TargetTreeNodeClicked(String), // Node clicked in target tree
     CreateManualMapping,  // Create mapping from selected source to selected target
     DeleteManualMapping,  // Delete mapping from selected field
-    ToggleHideMatched,    // Toggle showing/hiding matched items in trees
+    CycleHideMode,        // Cycle through hide modes (Off -> HideMatched -> HideIgnored -> HideBoth)
     ToggleSortMode,       // Toggle between Alphabetical and MatchesFirst sorting
     ToggleTechnicalNames, // Toggle between technical (logical) and display names
     MappingsLoaded(std::collections::HashMap<String, String>, std::collections::HashMap<String, String>, std::collections::HashMap<String, String>, Option<String>, Vec<ExamplePair>, std::collections::HashSet<String>), // field_mappings, prefix_mappings, imported_mappings, import_source_file, example_pairs, ignored_items

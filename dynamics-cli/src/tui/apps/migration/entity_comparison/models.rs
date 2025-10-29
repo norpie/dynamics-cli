@@ -30,6 +30,36 @@ impl SortMode {
     }
 }
 
+/// Hide mode for filtering tree items
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HideMode {
+    #[default]
+    Off,         // Show all items
+    HideMatched, // Hide items with matches
+    HideIgnored, // Hide ignored items
+    HideBoth,    // Hide matched AND ignored items
+}
+
+impl HideMode {
+    pub fn label(&self) -> &'static str {
+        match self {
+            HideMode::Off => "Show All",
+            HideMode::HideMatched => "Hide Matched",
+            HideMode::HideIgnored => "Hide Ignored",
+            HideMode::HideBoth => "Hide Both",
+        }
+    }
+
+    pub fn toggle(&self) -> Self {
+        match self {
+            HideMode::Off => HideMode::HideMatched,
+            HideMode::HideMatched => HideMode::HideIgnored,
+            HideMode::HideIgnored => HideMode::HideBoth,
+            HideMode::HideBoth => HideMode::Off,
+        }
+    }
+}
+
 /// Active tab in the comparison view
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ActiveTab {
