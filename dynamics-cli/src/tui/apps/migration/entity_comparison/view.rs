@@ -108,6 +108,9 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
         target_items = sort_target_by_source_order(&source_items, target_items);
     }
 
+    // Calculate completion percentages
+    let (source_completion, target_completion) = calculate_completion_percentages(state, active_tab);
+
     // Cache entity names before borrowing tree states
     let source_entity_name = state.source_entity.clone();
     let target_entity_name = state.target_entity.clone();
@@ -129,7 +132,7 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
             .on_render(Msg::SourceViewportHeight)
             .build()
     )
-    .title(format!("Source: {}", source_entity_name))
+    .title(format!("Source: {} ({}%)", source_entity_name, source_completion))
     .build();
 
     // Target panel with tree - renderer will call on_render with actual area.height
@@ -140,7 +143,7 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
             .on_render(Msg::TargetViewportHeight)
             .build()
     )
-    .title(format!("Target: {}", target_entity_name))
+    .title(format!("Target: {} ({}%)", target_entity_name, target_completion))
     .build();
 
     // Side-by-side layout
@@ -730,4 +733,121 @@ pub fn render_ignore_modal(state: &mut State) -> Element<Msg> {
         .width(80)
         .height(30)
         .build()
+}
+
+/// Calculate mapping completion percentages for source and target sides
+/// Returns (source_completion_percent, target_completion_percent)
+fn calculate_completion_percentages(state: &State, active_tab: ActiveTab) -> (usize, usize) {
+    match active_tab {
+        ActiveTab::Fields => {
+            // Get total counts from metadata
+            let source_total = if let Resource::Success(ref metadata) = state.source_metadata {
+                metadata.fields.len()
+            } else {
+                0
+            };
+            let target_total = if let Resource::Success(ref metadata) = state.target_metadata {
+                metadata.fields.len()
+            } else {
+                0
+            };
+
+            // Count mapped items
+            let source_mapped = state.field_matches.len();
+
+            // Count unique target fields that have been mapped to
+            let target_mapped = state.field_matches
+                .values()
+                .map(|m| &m.target_field)
+                .collect::<std::collections::HashSet<_>>()
+                .len();
+
+            // Calculate percentages
+            let source_pct = if source_total > 0 {
+                (source_mapped as f64 / source_total as f64 * 100.0) as usize
+            } else {
+                0
+            };
+
+            let target_pct = if target_total > 0 {
+                (target_mapped as f64 / target_total as f64 * 100.0) as usize
+            } else {
+                0
+            };
+
+            (source_pct, target_pct)
+        }
+        ActiveTab::Relationships => {
+            // Get total counts from metadata
+            let source_total = if let Resource::Success(ref metadata) = state.source_metadata {
+                metadata.relationships.len()
+            } else {
+                0
+            };
+            let target_total = if let Resource::Success(ref metadata) = state.target_metadata {
+                metadata.relationships.len()
+            } else {
+                0
+            };
+
+            // Count mapped items
+            let source_mapped = state.relationship_matches.len();
+
+            // Count unique target relationships that have been mapped to
+            let target_mapped = state.relationship_matches
+                .values()
+                .map(|m| &m.target_field)
+                .collect::<std::collections::HashSet<_>>()
+                .len();
+
+            // Calculate percentages
+            let source_pct = if source_total > 0 {
+                (source_mapped as f64 / source_total as f64 * 100.0) as usize
+            } else {
+                0
+            };
+
+            let target_pct = if target_total > 0 {
+                (target_mapped as f64 / target_total as f64 * 100.0) as usize
+            } else {
+                0
+            };
+
+            (source_pct, target_pct)
+        }
+        ActiveTab::Entities => {
+            // Get total counts from entity lists
+            let source_total = state.source_entities.len();
+            let target_total = state.target_entities.len();
+
+            // Count mapped items
+            let source_mapped = state.entity_matches.len();
+
+            // Count unique target entities that have been mapped to
+            let target_mapped = state.entity_matches
+                .values()
+                .map(|m| &m.target_field)
+                .collect::<std::collections::HashSet<_>>()
+                .len();
+
+            // Calculate percentages
+            let source_pct = if source_total > 0 {
+                (source_mapped as f64 / source_total as f64 * 100.0) as usize
+            } else {
+                0
+            };
+
+            let target_pct = if target_total > 0 {
+                (target_mapped as f64 / target_total as f64 * 100.0) as usize
+            } else {
+                0
+            };
+
+            (source_pct, target_pct)
+        }
+        ActiveTab::Views | ActiveTab::Forms => {
+            // Views and Forms don't have mappings/matches
+            (0, 0)
+        }
+    }
 }
