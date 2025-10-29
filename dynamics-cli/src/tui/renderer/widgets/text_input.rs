@@ -1,4 +1,4 @@
-use ratatui::{Frame, style::{Style, Stylize}, widgets::Paragraph, layout::Rect};
+use ratatui::{Frame, style::{Style, Stylize}, widgets::Paragraph, layout::Rect, text::{Line, Span}};
 use crossterm::event::{KeyCode, KeyEvent};
 use crate::tui::{Element, Theme};
 use crate::tui::element::FocusId;
@@ -105,37 +105,54 @@ pub fn render_text_input<Msg: Clone + Send + 'static>(
     // Calculate cursor position in visible area
     let cursor_in_visible = cursor_pos.saturating_sub(start_idx);
 
-    // Build display text with cursor
-    let display_text = if value.is_empty() && !is_focused {
+    // Build display with styled spans for block cursor
+    let widget = if value.is_empty() && !is_focused {
         // Show placeholder
-        if let Some(ph) = placeholder {
+        let placeholder_text = if let Some(ph) = placeholder {
             format!(" {}", ph)  // Add left padding
         } else {
             String::from(" ")
-        }
-    } else {
-        // Show actual text with cursor if focused
-        if is_focused && cursor_in_visible <= visible_text.len() {
-            let mut chars: Vec<char> = visible_text.chars().collect();
-            chars.insert(cursor_in_visible, '│');
-            let text: String = chars.into_iter().collect();
-            format!(" {}", text)  // Add left padding
+        };
+        let placeholder_style = Style::default().fg(theme.border_primary).italic();
+        Paragraph::new(placeholder_text).style(placeholder_style)
+    } else if is_focused && cursor_in_visible <= visible_text.len() {
+        // Show text with block cursor
+        let chars: Vec<char> = visible_text.chars().collect();
+
+        // Split into: before cursor, at cursor, after cursor
+        let before: String = chars[..cursor_in_visible].iter().collect();
+        let cursor_char = if cursor_in_visible < chars.len() {
+            chars[cursor_in_visible].to_string()
         } else {
-            format!(" {}", visible_text)  // Add left padding
+            " ".to_string()  // Cursor at end - use space
+        };
+        let after: String = if cursor_in_visible < chars.len() {
+            chars[cursor_in_visible + 1..].iter().collect()
+        } else {
+            String::new()
+        };
+
+        // Create styled spans
+        let text_style = Style::default().fg(theme.text_primary);
+        let cursor_style = Style::default()
+            .fg(theme.text_primary)
+            .bg(theme.border_primary);  // Semi-transparent block cursor
+
+        let mut spans = vec![Span::raw(" ")];  // Left padding
+        if !before.is_empty() {
+            spans.push(Span::styled(before, text_style));
         }
-    };
+        spans.push(Span::styled(cursor_char, cursor_style));
+        if !after.is_empty() {
+            spans.push(Span::styled(after, text_style));
+        }
 
-    // Determine text style
-    let text_style = if value.is_empty() && !is_focused {
-        // Placeholder style: italic, dim color
-        Style::default().fg(theme.border_primary).italic()
+        Paragraph::new(Line::from(spans))
     } else {
-        Style::default().fg(theme.text_primary)
+        // Not focused or cursor out of view - show text normally
+        let text_style = Style::default().fg(theme.text_primary);
+        Paragraph::new(format!(" {}", visible_text)).style(text_style)
     };
-
-    // Render text without border
-    let widget = Paragraph::new(display_text)
-        .style(text_style);
 
     frame.render_widget(widget, area);
 }
