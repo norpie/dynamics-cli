@@ -80,16 +80,18 @@ async fn run_tui<B: Backend>(
 
             // Handle global shortcuts first
             if let Event::Key(key) = &event_result {
-                // Deduplicate key events (Windows-specific Tab double-press issue)
-                if let Some((last_key, last_time)) = last_key_event {
-                    let elapsed = frame_start.duration_since(last_time).as_millis();
-                    if elapsed < DEDUP_WINDOW_MS
-                        && last_key.code == key.code
-                        && last_key.modifiers == key.modifiers
-                    {
-                        // Duplicate event within deduplication window - skip
-                        log::debug!("Skipping duplicate key event: {:?} ({}ms since last)", key.code, elapsed);
-                        continue;
+                // Deduplicate ONLY problematic keys (Tab on Windows)
+                // Don't deduplicate Char events - this breaks paste
+                if !matches!(key.code, crossterm::event::KeyCode::Char(_)) {
+                    if let Some((last_key, last_time)) = last_key_event {
+                        let elapsed = frame_start.duration_since(last_time).as_millis();
+                        if elapsed < DEDUP_WINDOW_MS
+                            && last_key.code == key.code
+                            && last_key.modifiers == key.modifiers
+                        {
+                            log::debug!("Skipping duplicate key event: {:?} ({}ms since last)", key.code, elapsed);
+                            continue;
+                        }
                     }
                 }
                 last_key_event = Some((*key, frame_start));
