@@ -28,6 +28,8 @@ pub enum Msg {
     TargetViewportHeight(usize),  // Called by renderer with actual area.height
     SourceTreeNodeClicked(String), // Node clicked in source tree
     TargetTreeNodeClicked(String), // Node clicked in target tree
+    SourceTreeFocused,   // Source tree gained focus
+    TargetTreeFocused,   // Target tree gained focus
     CreateManualMapping,  // Create mapping from selected source to selected target
     DeleteManualMapping,  // Delete mapping from selected field
     CycleHideMode,        // Cycle through hide modes (Off -> HideMatched -> HideIgnored -> HideBoth)

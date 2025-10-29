@@ -5,10 +5,8 @@ use super::super::app::State;
 use super::super::tree_sync::{update_mirrored_selection, mirror_container_toggle};
 
 pub fn handle_source_tree_event(state: &mut State, event: TreeEvent) -> Command<Msg> {
-    // Update focused side
-    state.focused_side = super::super::Side::Source;
-
     // Handle source tree navigation/interaction
+    // Note: focused_side is now updated via on_focus callback
     let tree_state = match state.active_tab {
         ActiveTab::Fields => &mut state.source_fields_tree,
         ActiveTab::Relationships => &mut state.source_relationships_tree,
@@ -40,24 +38,23 @@ pub fn handle_source_tree_event(state: &mut State, event: TreeEvent) -> Command<
     // Release the borrow by dropping tree_state reference
     drop(tree_state);
 
-    // Mirrored selection: update target tree when source selection changes
-    if let Some(source_id) = selected_id {
-        update_mirrored_selection(state, &source_id);
-    }
-
     // Mirror container expansion/collapse
     if let Some(toggled_id) = node_id_before_toggle {
         mirror_container_toggle(state, &toggled_id, is_expanded);
     }
 
+    // NOTE: We do NOT mirror selection on keyboard navigation events.
+    // Mirrored selection only happens on:
+    // 1. Mouse clicks (see handle_source_node_clicked)
+    // 2. Tab switches (see app init)
+    // This prevents the target tree from constantly updating while navigating the source tree.
+
     Command::None
 }
 
 pub fn handle_target_tree_event(state: &mut State, event: TreeEvent) -> Command<Msg> {
-    // Update focused side
-    state.focused_side = super::super::Side::Target;
-
     // Handle target tree navigation/interaction
+    // Note: focused_side is now updated via on_focus callback
     let tree_state = match state.active_tab {
         ActiveTab::Fields => &mut state.target_fields_tree,
         ActiveTab::Relationships => &mut state.target_relationships_tree,
@@ -136,5 +133,17 @@ pub fn handle_target_node_clicked(state: &mut State, node_id: String) -> Command
     // Update selection and scroll to ensure visibility
     tree_state.select_and_scroll(Some(node_id.clone()));
 
+    Command::None
+}
+
+pub fn handle_source_tree_focused(state: &mut State) -> Command<Msg> {
+    // Update focused side when source tree gains focus
+    state.focused_side = super::super::Side::Source;
+    Command::None
+}
+
+pub fn handle_target_tree_focused(state: &mut State) -> Command<Msg> {
+    // Update focused side when target tree gains focus
+    state.focused_side = super::super::Side::Target;
     Command::None
 }

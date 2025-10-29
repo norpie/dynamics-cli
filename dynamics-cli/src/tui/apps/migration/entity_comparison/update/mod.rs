@@ -28,6 +28,8 @@ pub fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         Msg::TargetViewportHeight(h) => tree_events::handle_target_viewport_height(state, h),
         Msg::SourceTreeNodeClicked(node_id) => tree_events::handle_source_node_clicked(state, node_id),
         Msg::TargetTreeNodeClicked(node_id) => tree_events::handle_target_node_clicked(state, node_id),
+        Msg::SourceTreeFocused => tree_events::handle_source_tree_focused(state),
+        Msg::TargetTreeFocused => tree_events::handle_target_tree_focused(state),
 
         // Data loading
         Msg::ParallelDataLoaded(idx, result) => data_loading::handle_parallel_data_loaded(state, idx, result),
