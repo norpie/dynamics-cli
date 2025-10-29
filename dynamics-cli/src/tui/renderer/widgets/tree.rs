@@ -118,7 +118,8 @@ pub fn render_tree<Msg: Clone + Send + 'static>(
     let visible_height = area.height as usize;
 
     // Virtual scrolling: only render visible items
-    let start_idx = scroll_offset;
+    // Clamp start_idx to prevent out-of-bounds when items list shrinks (e.g., from filtering)
+    let start_idx = scroll_offset.min(items.len());
     let end_idx = (start_idx + visible_height).min(items.len());
 
     // Create layout for visible items
