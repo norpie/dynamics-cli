@@ -53,8 +53,10 @@ impl AutocompleteField {
     }
 
     /// Set value (useful for initialization)
+    /// Cursor is positioned at the end of the value
     pub fn set_value(&mut self, value: String) {
         self.value = value;
+        self.state.set_cursor_to_end(&self.value);
     }
 
     /// Check if dropdown is open
@@ -97,8 +99,10 @@ impl TextInputField {
     }
 
     /// Set value (useful for initialization)
+    /// Cursor is positioned at the end of the value
     pub fn set_value(&mut self, value: String) {
         self.value = value;
+        self.state.set_cursor_to_end(&self.value);
     }
 }
 

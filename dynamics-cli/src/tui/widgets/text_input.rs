@@ -32,6 +32,11 @@ impl TextInputState {
         self.scroll_offset
     }
 
+    /// Set cursor position to the end of the given text
+    pub fn set_cursor_to_end(&mut self, text: &str) {
+        self.cursor_pos = text.chars().count();
+    }
+
     /// Handle a key press and update text value
     /// Returns Some(new_value) if text changed, None if only cursor moved
     pub fn handle_key(
