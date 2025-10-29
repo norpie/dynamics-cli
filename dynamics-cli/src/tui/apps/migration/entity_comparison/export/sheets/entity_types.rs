@@ -52,7 +52,13 @@ pub fn create_source_entities_sheet(workbook: &mut Workbook, state: &State) -> R
             for (entity_name, usage_count) in mapped_entities {
                 let entity_id = format!("entity_{}", entity_name);
                 if let Some(match_info) = state.entity_matches.get(&entity_id) {
-                    let (mapping_type, format) = match match_info.match_type {
+                    // Get primary target's match type
+                    let primary_match_type = match_info.primary_target()
+                        .and_then(|primary| match_info.match_types.get(primary))
+                        .copied()
+                        .unwrap_or(MatchType::Manual);
+
+                    let (mapping_type, format) = match primary_match_type {
                         MatchType::Exact => ("Exact", &exact_match_format),
                         MatchType::Manual => ("Manual", &manual_mapping_format),
                         MatchType::Import => ("Import", &manual_mapping_format),
@@ -61,9 +67,11 @@ pub fn create_source_entities_sheet(workbook: &mut Workbook, state: &State) -> R
                         MatchType::TypeMismatch => ("Type Mismatch", &unmapped_format),
                     };
 
+                    let target_fields_str = match_info.target_fields.join(", ");
+
                     sheet.write_string_with_format(row, 0, &format!("    {}", entity_name), &indent_format)?;
                     sheet.write_string_with_format(row, 1, &usage_count.to_string(), format)?;
-                    sheet.write_string_with_format(row, 2, &match_info.target_field, format)?;
+                    sheet.write_string_with_format(row, 2, &target_fields_str, format)?;
                     sheet.write_string_with_format(row, 3, mapping_type, format)?;
                     row += 1;
                 }
@@ -121,8 +129,11 @@ pub fn create_target_entities_sheet(workbook: &mut Workbook, state: &State) -> R
     // Reverse lookup for entities
     let mut reverse_entity_matches: std::collections::HashMap<String, (String, MatchInfo)> = std::collections::HashMap::new();
     for (source_entity_id, match_info) in &state.entity_matches {
-        let target_entity_name = match_info.target_field.strip_prefix("entity_").unwrap_or(&match_info.target_field);
-        reverse_entity_matches.insert(target_entity_name.to_string(), (source_entity_id.clone(), match_info.clone()));
+        // Use primary target for reverse lookup
+        if let Some(primary_target) = match_info.primary_target() {
+            let target_entity_name = primary_target.strip_prefix("entity_").unwrap_or(primary_target);
+            reverse_entity_matches.insert(target_entity_name.to_string(), (source_entity_id.clone(), match_info.clone()));
+        }
     }
 
     if state.target_entities.is_empty() {
@@ -140,7 +151,14 @@ pub fn create_target_entities_sheet(workbook: &mut Workbook, state: &State) -> R
             for (entity_name, usage_count) in mapped_entities {
                 if let Some((source_id, match_info)) = reverse_entity_matches.get(entity_name) {
                     let source_name = source_id.strip_prefix("entity_").unwrap_or(source_id);
-                    let (mapping_type, format) = match match_info.match_type {
+
+                    // Get primary target's match type
+                    let primary_match_type = match_info.primary_target()
+                        .and_then(|primary| match_info.match_types.get(primary))
+                        .copied()
+                        .unwrap_or(MatchType::Manual);
+
+                    let (mapping_type, format) = match primary_match_type {
                         MatchType::Exact => ("Exact", &exact_match_format),
                         MatchType::Manual => ("Manual", &manual_mapping_format),
                         MatchType::Import => ("Import", &manual_mapping_format),

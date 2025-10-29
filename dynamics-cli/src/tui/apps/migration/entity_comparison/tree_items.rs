@@ -92,22 +92,33 @@ impl TreeItem for ComparisonTreeItem {
                 if let Some(match_info) = &node.match_info {
                     spans.push(Span::styled(" → ", Style::default().fg(theme.border_primary)));
 
-                    // Extract just the container name from target path
-                    let target_display = match_info.target_field
-                        .split('/')
-                        .last()
-                        .unwrap_or(&match_info.target_field)
-                        .to_string();
+                    // Extract just the container name from target paths and format as comma-separated
+                    let target_displays: Vec<String> = match_info.target_fields
+                        .iter()
+                        .map(|tf| {
+                            tf.split('/')
+                                .last()
+                                .unwrap_or(tf)
+                                .to_string()
+                        })
+                        .collect();
+
+                    let target_display = target_displays.join(", ");
 
                     spans.push(Span::styled(
                         target_display,
                         Style::default().fg(theme.accent_secondary),
                     ));
 
-                    spans.push(Span::styled(
-                        format!(" {}", match_info.match_type.label()),
-                        Style::default().fg(theme.border_primary),
-                    ));
+                    // Show match type of primary target
+                    if let Some(primary) = match_info.primary_target() {
+                        if let Some(match_type) = match_info.match_types.get(primary) {
+                            spans.push(Span::styled(
+                                format!(" {}", match_type.label()),
+                                Style::default().fg(theme.border_primary),
+                            ));
+                        }
+                    }
                 }
 
                 let mut builder = Element::styled_text(Line::from(spans));
@@ -208,13 +219,19 @@ impl TreeItem for FieldNode {
         let field_name_color = if self.is_ignored {
             theme.text_tertiary  // Gray for ignored items
         } else if let Some(match_info) = &self.match_info {
-            match match_info.match_type {
-                MatchType::Exact => theme.accent_success,        // Exact name + type match
-                MatchType::Prefix => theme.accent_success,       // Prefix name + type match
-                MatchType::Manual => theme.accent_success,       // User override
-                MatchType::Import => theme.accent_success,       // Imported from C# file
-                MatchType::ExampleValue => theme.palette_4,   // Example value match
-                MatchType::TypeMismatch => theme.accent_warning, // Name match but type differs
+            // Get match type of primary target
+            let primary_match_type = match_info.primary_target()
+                .and_then(|primary| match_info.match_types.get(primary))
+                .copied();
+
+            match primary_match_type {
+                Some(MatchType::Exact) => theme.accent_success,        // Exact name + type match
+                Some(MatchType::Prefix) => theme.accent_success,       // Prefix name + type match
+                Some(MatchType::Manual) => theme.accent_success,       // User override
+                Some(MatchType::Import) => theme.accent_success,       // Imported from C# file
+                Some(MatchType::ExampleValue) => theme.palette_4,   // Example value match
+                Some(MatchType::TypeMismatch) => theme.accent_warning, // Name match but type differs
+                None => theme.accent_error,  // No match
             }
         } else {
             theme.accent_error  // No match
@@ -233,16 +250,22 @@ impl TreeItem for FieldNode {
             spans.push(Span::styled(" *", Style::default().fg(theme.accent_error)));
         }
 
-        // Mapping arrow and target field (if mapped)
+        // Mapping arrow and target fields (if mapped)
         if let Some(match_info) = &self.match_info {
             spans.push(Span::styled(" → ", Style::default().fg(theme.border_primary)));
 
-            // Extract just the field name from target path
-            let target_display = match_info.target_field
-                .split('/')
-                .last()
-                .unwrap_or(&match_info.target_field)
-                .to_string();
+            // Extract just the field name from target paths and format as comma-separated
+            let target_displays: Vec<String> = match_info.target_fields
+                .iter()
+                .map(|tf| {
+                    tf.split('/')
+                        .last()
+                        .unwrap_or(tf)
+                        .to_string()
+                })
+                .collect();
+
+            let target_display = target_displays.join(", ");
 
             spans.push(Span::styled(
                 target_display,
@@ -258,10 +281,15 @@ impl TreeItem for FieldNode {
 
         // Mapping source badge (if mapped)
         if let Some(match_info) = &self.match_info {
-            spans.push(Span::styled(
-                format!(" {}", match_info.match_type.label()),
-                Style::default().fg(theme.border_primary),
-            ));
+            // Show match type of primary target
+            if let Some(primary) = match_info.primary_target() {
+                if let Some(match_type) = match_info.match_types.get(primary) {
+                    spans.push(Span::styled(
+                        format!(" {}", match_type.label()),
+                        Style::default().fg(theme.border_primary),
+                    ));
+                }
+            }
         }
 
         // Example value (if present)
@@ -335,13 +363,19 @@ impl TreeItem for RelationshipNode {
         let rel_name_color = if self.is_ignored {
             theme.text_tertiary  // Gray for ignored items
         } else if let Some(match_info) = &self.match_info {
-            match match_info.match_type {
-                MatchType::Exact => theme.accent_success,        // Exact name + type match
-                MatchType::Prefix => theme.accent_success,       // Prefix name + type match
-                MatchType::Manual => theme.accent_success,       // User override
-                MatchType::Import => theme.accent_success,       // Imported from C# file
-                MatchType::ExampleValue => theme.palette_4,   // Example value match
-                MatchType::TypeMismatch => theme.accent_warning, // Name match but type differs
+            // Get match type of primary target
+            let primary_match_type = match_info.primary_target()
+                .and_then(|primary| match_info.match_types.get(primary))
+                .copied();
+
+            match primary_match_type {
+                Some(MatchType::Exact) => theme.accent_success,        // Exact name + type match
+                Some(MatchType::Prefix) => theme.accent_success,       // Prefix name + type match
+                Some(MatchType::Manual) => theme.accent_success,       // User override
+                Some(MatchType::Import) => theme.accent_success,       // Imported from C# file
+                Some(MatchType::ExampleValue) => theme.palette_4,   // Example value match
+                Some(MatchType::TypeMismatch) => theme.accent_warning, // Name match but type differs
+                None => theme.accent_error,  // No match
             }
         } else {
             theme.accent_error  // No match
@@ -352,11 +386,15 @@ impl TreeItem for RelationshipNode {
             Style::default().fg(rel_name_color),
         ));
 
-        // Mapping arrow and target relationship (if mapped)
+        // Mapping arrow and target relationships (if mapped)
         if let Some(match_info) = &self.match_info {
             spans.push(Span::styled(" → ", Style::default().fg(theme.border_primary)));
+
+            // Show comma-separated targets
+            let target_display = match_info.target_fields.join(", ");
+
             spans.push(Span::styled(
-                match_info.target_field.clone(),
+                target_display,
                 Style::default().fg(theme.accent_secondary),
             ));
         }
@@ -382,10 +420,15 @@ impl TreeItem for RelationshipNode {
 
         // Mapping source badge (if mapped)
         if let Some(match_info) = &self.match_info {
-            spans.push(Span::styled(
-                format!(" {}", match_info.match_type.label()),
-                Style::default().fg(theme.border_primary),
-            ));
+            // Show match type of primary target
+            if let Some(primary) = match_info.primary_target() {
+                if let Some(match_type) = match_info.match_types.get(primary) {
+                    spans.push(Span::styled(
+                        format!(" {}", match_type.label()),
+                        Style::default().fg(theme.border_primary),
+                    ));
+                }
+            }
         }
 
         let mut builder = Element::styled_text(Line::from(spans));
@@ -579,13 +622,19 @@ impl TreeItem for EntityNode {
         let entity_name_color = if self.is_ignored {
             theme.text_tertiary  // Gray for ignored items
         } else if let Some(match_info) = &self.match_info {
-            match match_info.match_type {
-                MatchType::Exact => theme.accent_success,        // Exact name match
-                MatchType::Prefix => theme.accent_success,       // Prefix name match
-                MatchType::Manual => theme.accent_success,       // User override
-                MatchType::Import => theme.accent_success,       // Imported from C# file
-                MatchType::ExampleValue => theme.palette_4,   // Example value match
-                MatchType::TypeMismatch => theme.accent_warning, // Should not happen for entities
+            // Get match type of primary target
+            let primary_match_type = match_info.primary_target()
+                .and_then(|primary| match_info.match_types.get(primary))
+                .copied();
+
+            match primary_match_type {
+                Some(MatchType::Exact) => theme.accent_success,        // Exact name match
+                Some(MatchType::Prefix) => theme.accent_success,       // Prefix name match
+                Some(MatchType::Manual) => theme.accent_success,       // User override
+                Some(MatchType::Import) => theme.accent_success,       // Imported from C# file
+                Some(MatchType::ExampleValue) => theme.palette_4,   // Example value match
+                Some(MatchType::TypeMismatch) => theme.accent_warning, // Should not happen for entities
+                None => theme.accent_error,  // No match
             }
         } else {
             theme.accent_error  // No match
@@ -604,21 +653,30 @@ impl TreeItem for EntityNode {
             Style::default().fg(theme.border_primary),
         ));
 
-        // Mapping arrow and target entity (if mapped)
+        // Mapping arrow and target entities (if mapped)
         if let Some(match_info) = &self.match_info {
             spans.push(Span::styled(" → ", Style::default().fg(theme.border_primary)));
+
+            // Show comma-separated targets
+            let target_display = match_info.target_fields.join(", ");
+
             spans.push(Span::styled(
-                match_info.target_field.clone(),
+                target_display,
                 Style::default().fg(theme.accent_secondary),
             ));
         }
 
         // Mapping source badge (if mapped)
         if let Some(match_info) = &self.match_info {
-            spans.push(Span::styled(
-                format!(" {}", match_info.match_type.label()),
-                Style::default().fg(theme.border_primary),
-            ));
+            // Show match type of primary target
+            if let Some(primary) = match_info.primary_target() {
+                if let Some(match_type) = match_info.match_types.get(primary) {
+                    spans.push(Span::styled(
+                        format!(" {}", match_type.label()),
+                        Style::default().fg(theme.border_primary),
+                    ));
+                }
+            }
         }
 
         let mut builder = Element::styled_text(Line::from(spans));

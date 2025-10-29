@@ -203,11 +203,65 @@ impl ExamplePair {
 }
 
 /// Field mapping information
+/// Supports both 1-to-1 and 1-to-N mappings (one source → multiple targets)
 #[derive(Debug, Clone)]
 pub struct MatchInfo {
-    pub target_field: String,
-    pub match_type: MatchType,
-    pub confidence: f64,
+    pub target_fields: Vec<String>,                              // List of target field names
+    pub match_types: std::collections::HashMap<String, MatchType>, // target_field -> match_type
+    pub confidences: std::collections::HashMap<String, f64>,      // target_field -> confidence
+}
+
+impl MatchInfo {
+    /// Create a new MatchInfo with a single target (common case)
+    pub fn single(target_field: String, match_type: MatchType, confidence: f64) -> Self {
+        let mut match_types = std::collections::HashMap::new();
+        match_types.insert(target_field.clone(), match_type);
+
+        let mut confidences = std::collections::HashMap::new();
+        confidences.insert(target_field.clone(), confidence);
+
+        Self {
+            target_fields: vec![target_field],
+            match_types,
+            confidences,
+        }
+    }
+
+    /// Add a target to this match info
+    pub fn add_target(&mut self, target_field: String, match_type: MatchType, confidence: f64) {
+        if !self.target_fields.contains(&target_field) {
+            self.target_fields.push(target_field.clone());
+            self.match_types.insert(target_field.clone(), match_type);
+            self.confidences.insert(target_field, confidence);
+        }
+    }
+
+    /// Remove a specific target
+    pub fn remove_target(&mut self, target_field: &str) {
+        self.target_fields.retain(|t| t != target_field);
+        self.match_types.remove(target_field);
+        self.confidences.remove(target_field);
+    }
+
+    /// Get the primary (first) target field
+    pub fn primary_target(&self) -> Option<&String> {
+        self.target_fields.first()
+    }
+
+    /// Check if this match info contains a specific target
+    pub fn has_target(&self, target: &str) -> bool {
+        self.target_fields.iter().any(|t| t == target)
+    }
+
+    /// Get the number of targets
+    pub fn target_count(&self) -> usize {
+        self.target_fields.len()
+    }
+
+    /// Check if this is empty (no targets)
+    pub fn is_empty(&self) -> bool {
+        self.target_fields.is_empty()
+    }
 }
 
 /// Type of field match/mapping

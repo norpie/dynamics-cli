@@ -62,8 +62,17 @@ pub fn create_examples_sheet(workbook: &mut Workbook, state: &State) -> Result<(
                 let source_value = state.examples.get_field_value(&source_field.logical_name, true, &state.source_entity)
                     .unwrap_or_else(|| "No example data".to_string());
 
-                let target_field_name = match_info.target_field.split('/').last().unwrap_or(&match_info.target_field);
-                let target_value = state.examples.get_field_value(target_field_name, false, &state.target_entity)
+                // For examples sheet, show primary target or all targets comma-separated
+                let target_field_names: Vec<&str> = match_info.target_fields.iter()
+                    .map(|tf| tf.split('/').last().unwrap_or(tf.as_str()))
+                    .collect();
+                let target_field_name = target_field_names.join(", ");
+
+                // Get value from first target for comparison
+                let first_target_name = match_info.target_fields.first()
+                    .map(|tf| tf.split('/').last().unwrap_or(tf.as_str()))
+                    .unwrap_or("");
+                let target_value = state.examples.get_field_value(first_target_name, false, &state.target_entity)
                     .unwrap_or_else(|| "No example data".to_string());
 
                 let (status, status_format) = if source_value == target_value && source_value != "No example data" {

@@ -27,11 +27,7 @@ pub fn compute_entity_matches(
             if target_lookup.contains_key(target_name) {
                 matches.insert(
                     source_name.clone(),
-                    MatchInfo {
-                        target_field: target_name.clone(),
-                        match_type: MatchType::Manual,
-                        confidence: 1.0,
-                    },
+                    MatchInfo::single(target_name.clone(), MatchType::Manual, 1.0),
                 );
                 continue;
             }
@@ -41,11 +37,7 @@ pub fn compute_entity_matches(
         if target_lookup.contains_key(source_name) {
             matches.insert(
                 source_name.clone(),
-                MatchInfo {
-                    target_field: source_name.clone(),
-                    match_type: MatchType::Exact,
-                    confidence: 1.0,
-                },
+                MatchInfo::single(source_name.clone(), MatchType::Exact, 1.0),
             );
             continue;
         }
@@ -55,11 +47,7 @@ pub fn compute_entity_matches(
             if target_lookup.contains_key(&transformed) {
                 matches.insert(
                     source_name.clone(),
-                    MatchInfo {
-                        target_field: transformed,
-                        match_type: MatchType::Prefix,
-                        confidence: 0.9,
-                    },
+                    MatchInfo::single(transformed, MatchType::Prefix, 0.9),
                 );
                 continue;
             }
@@ -152,11 +140,7 @@ pub fn compute_field_matches(
             if target_lookup.contains_key(target_name) {
                 matches.insert(
                     source_name.clone(),
-                    MatchInfo {
-                        target_field: target_name.clone(),
-                        match_type: MatchType::Manual,
-                        confidence: 1.0,
-                    },
+                    MatchInfo::single(target_name.clone(), MatchType::Manual, 1.0),
                 );
                 already_matched.insert(target_name.clone());
                 continue;
@@ -170,11 +154,7 @@ pub fn compute_field_matches(
                 let actual_target_name = &target_field.logical_name;
                 matches.insert(
                     source_name.clone(),
-                    MatchInfo {
-                        target_field: actual_target_name.clone(),
-                        match_type: MatchType::Import,
-                        confidence: 1.0,
-                    },
+                    MatchInfo::single(actual_target_name.clone(), MatchType::Import, 1.0),
                 );
                 already_matched.insert(actual_target_name.clone());
                 continue;
@@ -186,15 +166,11 @@ pub fn compute_field_matches(
             let types_match = source_field.field_type == target_field.field_type;
             matches.insert(
                 source_name.clone(),
-                MatchInfo {
-                    target_field: source_name.clone(),
-                    match_type: if types_match {
-                        MatchType::Exact
-                    } else {
-                        MatchType::TypeMismatch
-                    },
-                    confidence: if types_match { 1.0 } else { 0.7 },
-                },
+                MatchInfo::single(
+                    source_name.clone(),
+                    if types_match { MatchType::Exact } else { MatchType::TypeMismatch },
+                    if types_match { 1.0 } else { 0.7 },
+                ),
             );
             already_matched.insert(source_name.clone());
             continue;
@@ -206,15 +182,11 @@ pub fn compute_field_matches(
                 let types_match = source_field.field_type == target_field.field_type;
                 matches.insert(
                     source_name.clone(),
-                    MatchInfo {
-                        target_field: transformed.clone(),
-                        match_type: if types_match {
-                            MatchType::Prefix
-                        } else {
-                            MatchType::TypeMismatch
-                        },
-                        confidence: if types_match { 0.9 } else { 0.6 },
-                    },
+                    MatchInfo::single(
+                        transformed.clone(),
+                        if types_match { MatchType::Prefix } else { MatchType::TypeMismatch },
+                        if types_match { 0.9 } else { 0.6 },
+                    ),
                 );
                 already_matched.insert(transformed);
                 continue;
@@ -232,11 +204,7 @@ pub fn compute_field_matches(
         ) {
             matches.insert(
                 source_name.clone(),
-                MatchInfo {
-                    target_field: target_name.clone(),
-                    match_type: MatchType::ExampleValue,
-                    confidence: 1.0,
-                },
+                MatchInfo::single(target_name.clone(), MatchType::ExampleValue, 1.0),
             );
             already_matched.insert(target_name);
             continue;
@@ -256,7 +224,7 @@ fn entities_match(
 ) -> bool {
     // Check if source entity has a match that points to target
     if let Some(match_info) = entity_matches.get(source_entity) {
-        return &match_info.target_field == target_entity;
+        return match_info.has_target(target_entity);
     }
     // Fallback to exact match
     source_entity == target_entity
@@ -288,11 +256,7 @@ pub fn compute_relationship_matches(
             if target_lookup.contains_key(target_name) {
                 matches.insert(
                     source_name.clone(),
-                    MatchInfo {
-                        target_field: target_name.clone(),
-                        match_type: MatchType::Manual,
-                        confidence: 1.0,
-                    },
+                    MatchInfo::single(target_name.clone(), MatchType::Manual, 1.0),
                 );
                 continue;
             }
@@ -305,15 +269,11 @@ pub fn compute_relationship_matches(
                 && entities_match(&source_rel.related_entity, &target_rel.related_entity, entity_matches);
             matches.insert(
                 source_name.clone(),
-                MatchInfo {
-                    target_field: source_name.clone(),
-                    match_type: if types_match {
-                        MatchType::Exact
-                    } else {
-                        MatchType::TypeMismatch
-                    },
-                    confidence: if types_match { 1.0 } else { 0.7 },
-                },
+                MatchInfo::single(
+                    source_name.clone(),
+                    if types_match { MatchType::Exact } else { MatchType::TypeMismatch },
+                    if types_match { 1.0 } else { 0.7 },
+                ),
             );
             continue;
         }
@@ -326,15 +286,11 @@ pub fn compute_relationship_matches(
                     && entities_match(&source_rel.related_entity, &target_rel.related_entity, entity_matches);
                 matches.insert(
                     source_name.clone(),
-                    MatchInfo {
-                        target_field: transformed,
-                        match_type: if types_match {
-                            MatchType::Prefix
-                        } else {
-                            MatchType::TypeMismatch
-                        },
-                        confidence: if types_match { 0.9 } else { 0.6 },
-                    },
+                    MatchInfo::single(
+                        transformed,
+                        if types_match { MatchType::Prefix } else { MatchType::TypeMismatch },
+                        if types_match { 0.9 } else { 0.6 },
+                    ),
                 );
                 continue;
             }
@@ -443,11 +399,7 @@ pub fn compute_hierarchical_field_matches(
             if target_container_lookup.contains_key(target_path) {
                 matches.insert(
                     source_path.clone(),
-                    MatchInfo {
-                        target_field: target_path.clone(),
-                        match_type: MatchType::Manual,
-                        confidence: 1.0,
-                    },
+                    MatchInfo::single(target_path.clone(), MatchType::Manual, 1.0),
                 );
                 continue;
             }
@@ -457,11 +409,7 @@ pub fn compute_hierarchical_field_matches(
         if target_container_lookup.contains_key(source_path) {
             matches.insert(
                 source_path.clone(),
-                MatchInfo {
-                    target_field: source_path.clone(),
-                    match_type: MatchType::Exact,
-                    confidence: 1.0,
-                },
+                MatchInfo::single(source_path.clone(), MatchType::Exact, 1.0),
             );
         }
     }
@@ -474,7 +422,7 @@ pub fn compute_hierarchical_field_matches(
         }
 
         // Get corresponding target container path
-        let target_container_path = &matches.get(container_path).unwrap().target_field;
+        let target_container_path = matches.get(container_path).unwrap().primary_target().unwrap();
 
         // Get fields in target container
         let target_fields = match target_fields_by_container.get(target_container_path) {
@@ -506,11 +454,7 @@ pub fn compute_hierarchical_field_matches(
             if let Some(target_path) = manual_mappings.get(&source_field.path) {
                 matches.insert(
                     source_field.path.clone(),
-                    MatchInfo {
-                        target_field: target_path.clone(),
-                        match_type: MatchType::Manual,
-                        confidence: 1.0,
-                    },
+                    MatchInfo::single(target_path.clone(), MatchType::Manual, 1.0),
                 );
                 continue;
             }
@@ -521,11 +465,7 @@ pub fn compute_hierarchical_field_matches(
                 if let Some(target_field) = target_field_lookup_lowercase.get(&target_name_cs.to_lowercase()) {
                     matches.insert(
                         source_field.path.clone(),
-                        MatchInfo {
-                            target_field: target_field.path.clone(),
-                            match_type: MatchType::Import,
-                            confidence: 1.0,
-                        },
+                        MatchInfo::single(target_field.path.clone(), MatchType::Import, 1.0),
                     );
                     continue;
                 }
@@ -536,15 +476,11 @@ pub fn compute_hierarchical_field_matches(
                 let types_match = source_field.field_type == target_field.field_type;
                 matches.insert(
                     source_field.path.clone(),
-                    MatchInfo {
-                        target_field: target_field.path.clone(),
-                        match_type: if types_match {
-                            MatchType::Exact
-                        } else {
-                            MatchType::TypeMismatch
-                        },
-                        confidence: if types_match { 1.0 } else { 0.7 },
-                    },
+                    MatchInfo::single(
+                        target_field.path.clone(),
+                        if types_match { MatchType::Exact } else { MatchType::TypeMismatch },
+                        if types_match { 1.0 } else { 0.7 },
+                    ),
                 );
                 continue;
             }
@@ -555,15 +491,11 @@ pub fn compute_hierarchical_field_matches(
                     let types_match = source_field.field_type == target_field.field_type;
                     matches.insert(
                         source_field.path.clone(),
-                        MatchInfo {
-                            target_field: target_field.path.clone(),
-                            match_type: if types_match {
-                                MatchType::Prefix
-                            } else {
-                                MatchType::TypeMismatch
-                            },
-                            confidence: if types_match { 0.9 } else { 0.6 },
-                        },
+                        MatchInfo::single(
+                            target_field.path.clone(),
+                            if types_match { MatchType::Prefix } else { MatchType::TypeMismatch },
+                            if types_match { 0.9 } else { 0.6 },
+                        ),
                     );
                 }
             }

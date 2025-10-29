@@ -13,7 +13,7 @@ use super::app::State;
 use super::tree_builder::build_tree_items;
 use super::tree_items::ComparisonTreeItem;
 use std::collections::HashMap;
-use super::models::MatchInfo;
+use super::models::{MatchInfo, MatchType};
 
 /// Render the main side-by-side layout with source and target trees
 pub fn render_main_layout(state: &mut State) -> Element<Msg> {
@@ -71,32 +71,33 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
 
     let mut target_items = if let Resource::Success(ref metadata) = state.target_metadata {
         // Create reverse matches for target side (target_field -> source_field)
+        // For 1-to-N mappings, each target gets its own reverse mapping back to the source
         let reverse_field_matches: HashMap<String, MatchInfo> = state.field_matches.iter()
-            .map(|(source_field, match_info)| {
-                (match_info.target_field.clone(), MatchInfo {
-                    target_field: source_field.clone(),  // Points back to source
-                    match_type: match_info.match_type,
-                    confidence: match_info.confidence,
+            .flat_map(|(source_field, match_info)| {
+                match_info.target_fields.iter().map(move |target_field| {
+                    let match_type = match_info.match_types.get(target_field).copied().unwrap_or(MatchType::Manual);
+                    let confidence = match_info.confidences.get(target_field).copied().unwrap_or(1.0);
+                    (target_field.clone(), MatchInfo::single(source_field.clone(), match_type, confidence))
                 })
             })
             .collect();
 
         let reverse_relationship_matches: HashMap<String, MatchInfo> = state.relationship_matches.iter()
-            .map(|(source_rel, match_info)| {
-                (match_info.target_field.clone(), MatchInfo {
-                    target_field: source_rel.clone(),  // Points back to source
-                    match_type: match_info.match_type,
-                    confidence: match_info.confidence,
+            .flat_map(|(source_rel, match_info)| {
+                match_info.target_fields.iter().map(move |target_field| {
+                    let match_type = match_info.match_types.get(target_field).copied().unwrap_or(MatchType::Manual);
+                    let confidence = match_info.confidences.get(target_field).copied().unwrap_or(1.0);
+                    (target_field.clone(), MatchInfo::single(source_rel.clone(), match_type, confidence))
                 })
             })
             .collect();
 
         let reverse_entity_matches: HashMap<String, MatchInfo> = state.entity_matches.iter()
-            .map(|(source_entity, match_info)| {
-                (match_info.target_field.clone(), MatchInfo {
-                    target_field: source_entity.clone(),  // Points back to source
-                    match_type: match_info.match_type,
-                    confidence: match_info.confidence,
+            .flat_map(|(source_entity, match_info)| {
+                match_info.target_fields.iter().map(move |target_field| {
+                    let match_type = match_info.match_types.get(target_field).copied().unwrap_or(MatchType::Manual);
+                    let confidence = match_info.confidences.get(target_field).copied().unwrap_or(1.0);
+                    (target_field.clone(), MatchInfo::single(source_entity.clone(), match_type, confidence))
                 })
             })
             .collect();
@@ -401,27 +402,27 @@ pub fn filter_matched_items(items: Vec<super::tree_items::ComparisonTreeItem>) -
     items.into_iter().filter_map(|item| {
         match item {
             ComparisonTreeItem::Field(ref node) => {
-                // Keep if no match OR if match is ExampleValue
+                // Keep if no match OR if any target has ExampleValue match type
                 if node.match_info.is_none()
-                    || node.match_info.as_ref().map(|m| &m.match_type) == Some(&MatchType::ExampleValue) {
+                    || node.match_info.as_ref().map(|m| m.match_types.values().any(|t| t == &MatchType::ExampleValue)).unwrap_or(false) {
                     Some(item)
                 } else {
                     None
                 }
             }
             ComparisonTreeItem::Relationship(ref node) => {
-                // Keep if no match OR if match is ExampleValue
+                // Keep if no match OR if any target has ExampleValue match type
                 if node.match_info.is_none()
-                    || node.match_info.as_ref().map(|m| &m.match_type) == Some(&MatchType::ExampleValue) {
+                    || node.match_info.as_ref().map(|m| m.match_types.values().any(|t| t == &MatchType::ExampleValue)).unwrap_or(false) {
                     Some(item)
                 } else {
                     None
                 }
             }
             ComparisonTreeItem::Entity(ref node) => {
-                // Keep if no match OR if match is ExampleValue
+                // Keep if no match OR if any target has ExampleValue match type
                 if node.match_info.is_none()
-                    || node.match_info.as_ref().map(|m| &m.match_type) == Some(&MatchType::ExampleValue) {
+                    || node.match_info.as_ref().map(|m| m.match_types.values().any(|t| t == &MatchType::ExampleValue)).unwrap_or(false) {
                     Some(item)
                 } else {
                     None
@@ -433,7 +434,7 @@ pub fn filter_matched_items(items: Vec<super::tree_items::ComparisonTreeItem>) -
 
                 // Keep container if it has any unmatched/example children OR if container itself is unmatched/example
                 let keep_container = node.match_info.is_none()
-                    || node.match_info.as_ref().map(|m| &m.match_type) == Some(&MatchType::ExampleValue);
+                    || node.match_info.as_ref().map(|m| m.match_types.values().any(|t| t == &MatchType::ExampleValue)).unwrap_or(false);
 
                 if !filtered_children.is_empty() || keep_container {
                     Some(ComparisonTreeItem::Container(super::tree_items::ContainerNode {
@@ -528,9 +529,9 @@ pub fn filter_matched_and_ignored_items(items: Vec<super::tree_items::Comparison
     items.into_iter().filter_map(|item| {
         match item {
             ComparisonTreeItem::Field(ref node) => {
-                // Keep if not ignored AND (no match OR match is ExampleValue)
+                // Keep if not ignored AND (no match OR any target has ExampleValue match type)
                 let is_unmatched_or_example = node.match_info.is_none()
-                    || node.match_info.as_ref().map(|m| &m.match_type) == Some(&MatchType::ExampleValue);
+                    || node.match_info.as_ref().map(|m| m.match_types.values().any(|t| t == &MatchType::ExampleValue)).unwrap_or(false);
                 if !node.is_ignored && is_unmatched_or_example {
                     Some(item)
                 } else {
@@ -538,9 +539,9 @@ pub fn filter_matched_and_ignored_items(items: Vec<super::tree_items::Comparison
                 }
             }
             ComparisonTreeItem::Relationship(ref node) => {
-                // Keep if not ignored AND (no match OR match is ExampleValue)
+                // Keep if not ignored AND (no match OR any target has ExampleValue match type)
                 let is_unmatched_or_example = node.match_info.is_none()
-                    || node.match_info.as_ref().map(|m| &m.match_type) == Some(&MatchType::ExampleValue);
+                    || node.match_info.as_ref().map(|m| m.match_types.values().any(|t| t == &MatchType::ExampleValue)).unwrap_or(false);
                 if !node.is_ignored && is_unmatched_or_example {
                     Some(item)
                 } else {
@@ -548,9 +549,9 @@ pub fn filter_matched_and_ignored_items(items: Vec<super::tree_items::Comparison
                 }
             }
             ComparisonTreeItem::Entity(ref node) => {
-                // Keep if not ignored AND (no match OR match is ExampleValue)
+                // Keep if not ignored AND (no match OR any target has ExampleValue match type)
                 let is_unmatched_or_example = node.match_info.is_none()
-                    || node.match_info.as_ref().map(|m| &m.match_type) == Some(&MatchType::ExampleValue);
+                    || node.match_info.as_ref().map(|m| m.match_types.values().any(|t| t == &MatchType::ExampleValue)).unwrap_or(false);
                 if !node.is_ignored && is_unmatched_or_example {
                     Some(item)
                 } else {
@@ -669,27 +670,27 @@ pub fn filter_example_matches(items: Vec<super::tree_items::ComparisonTreeItem>)
     items.into_iter().filter_map(|item| {
         match item {
             ComparisonTreeItem::Field(ref node) => {
-                // Hide if match is ExampleValue
+                // Hide if any target has ExampleValue match type
                 if let Some(ref match_info) = node.match_info {
-                    if match_info.match_type == MatchType::ExampleValue {
+                    if match_info.match_types.values().any(|t| t == &MatchType::ExampleValue) {
                         return None;
                     }
                 }
                 Some(item)
             }
             ComparisonTreeItem::Relationship(ref node) => {
-                // Hide if match is ExampleValue
+                // Hide if any target has ExampleValue match type
                 if let Some(ref match_info) = node.match_info {
-                    if match_info.match_type == MatchType::ExampleValue {
+                    if match_info.match_types.values().any(|t| t == &MatchType::ExampleValue) {
                         return None;
                     }
                 }
                 Some(item)
             }
             ComparisonTreeItem::Entity(ref node) => {
-                // Hide if match is ExampleValue
+                // Hide if any target has ExampleValue match type
                 if let Some(ref match_info) = node.match_info {
-                    if match_info.match_type == MatchType::ExampleValue {
+                    if match_info.match_types.values().any(|t| t == &MatchType::ExampleValue) {
                         return None;
                     }
                 }
@@ -699,9 +700,9 @@ pub fn filter_example_matches(items: Vec<super::tree_items::ComparisonTreeItem>)
                 // Recursively filter container children
                 let filtered_children = filter_example_matches(node.children.clone());
 
-                // Hide container if its match is ExampleValue (but keep if has non-example children)
+                // Hide container if any target has ExampleValue match type (but keep if has non-example children)
                 let hide_container = if let Some(ref match_info) = node.match_info {
-                    match_info.match_type == MatchType::ExampleValue
+                    match_info.match_types.values().any(|t| t == &MatchType::ExampleValue)
                 } else {
                     false
                 };
@@ -781,13 +782,13 @@ fn get_item_name(item: &ComparisonTreeItem) -> &str {
     }
 }
 
-/// Get the target field name from an item's match info
+/// Get the primary target field name from an item's match info
 fn get_item_match_target(item: &ComparisonTreeItem) -> Option<&str> {
     match item {
-        ComparisonTreeItem::Field(node) => node.match_info.as_ref().map(|m| m.target_field.as_str()),
-        ComparisonTreeItem::Relationship(node) => node.match_info.as_ref().map(|m| m.target_field.as_str()),
-        ComparisonTreeItem::Entity(node) => node.match_info.as_ref().map(|m| m.target_field.as_str()),
-        ComparisonTreeItem::Container(node) => node.match_info.as_ref().map(|m| m.target_field.as_str()),
+        ComparisonTreeItem::Field(node) => node.match_info.as_ref().and_then(|m| m.primary_target()).map(|s| s.as_str()),
+        ComparisonTreeItem::Relationship(node) => node.match_info.as_ref().and_then(|m| m.primary_target()).map(|s| s.as_str()),
+        ComparisonTreeItem::Entity(node) => node.match_info.as_ref().and_then(|m| m.primary_target()).map(|s| s.as_str()),
+        ComparisonTreeItem::Container(node) => node.match_info.as_ref().and_then(|m| m.primary_target()).map(|s| s.as_str()),
         _ => None,
     }
 }
@@ -1371,9 +1372,9 @@ fn calculate_detailed_completion_stats(state: &State, active_tab: ActiveTab) -> 
                 .filter(|id| id.starts_with("fields:source:"))
                 .count();
 
-            // Count target mapped fields
+            // Count target mapped fields (flatten 1-to-N mappings)
             let target_mapped = state.field_matches.values()
-                .map(|m| &m.target_field)
+                .flat_map(|m| m.target_fields.iter())
                 .collect::<std::collections::HashSet<_>>()
                 .len();
 
@@ -1408,9 +1409,9 @@ fn calculate_detailed_completion_stats(state: &State, active_tab: ActiveTab) -> 
                 .filter(|id| id.starts_with("relationships:source:"))
                 .count();
 
-            // Count target mapped relationships
+            // Count target mapped relationships (flatten 1-to-N mappings)
             let target_mapped = state.relationship_matches.values()
-                .map(|m| &m.target_field)
+                .flat_map(|m| m.target_fields.iter())
                 .collect::<std::collections::HashSet<_>>()
                 .len();
 
@@ -1437,9 +1438,9 @@ fn calculate_detailed_completion_stats(state: &State, active_tab: ActiveTab) -> 
                 .filter(|id| id.starts_with("entities:source:"))
                 .count();
 
-            // Count target mapped entities
+            // Count target mapped entities (flatten 1-to-N mappings)
             let target_mapped = state.entity_matches.values()
-                .map(|m| &m.target_field)
+                .flat_map(|m| m.target_fields.iter())
                 .collect::<std::collections::HashSet<_>>()
                 .len();
 
@@ -1499,9 +1500,11 @@ fn calculate_completion_percentages(state: &State, active_tab: ActiveTab) -> (us
             // Count target items that are either mapped OR ignored
             let mut target_handled = std::collections::HashSet::new();
 
-            // Add all mapped target fields
+            // Add all mapped target fields (including 1-to-N mappings)
             for match_info in state.field_matches.values() {
-                target_handled.insert(match_info.target_field.clone());
+                for target_field in &match_info.target_fields {
+                    target_handled.insert(target_field.clone());
+                }
             }
 
             // Add all ignored target fields
@@ -1565,9 +1568,11 @@ fn calculate_completion_percentages(state: &State, active_tab: ActiveTab) -> (us
             // Count target items that are either mapped OR ignored
             let mut target_handled = std::collections::HashSet::new();
 
-            // Add all mapped target relationships
+            // Add all mapped target relationships (including 1-to-N mappings)
             for match_info in state.relationship_matches.values() {
-                target_handled.insert(match_info.target_field.clone());
+                for target_field in &match_info.target_fields {
+                    target_handled.insert(target_field.clone());
+                }
             }
 
             // Add all ignored target relationships
@@ -1623,9 +1628,11 @@ fn calculate_completion_percentages(state: &State, active_tab: ActiveTab) -> (us
             // Count target items that are either mapped OR ignored
             let mut target_handled = std::collections::HashSet::new();
 
-            // Add all mapped target entities
+            // Add all mapped target entities (including 1-to-N mappings)
             for match_info in state.entity_matches.values() {
-                target_handled.insert(match_info.target_field.clone());
+                for target_field in &match_info.target_fields {
+                    target_handled.insert(target_field.clone());
+                }
             }
 
             // Add all ignored target entities
