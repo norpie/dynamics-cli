@@ -1124,25 +1124,53 @@ fn calculate_completion_percentages(state: &State, active_tab: ActiveTab) -> (us
                 0
             };
 
-            // Count mapped items
-            let source_mapped = state.field_matches.len();
+            // Count source items that are either mapped OR ignored
+            let mut source_handled = std::collections::HashSet::new();
 
-            // Count unique target fields that have been mapped to
-            let target_mapped = state.field_matches
-                .values()
-                .map(|m| &m.target_field)
-                .collect::<std::collections::HashSet<_>>()
-                .len();
+            // Add all mapped source fields
+            for field_name in state.field_matches.keys() {
+                source_handled.insert(field_name.clone());
+            }
+
+            // Add all ignored source fields
+            for ignored_id in &state.ignored_items {
+                if ignored_id.starts_with("fields:source:") {
+                    if let Some(field_name) = ignored_id.strip_prefix("fields:source:") {
+                        source_handled.insert(field_name.to_string());
+                    }
+                }
+            }
+
+            let source_handled_count = source_handled.len();
+
+            // Count target items that are either mapped OR ignored
+            let mut target_handled = std::collections::HashSet::new();
+
+            // Add all mapped target fields
+            for match_info in state.field_matches.values() {
+                target_handled.insert(match_info.target_field.clone());
+            }
+
+            // Add all ignored target fields
+            for ignored_id in &state.ignored_items {
+                if ignored_id.starts_with("fields:target:") {
+                    if let Some(field_name) = ignored_id.strip_prefix("fields:target:") {
+                        target_handled.insert(field_name.to_string());
+                    }
+                }
+            }
+
+            let target_handled_count = target_handled.len();
 
             // Calculate percentages
             let source_pct = if source_total > 0 {
-                (source_mapped as f64 / source_total as f64 * 100.0) as usize
+                (source_handled_count as f64 / source_total as f64 * 100.0) as usize
             } else {
                 0
             };
 
             let target_pct = if target_total > 0 {
-                (target_mapped as f64 / target_total as f64 * 100.0) as usize
+                (target_handled_count as f64 / target_total as f64 * 100.0) as usize
             } else {
                 0
             };
@@ -1162,25 +1190,53 @@ fn calculate_completion_percentages(state: &State, active_tab: ActiveTab) -> (us
                 0
             };
 
-            // Count mapped items
-            let source_mapped = state.relationship_matches.len();
+            // Count source items that are either mapped OR ignored
+            let mut source_handled = std::collections::HashSet::new();
 
-            // Count unique target relationships that have been mapped to
-            let target_mapped = state.relationship_matches
-                .values()
-                .map(|m| &m.target_field)
-                .collect::<std::collections::HashSet<_>>()
-                .len();
+            // Add all mapped source relationships
+            for relationship_name in state.relationship_matches.keys() {
+                source_handled.insert(relationship_name.clone());
+            }
+
+            // Add all ignored source relationships
+            for ignored_id in &state.ignored_items {
+                if ignored_id.starts_with("relationships:source:") {
+                    if let Some(relationship_name) = ignored_id.strip_prefix("relationships:source:") {
+                        source_handled.insert(relationship_name.to_string());
+                    }
+                }
+            }
+
+            let source_handled_count = source_handled.len();
+
+            // Count target items that are either mapped OR ignored
+            let mut target_handled = std::collections::HashSet::new();
+
+            // Add all mapped target relationships
+            for match_info in state.relationship_matches.values() {
+                target_handled.insert(match_info.target_field.clone());
+            }
+
+            // Add all ignored target relationships
+            for ignored_id in &state.ignored_items {
+                if ignored_id.starts_with("relationships:target:") {
+                    if let Some(relationship_name) = ignored_id.strip_prefix("relationships:target:") {
+                        target_handled.insert(relationship_name.to_string());
+                    }
+                }
+            }
+
+            let target_handled_count = target_handled.len();
 
             // Calculate percentages
             let source_pct = if source_total > 0 {
-                (source_mapped as f64 / source_total as f64 * 100.0) as usize
+                (source_handled_count as f64 / source_total as f64 * 100.0) as usize
             } else {
                 0
             };
 
             let target_pct = if target_total > 0 {
-                (target_mapped as f64 / target_total as f64 * 100.0) as usize
+                (target_handled_count as f64 / target_total as f64 * 100.0) as usize
             } else {
                 0
             };
@@ -1192,25 +1248,53 @@ fn calculate_completion_percentages(state: &State, active_tab: ActiveTab) -> (us
             let source_total = state.source_entities.len();
             let target_total = state.target_entities.len();
 
-            // Count mapped items
-            let source_mapped = state.entity_matches.len();
+            // Count source items that are either mapped OR ignored
+            let mut source_handled = std::collections::HashSet::new();
 
-            // Count unique target entities that have been mapped to
-            let target_mapped = state.entity_matches
-                .values()
-                .map(|m| &m.target_field)
-                .collect::<std::collections::HashSet<_>>()
-                .len();
+            // Add all mapped source entities
+            for entity_name in state.entity_matches.keys() {
+                source_handled.insert(entity_name.clone());
+            }
+
+            // Add all ignored source entities
+            for ignored_id in &state.ignored_items {
+                if ignored_id.starts_with("entities:source:") {
+                    if let Some(entity_name) = ignored_id.strip_prefix("entities:source:") {
+                        source_handled.insert(entity_name.to_string());
+                    }
+                }
+            }
+
+            let source_handled_count = source_handled.len();
+
+            // Count target items that are either mapped OR ignored
+            let mut target_handled = std::collections::HashSet::new();
+
+            // Add all mapped target entities
+            for match_info in state.entity_matches.values() {
+                target_handled.insert(match_info.target_field.clone());
+            }
+
+            // Add all ignored target entities
+            for ignored_id in &state.ignored_items {
+                if ignored_id.starts_with("entities:target:") {
+                    if let Some(entity_name) = ignored_id.strip_prefix("entities:target:") {
+                        target_handled.insert(entity_name.to_string());
+                    }
+                }
+            }
+
+            let target_handled_count = target_handled.len();
 
             // Calculate percentages
             let source_pct = if source_total > 0 {
-                (source_mapped as f64 / source_total as f64 * 100.0) as usize
+                (source_handled_count as f64 / source_total as f64 * 100.0) as usize
             } else {
                 0
             };
 
             let target_pct = if target_total > 0 {
-                (target_mapped as f64 / target_total as f64 * 100.0) as usize
+                (target_handled_count as f64 / target_total as f64 * 100.0) as usize
             } else {
                 0
             };
