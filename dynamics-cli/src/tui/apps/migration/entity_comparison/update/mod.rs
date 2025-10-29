@@ -7,6 +7,7 @@ pub mod manual_mappings;
 pub mod data_loading;
 pub mod import;
 pub mod ignore;
+pub mod search;
 
 use crate::tui::command::Command;
 use super::Msg;
@@ -70,6 +71,12 @@ pub fn update(state: &mut State, msg: Msg) -> Command<Msg> {
         Msg::ManualMappingsListNavigate(key) => manual_mappings::handle_list_navigate(state, key),
         Msg::ManualMappingsListSelect(idx) => manual_mappings::handle_list_select(state, idx),
         Msg::DeleteManualMappingFromModal => manual_mappings::handle_delete_manual_mapping(state),
+
+        // Search
+        Msg::ToggleSearch => search::handle_toggle_search(state),
+        Msg::SearchInputEvent(event) => search::handle_search_input_event(state, event),
+        Msg::ClearSearch => search::handle_clear_search(state),
+        Msg::SearchSelectFirstMatch => search::handle_search_select_first_match(state),
 
         // Export
         Msg::ExportToExcel => mappings::handle_export_to_excel(state),

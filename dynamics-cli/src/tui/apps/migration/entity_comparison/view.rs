@@ -48,6 +48,12 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
         source_items = filter_matched_items(source_items);
     }
 
+    // Apply search filter if there's a search query
+    let search_query = state.search_input.value();
+    if !search_query.is_empty() {
+        source_items = filter_tree_items_by_search(source_items, &search_query);
+    }
+
     let mut target_items = if let Resource::Success(ref metadata) = state.target_metadata {
         // Create reverse matches for target side (target_field -> source_field)
         let reverse_field_matches: HashMap<String, MatchInfo> = state.field_matches.iter()
@@ -103,6 +109,11 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
         target_items = filter_matched_items(target_items);
     }
 
+    // Apply search filter if there's a search query
+    if !search_query.is_empty() {
+        target_items = filter_tree_items_by_search(target_items, &search_query);
+    }
+
     // Apply SourceMatches sorting to target side if enabled
     if sort_mode == super::models::SortMode::SourceMatches {
         target_items = sort_target_by_source_order(&source_items, target_items);
@@ -146,11 +157,51 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
     .title(format!("Target: {} ({}%)", target_entity_name, target_completion))
     .build();
 
-    // Side-by-side layout
-    row![
-        source_panel => Fill(1),
-        target_panel => Fill(1),
-    ]
+    // Build search box if visible (when focused or has content)
+    let search_visible = state.search_is_focused || !state.search_input.value().is_empty();
+
+    if search_visible {
+        // Count filtered results
+        let source_count = source_items.len();
+        let target_count = target_items.len();
+
+        // Create search input
+        let search_input = Element::text_input(
+            crate::tui::FocusId::new("entity-search-input"),
+            &state.search_input.value(),
+            &state.search_input.state,
+        )
+        .placeholder("Search fields... (/ to focus, Esc to clear)")
+        .on_event(Msg::SearchInputEvent)
+        .build();
+
+        // Build search panel title with result counts
+        let search_title = if !search_query.is_empty() {
+            format!("Search - {} matches in source, {} matches in target", source_count, target_count)
+        } else {
+            "Search".to_string()
+        };
+
+        // Search panel
+        let search_panel = Element::panel(search_input)
+            .title(search_title)
+            .build();
+
+        // Main layout with search
+        col![
+            search_panel => Length(3),
+            row![
+                source_panel => Fill(1),
+                target_panel => Fill(1),
+            ] => Fill(1),
+        ]
+    } else {
+        // Side-by-side layout without search
+        row![
+            source_panel => Fill(1),
+            target_panel => Fill(1),
+        ]
+    }
 }
 
 /// Render the back confirmation modal
@@ -733,6 +784,93 @@ pub fn render_ignore_modal(state: &mut State) -> Element<Msg> {
         .width(80)
         .height(30)
         .build()
+}
+
+/// Filter tree items based on fuzzy search query
+/// Searches both logical names and display names
+fn filter_tree_items_by_search(
+    items: Vec<super::tree_items::ComparisonTreeItem>,
+    query: &str,
+) -> Vec<super::tree_items::ComparisonTreeItem> {
+    use fuzzy_matcher::skim::SkimMatcherV2;
+    use fuzzy_matcher::FuzzyMatcher;
+    use super::tree_items::ComparisonTreeItem;
+
+    if query.is_empty() {
+        return items;
+    }
+
+    let matcher = SkimMatcherV2::default();
+
+    items.into_iter().filter_map(|item| {
+        match &item {
+            ComparisonTreeItem::Field(node) => {
+                // Search both logical name and display name
+                let logical_match = matcher.fuzzy_match(&node.metadata.logical_name, query);
+                let display_match = matcher.fuzzy_match(&node.display_name, query);
+
+                if logical_match.is_some() || display_match.is_some() {
+                    Some(item)
+                } else {
+                    None
+                }
+            }
+            ComparisonTreeItem::Relationship(node) => {
+                // Search relationship name and related entity
+                let name_match = matcher.fuzzy_match(&node.metadata.name, query);
+                let entity_match = matcher.fuzzy_match(&node.metadata.related_entity, query);
+
+                if name_match.is_some() || entity_match.is_some() {
+                    Some(item)
+                } else {
+                    None
+                }
+            }
+            ComparisonTreeItem::Entity(node) => {
+                // Search entity name
+                if matcher.fuzzy_match(&node.name, query).is_some() {
+                    Some(item)
+                } else {
+                    None
+                }
+            }
+            ComparisonTreeItem::Container(node) => {
+                // Recursively filter container children
+                let filtered_children = filter_tree_items_by_search(node.children.clone(), query);
+
+                // Keep container if it has matching children OR if container label matches
+                let label_match = matcher.fuzzy_match(&node.label, query);
+
+                if !filtered_children.is_empty() || label_match.is_some() {
+                    Some(ComparisonTreeItem::Container(super::tree_items::ContainerNode {
+                        id: node.id.clone(),
+                        label: node.label.clone(),
+                        children: filtered_children,
+                        container_match_type: node.container_match_type.clone(),
+                        match_info: node.match_info.clone(),
+                    }))
+                } else {
+                    None
+                }
+            }
+            ComparisonTreeItem::View(node) => {
+                // Search view name
+                if matcher.fuzzy_match(&node.metadata.name, query).is_some() {
+                    Some(item)
+                } else {
+                    None
+                }
+            }
+            ComparisonTreeItem::Form(node) => {
+                // Search form name
+                if matcher.fuzzy_match(&node.metadata.name, query).is_some() {
+                    Some(item)
+                } else {
+                    None
+                }
+            }
+        }
+    }).collect()
 }
 
 /// Calculate mapping completion percentages for source and target sides

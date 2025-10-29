@@ -66,6 +66,12 @@ pub enum Msg {
     ManualMappingsListSelect(usize),
     DeleteManualMappingFromModal,
 
+    // Search messages
+    ToggleSearch,              // Show/focus search (triggered by `/`)
+    SearchInputEvent(crate::tui::widgets::TextInputEvent),
+    ClearSearch,               // Clear search and hide box (Esc when focused)
+    SearchSelectFirstMatch,    // Enter in search box
+
     // Export
     ExportToExcel,
 

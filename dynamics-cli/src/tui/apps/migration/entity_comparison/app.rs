@@ -112,6 +112,10 @@ pub struct State {
     pub(super) show_ignore_modal: bool,
     pub(super) ignore_list_state: crate::tui::widgets::ListState,
 
+    // Search state
+    pub(super) search_input: crate::tui::widgets::TextInputField,
+    pub(super) search_is_focused: bool,
+
     // Modal state
     pub(super) show_back_confirmation: bool,
 }
@@ -194,6 +198,8 @@ impl Default for State {
             ignored_items: std::collections::HashSet::new(),
             show_ignore_modal: false,
             ignore_list_state: crate::tui::widgets::ListState::new(),
+            search_input: crate::tui::widgets::TextInputField::new(),
+            search_is_focused: false,
             show_back_confirmation: false,
         }
     }
@@ -283,6 +289,8 @@ impl App for EntityComparisonApp {
             ignored_items: std::collections::HashSet::new(),
             show_ignore_modal: false,
             ignore_list_state: crate::tui::widgets::ListState::new(),
+            search_input: crate::tui::widgets::TextInputField::new(),
+            search_is_focused: false,
             show_back_confirmation: false,
         };
 
@@ -416,6 +424,25 @@ impl App for EntityComparisonApp {
             // Export
             Subscription::keyboard(config.get_keybind("entity_comparison.export"), "Export to Excel", Msg::ExportToExcel),
         ];
+
+        // Search - add global `/` key unless a modal is open
+        let any_modal_open = state.show_back_confirmation
+            || state.show_examples_modal
+            || state.show_prefix_mappings_modal
+            || state.show_manual_mappings_modal
+            || state.show_import_modal
+            || state.show_import_results_modal
+            || state.show_ignore_modal;
+
+        if !any_modal_open && !state.search_is_focused {
+            subs.push(Subscription::keyboard(KeyCode::Char('/'), "Search", Msg::ToggleSearch));
+        }
+
+        // When search is focused, add Esc and Enter shortcuts
+        if state.search_is_focused {
+            subs.push(Subscription::keyboard(KeyCode::Esc, "Clear search", Msg::ClearSearch));
+            subs.push(Subscription::keyboard(KeyCode::Enter, "Select first match", Msg::SearchSelectFirstMatch));
+        }
 
         // When showing confirmation modal, add y/n hotkeys
         if state.show_back_confirmation {
