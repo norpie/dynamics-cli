@@ -86,9 +86,15 @@ fn find_example_value_match(
         return None;
     }
 
-    // Get source value (skip if null/empty)
+    // Get source value (skip if null/empty/boolean/0/1 - too much overlap)
     let source_value = examples.get_field_value(&source_field.logical_name, true, source_entity)?;
-    if source_value == "null" || source_value.trim().is_empty() || source_value == "\"\"" {
+    if source_value == "null"
+        || source_value.trim().is_empty()
+        || source_value == "\"\""
+        || source_value == "true"
+        || source_value == "false"
+        || source_value == "0"
+        || source_value == "1" {
         return None;
     }
 
