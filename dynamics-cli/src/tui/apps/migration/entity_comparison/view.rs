@@ -48,7 +48,9 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
         super::models::HideMode::Off => source_items,
         super::models::HideMode::HideMatched => filter_matched_items(source_items),
         super::models::HideMode::HideIgnored => filter_ignored_items(source_items),
-        super::models::HideMode::HideBoth => filter_both_items(source_items),
+        super::models::HideMode::HideMatchedAndIgnored => filter_matched_and_ignored_items(source_items),
+        super::models::HideMode::HideExamples => filter_example_matches(source_items),
+        super::models::HideMode::HideAll => filter_all_items(source_items),
     };
 
     // Apply search filter based on search mode
@@ -121,7 +123,9 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
         super::models::HideMode::Off => target_items,
         super::models::HideMode::HideMatched => filter_matched_items(target_items),
         super::models::HideMode::HideIgnored => filter_ignored_items(target_items),
-        super::models::HideMode::HideBoth => filter_both_items(target_items),
+        super::models::HideMode::HideMatchedAndIgnored => filter_matched_and_ignored_items(target_items),
+        super::models::HideMode::HideExamples => filter_example_matches(target_items),
+        super::models::HideMode::HideAll => filter_all_items(target_items),
     };
 
     // Apply search filter if there's a search query
@@ -376,30 +380,35 @@ pub fn render_prefix_mappings_modal(state: &State) -> Element<Msg> {
 }
 
 /// Filter out matched items from tree (hide unmatched, show matched)
+/// Exception: ExampleValue matches are treated as unmatched (shown)
 pub fn filter_matched_items(items: Vec<super::tree_items::ComparisonTreeItem>) -> Vec<super::tree_items::ComparisonTreeItem> {
     use super::tree_items::ComparisonTreeItem;
+    use super::models::MatchType;
 
     items.into_iter().filter_map(|item| {
         match item {
             ComparisonTreeItem::Field(ref node) => {
-                // Keep if no match (unmatched field)
-                if node.match_info.is_none() {
+                // Keep if no match OR if match is ExampleValue
+                if node.match_info.is_none()
+                    || node.match_info.as_ref().map(|m| &m.match_type) == Some(&MatchType::ExampleValue) {
                     Some(item)
                 } else {
                     None
                 }
             }
             ComparisonTreeItem::Relationship(ref node) => {
-                // Keep if no match (unmatched relationship)
-                if node.match_info.is_none() {
+                // Keep if no match OR if match is ExampleValue
+                if node.match_info.is_none()
+                    || node.match_info.as_ref().map(|m| &m.match_type) == Some(&MatchType::ExampleValue) {
                     Some(item)
                 } else {
                     None
                 }
             }
             ComparisonTreeItem::Entity(ref node) => {
-                // Keep if no match (unmatched entity)
-                if node.match_info.is_none() {
+                // Keep if no match OR if match is ExampleValue
+                if node.match_info.is_none()
+                    || node.match_info.as_ref().map(|m| &m.match_type) == Some(&MatchType::ExampleValue) {
                     Some(item)
                 } else {
                     None
@@ -409,8 +418,11 @@ pub fn filter_matched_items(items: Vec<super::tree_items::ComparisonTreeItem>) -
                 // Recursively filter container children
                 let filtered_children = filter_matched_items(node.children.clone());
 
-                // Keep container if it has any unmatched children OR if container itself is unmatched
-                if !filtered_children.is_empty() || node.match_info.is_none() {
+                // Keep container if it has any unmatched/example children OR if container itself is unmatched/example
+                let keep_container = node.match_info.is_none()
+                    || node.match_info.as_ref().map(|m| &m.match_type) == Some(&MatchType::ExampleValue);
+
+                if !filtered_children.is_empty() || keep_container {
                     Some(ComparisonTreeItem::Container(super::tree_items::ContainerNode {
                         id: node.id,
                         label: node.label,
@@ -495,8 +507,82 @@ pub fn filter_ignored_items(items: Vec<super::tree_items::ComparisonTreeItem>) -
     }).collect()
 }
 
-/// Filter out both matched AND ignored items
-pub fn filter_both_items(items: Vec<super::tree_items::ComparisonTreeItem>) -> Vec<super::tree_items::ComparisonTreeItem> {
+/// Filter out both matched (except examples) AND ignored items
+pub fn filter_matched_and_ignored_items(items: Vec<super::tree_items::ComparisonTreeItem>) -> Vec<super::tree_items::ComparisonTreeItem> {
+    use super::tree_items::ComparisonTreeItem;
+    use super::models::MatchType;
+
+    items.into_iter().filter_map(|item| {
+        match item {
+            ComparisonTreeItem::Field(ref node) => {
+                // Keep if not ignored AND (no match OR match is ExampleValue)
+                let is_unmatched_or_example = node.match_info.is_none()
+                    || node.match_info.as_ref().map(|m| &m.match_type) == Some(&MatchType::ExampleValue);
+                if !node.is_ignored && is_unmatched_or_example {
+                    Some(item)
+                } else {
+                    None
+                }
+            }
+            ComparisonTreeItem::Relationship(ref node) => {
+                // Keep if not ignored AND (no match OR match is ExampleValue)
+                let is_unmatched_or_example = node.match_info.is_none()
+                    || node.match_info.as_ref().map(|m| &m.match_type) == Some(&MatchType::ExampleValue);
+                if !node.is_ignored && is_unmatched_or_example {
+                    Some(item)
+                } else {
+                    None
+                }
+            }
+            ComparisonTreeItem::Entity(ref node) => {
+                // Keep if not ignored AND (no match OR match is ExampleValue)
+                let is_unmatched_or_example = node.match_info.is_none()
+                    || node.match_info.as_ref().map(|m| &m.match_type) == Some(&MatchType::ExampleValue);
+                if !node.is_ignored && is_unmatched_or_example {
+                    Some(item)
+                } else {
+                    None
+                }
+            }
+            ComparisonTreeItem::Container(node) => {
+                // Recursively filter container children
+                let filtered_children = filter_matched_and_ignored_items(node.children.clone());
+
+                // Keep container if it has any children that are not ignored and (not matched or example)
+                if !filtered_children.is_empty() {
+                    Some(ComparisonTreeItem::Container(super::tree_items::ContainerNode {
+                        id: node.id,
+                        label: node.label,
+                        children: filtered_children,
+                        container_match_type: node.container_match_type,
+                        match_info: node.match_info,
+                    }))
+                } else {
+                    None
+                }
+            }
+            ComparisonTreeItem::View(ref node) => {
+                // Keep if not ignored (Views don't have match info)
+                if !node.is_ignored {
+                    Some(item)
+                } else {
+                    None
+                }
+            }
+            ComparisonTreeItem::Form(ref node) => {
+                // Keep if not ignored (Forms don't have match info)
+                if !node.is_ignored {
+                    Some(item)
+                } else {
+                    None
+                }
+            }
+        }
+    }).collect()
+}
+
+/// Filter out all matched AND ignored items (including examples)
+pub fn filter_all_items(items: Vec<super::tree_items::ComparisonTreeItem>) -> Vec<super::tree_items::ComparisonTreeItem> {
     use super::tree_items::ComparisonTreeItem;
 
     items.into_iter().filter_map(|item| {
@@ -527,7 +613,7 @@ pub fn filter_both_items(items: Vec<super::tree_items::ComparisonTreeItem>) -> V
             }
             ComparisonTreeItem::Container(node) => {
                 // Recursively filter container children
-                let filtered_children = filter_both_items(node.children.clone());
+                let filtered_children = filter_all_items(node.children.clone());
 
                 // Keep container if it has any children that are not ignored and not matched
                 if !filtered_children.is_empty() {
@@ -558,6 +644,69 @@ pub fn filter_both_items(items: Vec<super::tree_items::ComparisonTreeItem>) -> V
                     None
                 }
             }
+        }
+    }).collect()
+}
+
+/// Filter out example matches (hide example matches, show everything else)
+pub fn filter_example_matches(items: Vec<super::tree_items::ComparisonTreeItem>) -> Vec<super::tree_items::ComparisonTreeItem> {
+    use super::tree_items::ComparisonTreeItem;
+    use super::models::MatchType;
+
+    items.into_iter().filter_map(|item| {
+        match item {
+            ComparisonTreeItem::Field(ref node) => {
+                // Hide if match is ExampleValue
+                if let Some(ref match_info) = node.match_info {
+                    if match_info.match_type == MatchType::ExampleValue {
+                        return None;
+                    }
+                }
+                Some(item)
+            }
+            ComparisonTreeItem::Relationship(ref node) => {
+                // Hide if match is ExampleValue
+                if let Some(ref match_info) = node.match_info {
+                    if match_info.match_type == MatchType::ExampleValue {
+                        return None;
+                    }
+                }
+                Some(item)
+            }
+            ComparisonTreeItem::Entity(ref node) => {
+                // Hide if match is ExampleValue
+                if let Some(ref match_info) = node.match_info {
+                    if match_info.match_type == MatchType::ExampleValue {
+                        return None;
+                    }
+                }
+                Some(item)
+            }
+            ComparisonTreeItem::Container(node) => {
+                // Recursively filter container children
+                let filtered_children = filter_example_matches(node.children.clone());
+
+                // Hide container if its match is ExampleValue (but keep if has non-example children)
+                let hide_container = if let Some(ref match_info) = node.match_info {
+                    match_info.match_type == MatchType::ExampleValue
+                } else {
+                    false
+                };
+
+                if !filtered_children.is_empty() || !hide_container {
+                    Some(ComparisonTreeItem::Container(super::tree_items::ContainerNode {
+                        id: node.id,
+                        label: node.label,
+                        children: filtered_children,
+                        container_match_type: node.container_match_type,
+                        match_info: node.match_info,
+                    }))
+                } else {
+                    None
+                }
+            }
+            // Keep View and Form nodes (they don't have match info)
+            ComparisonTreeItem::View(_) | ComparisonTreeItem::Form(_) => Some(item),
         }
     }).collect()
 }

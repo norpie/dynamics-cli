@@ -34,10 +34,12 @@ impl SortMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum HideMode {
     #[default]
-    Off,         // Show all items
-    HideMatched, // Hide items with matches
-    HideIgnored, // Hide ignored items
-    HideBoth,    // Hide matched AND ignored items
+    Off,                   // Show all items
+    HideMatched,           // Hide items with matches (except example matches)
+    HideIgnored,           // Hide ignored items
+    HideMatchedAndIgnored, // Hide matched (except examples) AND ignored items
+    HideExamples,          // Hide only example matches
+    HideAll,               // Hide all matched AND ignored items (including examples)
 }
 
 impl HideMode {
@@ -46,7 +48,9 @@ impl HideMode {
             HideMode::Off => "Show All",
             HideMode::HideMatched => "Hide Matched",
             HideMode::HideIgnored => "Hide Ignored",
-            HideMode::HideBoth => "Hide Both",
+            HideMode::HideMatchedAndIgnored => "Hide Matched+Ignored",
+            HideMode::HideExamples => "Hide Examples",
+            HideMode::HideAll => "Hide All",
         }
     }
 
@@ -54,8 +58,10 @@ impl HideMode {
         match self {
             HideMode::Off => HideMode::HideMatched,
             HideMode::HideMatched => HideMode::HideIgnored,
-            HideMode::HideIgnored => HideMode::HideBoth,
-            HideMode::HideBoth => HideMode::Off,
+            HideMode::HideIgnored => HideMode::HideMatchedAndIgnored,
+            HideMode::HideMatchedAndIgnored => HideMode::HideExamples,
+            HideMode::HideExamples => HideMode::HideAll,
+            HideMode::HideAll => HideMode::Off,
         }
     }
 }
