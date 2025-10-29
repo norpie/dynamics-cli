@@ -114,7 +114,6 @@ pub struct State {
 
     // Search state
     pub(super) search_input: crate::tui::widgets::TextInputField,
-    pub(super) search_is_focused: bool,
 
     // Modal state
     pub(super) show_back_confirmation: bool,
@@ -199,7 +198,6 @@ impl Default for State {
             show_ignore_modal: false,
             ignore_list_state: crate::tui::widgets::ListState::new(),
             search_input: crate::tui::widgets::TextInputField::new(),
-            search_is_focused: false,
             show_back_confirmation: false,
         }
     }
@@ -290,7 +288,6 @@ impl App for EntityComparisonApp {
             show_ignore_modal: false,
             ignore_list_state: crate::tui::widgets::ListState::new(),
             search_input: crate::tui::widgets::TextInputField::new(),
-            search_is_focused: false,
             show_back_confirmation: false,
         };
 
@@ -435,12 +432,11 @@ impl App for EntityComparisonApp {
             || state.show_import_results_modal
             || state.show_ignore_modal;
 
-        if !any_modal_open && !state.search_is_focused {
+        if !any_modal_open {
             use crate::tui::widgets::TreeEvent;
             use crossterm::event::KeyCode;
 
-            log::debug!("✓ Registering multi-select shortcuts (search_is_focused={}, search_value='{}')",
-                       state.search_is_focused, state.search_input.value());
+            log::debug!("✓ Registering multi-select shortcuts (search_value='{}')", state.search_input.value());
 
             // Multi-select shortcuts for source side only
             // Space: Toggle multi-select on current node
@@ -471,8 +467,8 @@ impl App for EntityComparisonApp {
                 Msg::SourceTreeEvent(TreeEvent::ExtendSelectionDown)
             ));
         } else {
-            log::debug!("✗ Skipping multi-select shortcuts (any_modal_open={}, search_is_focused={}, search_value='{}')",
-                       any_modal_open, state.search_is_focused, state.search_input.value());
+            log::debug!("✗ Skipping multi-select shortcuts (any_modal_open={}, search_value='{}')",
+                       any_modal_open, state.search_input.value());
         }
 
         // Search - add global `/` key unless a modal is open
@@ -484,14 +480,8 @@ impl App for EntityComparisonApp {
             || state.show_import_results_modal
             || state.show_ignore_modal;
 
-        if !any_modal_open && !state.search_is_focused {
-            subs.push(Subscription::keyboard(KeyCode::Char('/'), "Search", Msg::ToggleSearch));
-        }
-
-        // When search is focused, add Esc and Enter shortcuts
-        if state.search_is_focused {
-            subs.push(Subscription::keyboard(KeyCode::Esc, "Clear search", Msg::ClearSearch));
-            subs.push(Subscription::keyboard(KeyCode::Enter, "Select first match", Msg::SearchSelectFirstMatch));
+        if !any_modal_open {
+            subs.push(Subscription::keyboard(KeyCode::Char('/'), "Focus search", Msg::ToggleSearch));
         }
 
         // When showing confirmation modal, add y/n hotkeys

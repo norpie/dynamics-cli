@@ -174,52 +174,41 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
     .title(format!("Target: {} ({}%)", target_entity_name, target_completion))
     .build();
 
-    // Build search box if visible (when focused or has content)
-    let search_visible = state.search_is_focused || !state.search_input.value().is_empty();
+    // Count filtered results
+    let source_count = source_items.len();
+    let target_count = target_items.len();
 
-    if search_visible {
-        // Count filtered results
-        let source_count = source_items.len();
-        let target_count = target_items.len();
+    // Create search input (always visible)
+    let search_input = Element::text_input(
+        crate::tui::FocusId::new("entity-search-input"),
+        &state.search_input.value(),
+        &state.search_input.state,
+    )
+    .placeholder("Search fields... (/ to focus)")
+    .on_event(Msg::SearchInputEvent)
+    .on_blur(Msg::SearchInputBlur)
+    .build();
 
-        // Create search input
-        let search_input = Element::text_input(
-            crate::tui::FocusId::new("entity-search-input"),
-            &state.search_input.value(),
-            &state.search_input.state,
-        )
-        .placeholder("Search fields... (/ to focus, Esc to clear)")
-        .on_event(Msg::SearchInputEvent)
-        .on_blur(Msg::SearchInputBlur)
+    // Build search panel title with result counts
+    let search_title = if !search_query.is_empty() {
+        format!("Search - {} matches in source, {} matches in target", source_count, target_count)
+    } else {
+        "Search".to_string()
+    };
+
+    // Search panel
+    let search_panel = Element::panel(search_input)
+        .title(search_title)
         .build();
 
-        // Build search panel title with result counts
-        let search_title = if !search_query.is_empty() {
-            format!("Search - {} matches in source, {} matches in target", source_count, target_count)
-        } else {
-            "Search".to_string()
-        };
-
-        // Search panel
-        let search_panel = Element::panel(search_input)
-            .title(search_title)
-            .build();
-
-        // Main layout with search
-        col![
-            search_panel => Length(3),
-            row![
-                source_panel => Fill(1),
-                target_panel => Fill(1),
-            ] => Fill(1),
-        ]
-    } else {
-        // Side-by-side layout without search
+    // Main layout with search
+    col![
+        search_panel => Length(3),
         row![
             source_panel => Fill(1),
             target_panel => Fill(1),
-        ]
-    }
+        ] => Fill(1),
+    ]
 }
 
 /// Render the back confirmation modal

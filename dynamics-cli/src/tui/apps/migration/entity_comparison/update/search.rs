@@ -4,10 +4,8 @@ use crate::tui::FocusId;
 use super::super::Msg;
 use super::super::app::State;
 
-/// Handle toggle search - show and focus the search box
+/// Handle toggle search - focus the search box
 pub fn handle_toggle_search(state: &mut State) -> Command<Msg> {
-    state.search_is_focused = true;
-
     // Clear multi-selection when starting a search
     // to avoid confusion with filtered items
     clear_all_multi_selections(state);
@@ -17,8 +15,7 @@ pub fn handle_toggle_search(state: &mut State) -> Command<Msg> {
 
 /// Handle search input blur - called when search input loses focus
 pub fn handle_search_input_blur(state: &mut State) -> Command<Msg> {
-    log::debug!("Search input blurred, clearing search_is_focused flag");
-    state.search_is_focused = false;
+    log::debug!("Search input blurred");
     Command::None
 }
 
@@ -49,13 +46,24 @@ pub fn handle_search_input_event(state: &mut State, event: TextInputEvent) -> Co
     Command::None
 }
 
-/// Handle clear search - clear text and hide box
+/// Handle clear search - clear text
 pub fn handle_clear_search(state: &mut State) -> Command<Msg> {
     state.search_input.set_value(String::new());
-    state.search_is_focused = false;
 
     // Clear multi-selection when clearing search
     clear_all_multi_selections(state);
+
+    // Invalidate tree caches so they rebuild without filtering
+    state.source_fields_tree.invalidate_cache();
+    state.target_fields_tree.invalidate_cache();
+    state.source_relationships_tree.invalidate_cache();
+    state.target_relationships_tree.invalidate_cache();
+    state.source_views_tree.invalidate_cache();
+    state.target_views_tree.invalidate_cache();
+    state.source_forms_tree.invalidate_cache();
+    state.target_forms_tree.invalidate_cache();
+    state.source_entities_tree.invalidate_cache();
+    state.target_entities_tree.invalidate_cache();
 
     Command::ClearFocus
 }
@@ -82,15 +90,13 @@ pub fn handle_search_select_first_match(state: &mut State) -> Command<Msg> {
     // to the tree, which already handles selection
 
     // Since the tree already shows filtered results, we can leverage the tree's
-    // built-in selection. We just need to ensure the search stays focused and
-    // the search term remains in the box.
+    // built-in selection. We just need to ensure the search term remains in the box.
 
     // For now, return None to keep search open.
     // In a more complete implementation, we'd need to:
     // 1. Get the filtered tree items
     // 2. Find the first item's node ID
     // 3. Send a SourceTreeNodeClicked or TargetTreeNodeClicked message
-    // 4. Keep search_is_focused = true
 
     Command::None
 }
