@@ -70,11 +70,15 @@ pub fn handle_ignore_item(state: &mut State) -> Command<Msg> {
 /// Open the ignore manager modal
 pub fn handle_open_modal(state: &mut State) -> Command<Msg> {
     state.show_ignore_modal = true;
-    state.ignore_list_state.select(if state.ignored_items.is_empty() {
-        None
-    } else {
-        Some(0)
-    });
+    let item_count = state.ignored_items.len();
+    state.ignore_list_state.select_and_scroll(
+        if state.ignored_items.is_empty() {
+            None
+        } else {
+            Some(0)
+        },
+        item_count,
+    );
     Command::None
 }
 
@@ -98,7 +102,8 @@ pub fn handle_navigate(state: &mut State, key: KeyCode) -> Command<Msg> {
 
 /// Handle selecting an item in ignore list
 pub fn handle_select(state: &mut State, index: usize) -> Command<Msg> {
-    state.ignore_list_state.select(Some(index));
+    let item_count = state.ignored_items.len();
+    state.ignore_list_state.select_and_scroll(Some(index), item_count);
     Command::None
 }
 
@@ -113,11 +118,16 @@ pub fn handle_delete_item(state: &mut State) -> Command<Msg> {
 
             // Adjust selection after deletion
             let new_count = state.ignored_items.len();
-            if new_count == 0 {
-                state.ignore_list_state.select(None);
-            } else if selected_index >= new_count {
-                state.ignore_list_state.select(Some(new_count - 1));
-            }
+            state.ignore_list_state.select_and_scroll(
+                if new_count == 0 {
+                    None
+                } else if selected_index >= new_count {
+                    Some(new_count - 1)
+                } else {
+                    Some(selected_index)
+                },
+                new_count,
+            );
 
             // Persist to config
             let source_entity = state.source_entity.clone();
@@ -142,7 +152,7 @@ pub fn handle_delete_item(state: &mut State) -> Command<Msg> {
 pub fn handle_clear_all(state: &mut State) -> Command<Msg> {
     log::info!("Clearing all ignored items");
     state.ignored_items.clear();
-    state.ignore_list_state.select(None);
+    state.ignore_list_state.select_and_scroll(None, 0);
 
     // Persist cleared state to config
     let source_entity = state.source_entity.clone();

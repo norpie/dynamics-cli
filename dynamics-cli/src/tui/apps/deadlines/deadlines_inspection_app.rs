@@ -83,8 +83,9 @@ impl State {
     fn new(entity_type: String, transformed_records: Vec<TransformedDeadline>) -> Self {
         let mut list_state = ListState::default();
         // Auto-select first record if any exist
+        let item_count = transformed_records.len();
         if !transformed_records.is_empty() {
-            list_state.select(Some(0));
+            list_state.select_and_scroll(Some(0), item_count);
         }
 
         Self {
@@ -137,7 +138,8 @@ impl App for DeadlinesInspectionApp {
             Msg::SelectRecord(idx) => {
                 if idx < state.transformed_records.len() {
                     state.selected_record_idx = idx;
-                    state.list_state.select(Some(idx));
+                    let item_count = state.transformed_records.len();
+                    state.list_state.select_and_scroll(Some(idx), item_count);
                 }
                 Command::None
             }

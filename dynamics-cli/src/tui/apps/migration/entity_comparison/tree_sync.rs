@@ -49,8 +49,8 @@ pub fn update_mirrored_selection(state: &mut State, source_id: &str) {
             expand_parent_path(state.target_tree_for_tab(), &target_id);
         }
 
-        // Set target tree selection
-        state.target_tree_for_tab().select(Some(target_id));
+        // Set target tree selection and scroll to ensure it's visible
+        state.target_tree_for_tab().select_and_scroll(Some(target_id));
     }
 }
 

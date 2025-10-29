@@ -20,7 +20,8 @@ pub fn handle_list_navigate(state: &mut State, key: crossterm::event::KeyCode) -
 }
 
 pub fn handle_list_select(state: &mut State, index: usize) -> Command<Msg> {
-    state.manual_mappings_list_state.select(Some(index));
+    let item_count = state.field_mappings.len();
+    state.manual_mappings_list_state.select_and_scroll(Some(index), item_count);
     Command::None
 }
 

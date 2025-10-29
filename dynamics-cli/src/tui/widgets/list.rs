@@ -81,8 +81,19 @@ impl ListState {
     }
 
     /// Set selected index (useful for initialization)
+    /// Note: This does NOT adjust scroll. Use select_and_scroll() if you need
+    /// to ensure the selected item is visible.
     pub fn select(&mut self, index: Option<usize>) {
         self.selected = index;
+    }
+
+    /// Set selected index and adjust scroll to ensure it's visible
+    /// This should be used when programmatically changing selection.
+    pub fn select_and_scroll(&mut self, index: Option<usize>, item_count: usize) {
+        self.selected = index;
+        if let Some(height) = self.viewport_height {
+            self.update_scroll(height, item_count);
+        }
     }
 
     /// Handle navigation key, returns true if handled
@@ -105,7 +116,7 @@ impl ListState {
                 true
             }
             KeyCode::PageUp => {
-                self.page_up(height);
+                self.page_up(height, item_count);
                 true
             }
             KeyCode::PageDown => {
@@ -113,7 +124,7 @@ impl ListState {
                 true
             }
             KeyCode::Home => {
-                self.select_first();
+                self.select_first(height, item_count);
                 true
             }
             KeyCode::End => {
@@ -132,20 +143,17 @@ impl ListState {
         if let Some(sel) = self.selected {
             if sel > 0 {
                 self.selected = Some(sel - 1);
-                // Adjust scroll if needed (scrolloff logic)
-                if sel > 0 && (sel - 1) < self.scroll_offset + self.scroll_off {
-                    self.scroll_offset = self.scroll_offset.saturating_sub(1);
-                }
             } else if self.wrap_around {
                 // At top, wrap to bottom
                 self.selected = Some(item_count - 1);
-                // Scroll to bottom to show last item
-                self.scroll_offset = item_count.saturating_sub(visible_height);
             }
         } else {
             // No selection, select first
             self.selected = Some(0);
         }
+
+        // Ensure the new selection is visible
+        self.update_scroll(visible_height, item_count);
     }
 
     fn move_down(&mut self, item_count: usize, visible_height: usize) {
@@ -156,52 +164,54 @@ impl ListState {
         if let Some(sel) = self.selected {
             if sel < item_count - 1 {
                 self.selected = Some(sel + 1);
-                // Adjust scroll if needed (scrolloff logic)
-                if sel + 1 >= self.scroll_offset + visible_height - self.scroll_off {
-                    let max_scroll = item_count.saturating_sub(visible_height);
-                    self.scroll_offset = (self.scroll_offset + 1).min(max_scroll);
-                }
             } else if self.wrap_around {
                 // At bottom, wrap to top
                 self.selected = Some(0);
-                self.scroll_offset = 0;
             }
         } else {
             // No selection, select first
             self.selected = Some(0);
         }
+
+        // Ensure the new selection is visible
+        self.update_scroll(visible_height, item_count);
     }
 
-    fn page_up(&mut self, visible_height: usize) {
+    fn page_up(&mut self, visible_height: usize, item_count: usize) {
         if let Some(sel) = self.selected {
             let new_sel = sel.saturating_sub(visible_height);
             self.selected = Some(new_sel);
-            self.scroll_offset = self.scroll_offset.saturating_sub(visible_height);
         } else {
             self.selected = Some(0);
         }
+
+        // Ensure the new selection is visible
+        self.update_scroll(visible_height, item_count);
     }
 
     fn page_down(&mut self, item_count: usize, visible_height: usize) {
         if let Some(sel) = self.selected {
             let new_sel = (sel + visible_height).min(item_count - 1);
             self.selected = Some(new_sel);
-            self.scroll_offset = (self.scroll_offset + visible_height).min(item_count.saturating_sub(visible_height));
         } else if item_count > 0 {
             self.selected = Some(0);
         }
+
+        // Ensure the new selection is visible
+        self.update_scroll(visible_height, item_count);
     }
 
-    fn select_first(&mut self) {
+    fn select_first(&mut self, visible_height: usize, item_count: usize) {
         self.selected = Some(0);
-        self.scroll_offset = 0;
+        // Ensure the selection is visible
+        self.update_scroll(visible_height, item_count);
     }
 
     fn select_last(&mut self, item_count: usize, visible_height: usize) {
         if item_count > 0 {
             self.selected = Some(item_count - 1);
-            // Scroll to show last item
-            self.scroll_offset = item_count.saturating_sub(visible_height);
+            // Ensure the selection is visible
+            self.update_scroll(visible_height, item_count);
         }
     }
 

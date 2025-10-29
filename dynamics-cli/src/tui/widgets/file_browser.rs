@@ -128,7 +128,8 @@ impl FileBrowserState {
     /// Select first entry matching the predicate
     pub fn select_first_matching(&mut self, predicate: impl Fn(&FileBrowserEntry) -> bool) {
         if let Some(idx) = self.entries.iter().position(|e| predicate(e)) {
-            self.list_state.select(Some(idx));
+            let item_count = self.entries.len();
+            self.list_state.select_and_scroll(Some(idx), item_count);
         }
     }
 
@@ -177,10 +178,11 @@ impl FileBrowserState {
         self.entries = read_directory(&self.current_path, self.filter)?;
 
         // Reset selection to first item
+        let item_count = self.entries.len();
         if !self.entries.is_empty() {
-            self.list_state.select(Some(0));
+            self.list_state.select_and_scroll(Some(0), item_count);
         } else {
-            self.list_state.select(None);
+            self.list_state.select_and_scroll(None, item_count);
         }
 
         Ok(())

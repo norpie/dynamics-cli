@@ -135,8 +135,19 @@ impl TreeState {
     }
 
     /// Set selected node by ID
+    /// Note: This does NOT adjust scroll. Use select_and_scroll() if you need
+    /// to ensure the selected item is visible.
     pub fn select(&mut self, node_id: Option<String>) {
         self.selected = node_id;
+    }
+
+    /// Set selected node by ID and adjust scroll to ensure it's visible
+    /// This should be used when programmatically changing selection.
+    pub fn select_and_scroll(&mut self, node_id: Option<String>) {
+        self.selected = node_id;
+        if let Some(height) = self.viewport_height {
+            self.update_scroll(height);
+        }
     }
 
     /// Check if a node is expanded
@@ -180,35 +191,22 @@ impl TreeState {
         if let Some(current) = &self.selected {
             if let Some(pos) = self.visible_order.iter().position(|id| id == current) {
                 if pos + 1 < self.visible_order.len() {
-                    let new_pos = pos + 1;
-                    self.selected = Some(self.visible_order[new_pos].clone());
-
-                    // Scroll down incrementally to maintain scrolloff from bottom
-                    // Use actual viewport height if available, otherwise don't adjust scroll
-                    if let Some(viewport_height) = self.viewport_height {
-                        let item_count = self.visible_order.len();
-
-                        // Don't scroll if all items fit
-                        if item_count > viewport_height {
-                            let max_offset = item_count.saturating_sub(viewport_height);
-                            let scroll_trigger = self.scroll_offset + viewport_height - self.scroll_off;
-
-                            if new_pos >= scroll_trigger && self.scroll_offset < max_offset {
-                                self.scroll_offset += 1;
-                            }
-                        }
-                    }
+                    self.selected = Some(self.visible_order[pos + 1].clone());
                 }
             } else {
                 // Current selection not in visible order (stale state), select first
                 if !self.visible_order.is_empty() {
                     self.selected = Some(self.visible_order[0].clone());
-                    self.scroll_offset = 0;
                 }
             }
         } else if !self.visible_order.is_empty() {
             // No selection, select first
             self.selected = Some(self.visible_order[0].clone());
+        }
+
+        // Ensure the new selection is visible
+        if let Some(height) = self.viewport_height {
+            self.update_scroll(height);
         }
     }
 
@@ -218,21 +216,21 @@ impl TreeState {
             if let Some(pos) = self.visible_order.iter().position(|id| id == current) {
                 if pos > 0 {
                     self.selected = Some(self.visible_order[pos - 1].clone());
-                    // Adjust scroll if needed (scrolloff logic) - same as List widget
-                    if (pos as isize - self.scroll_offset as isize) <= self.scroll_off as isize {
-                        self.scroll_offset = self.scroll_offset.saturating_sub(1);
-                    }
                 }
             } else {
                 // Current selection not in visible order (stale state), select first
                 if !self.visible_order.is_empty() {
                     self.selected = Some(self.visible_order[0].clone());
-                    self.scroll_offset = 0;
                 }
             }
         } else if !self.visible_order.is_empty() {
             // No selection, select first
             self.selected = Some(self.visible_order[0].clone());
+        }
+
+        // Ensure the new selection is visible
+        if let Some(height) = self.viewport_height {
+            self.update_scroll(height);
         }
     }
 
@@ -242,6 +240,11 @@ impl TreeState {
             if let Some(parent) = self.parent_of(current) {
                 self.selected = Some(parent.to_string());
             }
+        }
+
+        // Ensure the new selection is visible
+        if let Some(height) = self.viewport_height {
+            self.update_scroll(height);
         }
     }
 

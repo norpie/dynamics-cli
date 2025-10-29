@@ -99,8 +99,8 @@ pub fn handle_source_node_clicked(state: &mut State, node_id: String) -> Command
         ActiveTab::Entities => &mut state.source_entities_tree,
     };
 
-    // Update selection
-    tree_state.select(Some(node_id.clone()));
+    // Update selection and scroll to ensure visibility
+    tree_state.select_and_scroll(Some(node_id.clone()));
 
     // Release the borrow
     drop(tree_state);
@@ -121,8 +121,8 @@ pub fn handle_target_node_clicked(state: &mut State, node_id: String) -> Command
         ActiveTab::Entities => &mut state.target_entities_tree,
     };
 
-    // Update selection
-    tree_state.select(Some(node_id.clone()));
+    // Update selection and scroll to ensure visibility
+    tree_state.select_and_scroll(Some(node_id.clone()));
 
     Command::None
 }

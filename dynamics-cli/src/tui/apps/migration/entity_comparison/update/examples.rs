@@ -20,7 +20,8 @@ pub fn handle_list_navigate(state: &mut State, key: KeyCode) -> Command<Msg> {
 }
 
 pub fn handle_list_select(state: &mut State, index: usize) -> Command<Msg> {
-    state.examples_list_state.select(Some(index));
+    let item_count = state.examples.pairs.len();
+    state.examples_list_state.select_and_scroll(Some(index), item_count);
     Command::None
 }
 

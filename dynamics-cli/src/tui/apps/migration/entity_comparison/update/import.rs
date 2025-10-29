@@ -477,7 +477,27 @@ pub fn handle_results_navigate(state: &mut State, key: KeyCode) -> Command<Msg> 
 
 /// Handle selecting an item in import results list (no-op for read-only list)
 pub fn handle_results_select(state: &mut State, index: usize) -> Command<Msg> {
-    state.import_results_list.select(Some(index));
+    // Calculate total number of lines (same as in handle_results_set_viewport_height)
+    let line_count = if let Some(results) = &state.import_results {
+        let mut count = 2; // header + blank line
+        if !results.added.is_empty() {
+            count += 1 + results.added.len() + 1;
+        }
+        if !results.updated.is_empty() {
+            count += 1 + results.updated.len() + 1;
+        }
+        if !results.removed.is_empty() {
+            count += 1 + results.removed.len() + 1;
+        }
+        if !results.unparsed.is_empty() {
+            count += 1 + results.unparsed.len();
+        }
+        count
+    } else {
+        0
+    };
+
+    state.import_results_list.select_and_scroll(Some(index), line_count);
     Command::None
 }
 

@@ -176,9 +176,10 @@ impl App for SelectQuestionnaireApp {
                 match result {
                     Ok(questionnaires) => {
                         let has_items = !questionnaires.is_empty();
+                        let item_count = questionnaires.len();
                         state.questionnaires = Resource::Success(questionnaires);
                         if has_items {
-                            state.list_state.select(Some(0));
+                            state.list_state.select_and_scroll(Some(0), item_count);
                             return Command::set_focus(FocusId::new("questionnaire-list"));
                         }
                     }

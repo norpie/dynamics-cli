@@ -287,8 +287,9 @@ impl App for MigrationComparisonSelectApp {
                     Ok(comparisons) => {
                         state.comparisons = comparisons;
                         state.list_state = ListState::new();
+                        let item_count = state.comparisons.len();
                         if !state.comparisons.is_empty() {
-                            state.list_state.select(Some(0));
+                            state.list_state.select_and_scroll(Some(0), item_count);
                             // Focus the list after loading comparisons
                             return Command::set_focus(FocusId::new("comparison-list"));
                         }

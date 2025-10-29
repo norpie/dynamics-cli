@@ -672,7 +672,7 @@ impl App for OperationQueueApp {
                     let item_id = id.clone();
                     state.queue_items.retain(|item| &item.id != id);
                     state.selected_item_id = None; // Clear selection after delete
-                    state.tree_state.select(None);
+                    state.tree_state.select_and_scroll(None);
                     state.tree_state.invalidate_cache();
 
                     return Command::perform(
@@ -782,7 +782,7 @@ impl App for OperationQueueApp {
                 state.clear_confirm_modal.close();
                 state.queue_items.clear();
                 state.selected_item_id = None;
-                state.tree_state.select(None);
+                state.tree_state.select_and_scroll(None);
                 state.tree_state.invalidate_cache();
 
                 Command::perform(
