@@ -5,6 +5,9 @@ use super::super::app::State;
 use super::super::tree_sync::{update_mirrored_selection, mirror_container_toggle};
 
 pub fn handle_source_tree_event(state: &mut State, event: TreeEvent) -> Command<Msg> {
+    // Update focused side
+    state.focused_side = super::super::Side::Source;
+
     // Handle source tree navigation/interaction
     let tree_state = match state.active_tab {
         ActiveTab::Fields => &mut state.source_fields_tree,
@@ -51,6 +54,9 @@ pub fn handle_source_tree_event(state: &mut State, event: TreeEvent) -> Command<
 }
 
 pub fn handle_target_tree_event(state: &mut State, event: TreeEvent) -> Command<Msg> {
+    // Update focused side
+    state.focused_side = super::super::Side::Target;
+
     // Handle target tree navigation/interaction
     let tree_state = match state.active_tab {
         ActiveTab::Fields => &mut state.target_fields_tree,
@@ -90,6 +96,9 @@ pub fn handle_target_viewport_height(state: &mut State, height: usize) -> Comman
 }
 
 pub fn handle_source_node_clicked(state: &mut State, node_id: String) -> Command<Msg> {
+    // Update focused side
+    state.focused_side = super::super::Side::Source;
+
     // Get the tree state for the active tab
     let tree_state = match state.active_tab {
         ActiveTab::Fields => &mut state.source_fields_tree,
@@ -112,6 +121,9 @@ pub fn handle_source_node_clicked(state: &mut State, node_id: String) -> Command
 }
 
 pub fn handle_target_node_clicked(state: &mut State, node_id: String) -> Command<Msg> {
+    // Update focused side
+    state.focused_side = super::super::Side::Target;
+
     // Get the tree state for the active tab
     let tree_state = match state.active_tab {
         ActiveTab::Fields => &mut state.target_fields_tree,
