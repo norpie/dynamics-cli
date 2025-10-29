@@ -67,10 +67,15 @@ pub enum Msg {
     DeleteManualMappingFromModal,
 
     // Search messages
-    ToggleSearch,              // Show/focus search (triggered by `/`)
-    SearchInputEvent(crate::tui::widgets::TextInputEvent),
-    SearchInputBlur,           // Search input lost focus
-    ClearSearch,               // Clear search and hide box (Esc when focused)
+    ToggleSearch,              // Focus search (triggered by `/`)
+    ToggleSearchMode,          // Toggle between Unified and Independent modes (Ctrl+/)
+    SearchInputEvent(crate::tui::widgets::TextInputEvent),  // Unified search
+    SourceSearchEvent(crate::tui::widgets::TextInputEvent), // Independent: source search
+    TargetSearchEvent(crate::tui::widgets::TextInputEvent), // Independent: target search
+    SearchInputBlur,           // Unified search lost focus
+    SourceSearchBlur,          // Source search lost focus
+    TargetSearchBlur,          // Target search lost focus
+    ClearSearch,               // Clear search (Esc when focused)
     SearchSelectFirstMatch,    // Enter in search box
 
     // Export

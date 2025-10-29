@@ -113,7 +113,10 @@ pub struct State {
     pub(super) ignore_list_state: crate::tui::widgets::ListState,
 
     // Search state
-    pub(super) search_input: crate::tui::widgets::TextInputField,
+    pub(super) search_mode: super::models::SearchMode,
+    pub(super) unified_search: crate::tui::widgets::TextInputField,
+    pub(super) source_search: crate::tui::widgets::TextInputField,
+    pub(super) target_search: crate::tui::widgets::TextInputField,
 
     // Modal state
     pub(super) show_back_confirmation: bool,
@@ -197,7 +200,10 @@ impl Default for State {
             ignored_items: std::collections::HashSet::new(),
             show_ignore_modal: false,
             ignore_list_state: crate::tui::widgets::ListState::new(),
-            search_input: crate::tui::widgets::TextInputField::new(),
+            search_mode: super::models::SearchMode::default(),
+            unified_search: crate::tui::widgets::TextInputField::new(),
+            source_search: crate::tui::widgets::TextInputField::new(),
+            target_search: crate::tui::widgets::TextInputField::new(),
             show_back_confirmation: false,
         }
     }
@@ -287,7 +293,10 @@ impl App for EntityComparisonApp {
             ignored_items: std::collections::HashSet::new(),
             show_ignore_modal: false,
             ignore_list_state: crate::tui::widgets::ListState::new(),
-            search_input: crate::tui::widgets::TextInputField::new(),
+            search_mode: super::models::SearchMode::default(),
+            unified_search: crate::tui::widgets::TextInputField::new(),
+            source_search: crate::tui::widgets::TextInputField::new(),
+            target_search: crate::tui::widgets::TextInputField::new(),
             show_back_confirmation: false,
         };
 
@@ -436,7 +445,13 @@ impl App for EntityComparisonApp {
             use crate::tui::widgets::TreeEvent;
             use crossterm::event::KeyCode;
 
-            log::debug!("✓ Registering multi-select shortcuts (search_value='{}')", state.search_input.value());
+            let search_value = match state.search_mode {
+                super::models::SearchMode::Unified => state.unified_search.value(),
+                super::models::SearchMode::Independent => {
+                    &format!("source:'{}', target:'{}'", state.source_search.value(), state.target_search.value())
+                }
+            };
+            log::debug!("✓ Registering multi-select shortcuts (search_value='{}')", search_value);
 
             // Multi-select shortcuts for source side only
             // Space: Toggle multi-select on current node
@@ -467,8 +482,14 @@ impl App for EntityComparisonApp {
                 Msg::SourceTreeEvent(TreeEvent::ExtendSelectionDown)
             ));
         } else {
+            let search_value = match state.search_mode {
+                super::models::SearchMode::Unified => state.unified_search.value(),
+                super::models::SearchMode::Independent => {
+                    &format!("source:'{}', target:'{}'", state.source_search.value(), state.target_search.value())
+                }
+            };
             log::debug!("✗ Skipping multi-select shortcuts (any_modal_open={}, search_value='{}')",
-                       any_modal_open, state.search_input.value());
+                       any_modal_open, search_value);
         }
 
         // Search - add global `/` key unless a modal is open
@@ -482,6 +503,7 @@ impl App for EntityComparisonApp {
 
         if !any_modal_open {
             subs.push(Subscription::keyboard(KeyCode::Char('/'), "Focus search", Msg::ToggleSearch));
+            subs.push(Subscription::keyboard(KeyCode::Char('?'), "Toggle search mode", Msg::ToggleSearchMode));
         }
 
         // When showing confirmation modal, add y/n hotkeys

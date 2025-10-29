@@ -51,11 +51,13 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
         super::models::HideMode::HideBoth => filter_both_items(source_items),
     };
 
-    // Apply search filter if there's a search query
-    let search_query = state.search_input.value();
-    let search_active = !search_query.is_empty();
-    if search_active {
-        source_items = filter_tree_items_by_search(source_items, &search_query);
+    // Apply search filter based on search mode
+    let (source_search_query, target_search_query) = super::update::search::get_search_terms(state);
+    let source_search_active = source_search_query.is_some();
+    let target_search_active = target_search_query.is_some();
+
+    if let Some(query) = source_search_query {
+        source_items = filter_tree_items_by_search(source_items, query);
     }
 
     let mut target_items = if let Resource::Success(ref metadata) = state.target_metadata {
@@ -117,8 +119,8 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
     };
 
     // Apply search filter if there's a search query
-    if search_active {
-        target_items = filter_tree_items_by_search(target_items, &search_query);
+    if let Some(query) = target_search_query {
+        target_items = filter_tree_items_by_search(target_items, query);
     }
 
     // Apply SourceMatches sorting to target side if enabled
@@ -144,21 +146,24 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
 
     // Auto-expand containers with matching children when searching
     // This ensures filtered children are visible even if containers were collapsed
-    if search_active {
+    if source_search_active {
         auto_expand_containers_with_children(&source_items, source_tree_state);
-        auto_expand_containers_with_children(&target_items, target_tree_state);
-
         // CRITICAL: Reset scroll offset when search is active
-        // Otherwise if user scrolled before searching, the scroll offset may be beyond
-        // the filtered items, causing empty tree display
         source_tree_state.reset_scroll();
+    }
+
+    if target_search_active {
+        auto_expand_containers_with_children(&target_items, target_tree_state);
+        // CRITICAL: Reset scroll offset when search is active
         target_tree_state.reset_scroll();
     }
 
     // Invalidate tree cache when search or hide mode filtering is active
     // This ensures visible_order reflects the actual filtered items
-    if search_active || hide_mode != super::models::HideMode::Off {
+    if source_search_active || hide_mode != super::models::HideMode::Off {
         source_tree_state.invalidate_cache();
+    }
+    if target_search_active || hide_mode != super::models::HideMode::Off {
         target_tree_state.invalidate_cache();
     }
 
@@ -197,32 +202,86 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
     let source_count = source_items.len();
     let target_count = target_items.len();
 
-    // Create search input (always visible)
-    let search_input = Element::text_input(
-        crate::tui::FocusId::new("entity-search-input"),
-        &state.search_input.value(),
-        &state.search_input.state,
-    )
-    .placeholder("Search fields... (/ to focus)")
-    .on_event(Msg::SearchInputEvent)
-    .on_blur(Msg::SearchInputBlur)
-    .build();
+    // Create search UI based on mode
+    use super::models::SearchMode;
+    let search_ui = match state.search_mode {
+        SearchMode::Unified => {
+            // Single search box that filters both sides, wrapped in a panel
+            let search_input = Element::text_input(
+                crate::tui::FocusId::new("unified-search-input"),
+                state.unified_search.value(),
+                &state.unified_search.state,
+            )
+            .placeholder("Search both sides... (/ to focus, ? to split)")
+            .on_event(Msg::SearchInputEvent)
+            .on_blur(Msg::SearchInputBlur)
+            .build();
 
-    // Build search panel title with result counts
-    let search_title = if !search_query.is_empty() {
-        format!("Search - {} matches in source, {} matches in target", source_count, target_count)
-    } else {
-        "Search".to_string()
+            let title = if source_search_active {
+                format!("Search (Unified) - {} matches in source, {} matches in target", source_count, target_count)
+            } else {
+                "Search (Unified)".to_string()
+            };
+
+            Element::panel(search_input)
+                .title(title)
+                .build()
+        }
+        SearchMode::Independent => {
+            // Two search boxes side by side, each in its own panel
+            let source_search = Element::text_input(
+                crate::tui::FocusId::new("source-search-input"),
+                state.source_search.value(),
+                &state.source_search.state,
+            )
+            .placeholder("Filter source... (? to merge)")
+            .on_event(Msg::SourceSearchEvent)
+            .on_blur(Msg::SourceSearchBlur)
+            .build();
+
+            let target_search = Element::text_input(
+                crate::tui::FocusId::new("target-search-input"),
+                state.target_search.value(),
+                &state.target_search.state,
+            )
+            .placeholder("Filter target...")
+            .on_event(Msg::TargetSearchEvent)
+            .on_blur(Msg::TargetSearchBlur)
+            .build();
+
+            // Wrap each in a panel with title showing match count
+            let source_panel_title = if source_search_active {
+                format!("Source Search ({} matches)", source_count)
+            } else {
+                "Source Search".to_string()
+            };
+
+            let target_panel_title = if target_search_active {
+                format!("Target Search ({} matches)", target_count)
+            } else {
+                "Target Search".to_string()
+            };
+
+            let source_panel = Element::panel(source_search)
+                .title(source_panel_title)
+                .build();
+
+            let target_panel = Element::panel(target_search)
+                .title(target_panel_title)
+                .build();
+
+            // Return row of two panels (no outer wrapper)
+            row![
+                source_panel => Fill(1),
+                target_panel => Fill(1),
+            ]
+        }
     };
 
-    // Search panel
-    let search_panel = Element::panel(search_input)
-        .title(search_title)
-        .build();
-
     // Main layout with search
+    // Note: Both modes use 3 lines (1 panel with input = 3 lines height)
     col![
-        search_panel => Length(3),
+        search_ui => Length(3),
         row![
             source_panel => Fill(1),
             target_panel => Fill(1),

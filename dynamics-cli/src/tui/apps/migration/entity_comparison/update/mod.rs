@@ -74,8 +74,13 @@ pub fn update(state: &mut State, msg: Msg) -> Command<Msg> {
 
         // Search
         Msg::ToggleSearch => search::handle_toggle_search(state),
+        Msg::ToggleSearchMode => search::handle_toggle_search_mode(state),
         Msg::SearchInputEvent(event) => search::handle_search_input_event(state, event),
+        Msg::SourceSearchEvent(event) => search::handle_source_search_event(state, event),
+        Msg::TargetSearchEvent(event) => search::handle_target_search_event(state, event),
         Msg::SearchInputBlur => search::handle_search_input_blur(state),
+        Msg::SourceSearchBlur => search::handle_source_search_blur(state),
+        Msg::TargetSearchBlur => search::handle_target_search_blur(state),
         Msg::ClearSearch => search::handle_clear_search(state),
         Msg::SearchSelectFirstMatch => search::handle_search_select_first_match(state),
 

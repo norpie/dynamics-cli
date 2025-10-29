@@ -115,6 +115,23 @@ pub enum Side {
     Target,
 }
 
+/// Search mode for filtering tree items
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SearchMode {
+    #[default]
+    Unified,      // One search box filters both sides
+    Independent,  // Two search boxes, each filters one side
+}
+
+impl SearchMode {
+    pub fn toggle(&self) -> Self {
+        match self {
+            SearchMode::Unified => SearchMode::Independent,
+            SearchMode::Independent => SearchMode::Unified,
+        }
+    }
+}
+
 /// Example record pair for live data preview
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExamplePair {
