@@ -144,12 +144,22 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
         target_items = sort_target_by_source_order(&source_items, target_items);
     }
 
-    // Calculate completion percentages
-    let (source_completion, target_completion) = calculate_completion_percentages(state, active_tab);
+    // Calculate detailed completion statistics
+    let (source_stats, target_stats) = calculate_detailed_completion_stats(state, active_tab);
 
     // Cache entity names before borrowing tree states
     let source_entity_name = state.source_entity.clone();
     let target_entity_name = state.target_entity.clone();
+
+    // Get active example label if enabled
+    let example_label = if state.examples.enabled {
+        state.examples.get_active_pair()
+            .and_then(|pair| pair.label.as_ref())
+            .map(|label| format!(" [{}]", label))
+            .unwrap_or_else(|| " [Example]".to_string())
+    } else {
+        String::new()
+    };
 
     // Get the appropriate tree state for the active tab based on which side
     let (source_tree_state, target_tree_state) = match active_tab {
@@ -186,10 +196,11 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
     // Source panel with tree - renderer will call on_render with actual area.height
     let source_panel_title = {
         let multi_select_count = source_tree_state.total_selection_count();
+        let stats_str = source_stats.format_compact();
         if multi_select_count > 1 {
-            format!("Source: {} ({}%) - {} selected", source_entity_name, source_completion, multi_select_count)
+            format!("Source: {} ({}) - {} selected{}", source_entity_name, stats_str, multi_select_count, example_label)
         } else {
-            format!("Source: {} ({}%)", source_entity_name, source_completion)
+            format!("Source: {} ({}){}", source_entity_name, stats_str, example_label)
         }
     };
 
@@ -211,7 +222,7 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
             .on_render(Msg::TargetViewportHeight)
             .build()
     )
-    .title(format!("Target: {} ({}%)", target_entity_name, target_completion))
+    .title(format!("Target: {} ({}){}", target_entity_name, target_stats.format_compact(), example_label))
     .build();
 
     // Count filtered results
@@ -1254,6 +1265,176 @@ fn filter_tree_items_by_search(
             }
         }
     }).collect()
+}
+
+/// Detailed completion statistics for a single side (source or target)
+#[derive(Debug, Clone)]
+struct CompletionStats {
+    total_count: usize,
+    mapped_count: usize,
+    ignored_count: usize,
+    unhandled_count: usize,
+    mapped_percentage: usize,
+    ignored_percentage: usize,
+    unhandled_percentage: usize,
+}
+
+impl CompletionStats {
+    fn new(total: usize, mapped: usize, ignored: usize) -> Self {
+        let unhandled = total.saturating_sub(mapped + ignored);
+        let mapped_pct = if total > 0 {
+            (mapped as f64 / total as f64 * 100.0) as usize
+        } else {
+            0
+        };
+        let ignored_pct = if total > 0 {
+            (ignored as f64 / total as f64 * 100.0) as usize
+        } else {
+            0
+        };
+        let unhandled_pct = if total > 0 {
+            (unhandled as f64 / total as f64 * 100.0) as usize
+        } else {
+            0
+        };
+
+        Self {
+            total_count: total,
+            mapped_count: mapped,
+            ignored_count: ignored,
+            unhandled_count: unhandled,
+            mapped_percentage: mapped_pct,
+            ignored_percentage: ignored_pct,
+            unhandled_percentage: unhandled_pct,
+        }
+    }
+
+    /// Format stats as a compact string for display in panel title
+    /// Format: "75% | M:60% (45) I:15% (11) U:25% (19)"
+    /// Where: total handled% | Mapped:% (count) Ignored:% (count) Unhandled:% (count)
+    fn format_compact(&self) -> String {
+        format!(
+            "{}% | M:{}% ({}) I:{}% ({}) U:{}% ({})",
+            self.mapped_percentage + self.ignored_percentage, // Total handled percentage
+            self.mapped_percentage, self.mapped_count,
+            self.ignored_percentage, self.ignored_count,
+            self.unhandled_percentage, self.unhandled_count
+        )
+    }
+}
+
+/// Calculate detailed completion statistics for source and target sides
+/// Returns (source_stats, target_stats)
+fn calculate_detailed_completion_stats(state: &State, active_tab: ActiveTab) -> (CompletionStats, CompletionStats) {
+    match active_tab {
+        ActiveTab::Fields => {
+            // Get total counts from metadata
+            let source_total = if let Resource::Success(ref metadata) = state.source_metadata {
+                metadata.fields.len()
+            } else {
+                0
+            };
+            let target_total = if let Resource::Success(ref metadata) = state.target_metadata {
+                metadata.fields.len()
+            } else {
+                0
+            };
+
+            // Count source mapped fields
+            let source_mapped = state.field_matches.len();
+
+            // Count source ignored fields
+            let source_ignored = state.ignored_items.iter()
+                .filter(|id| id.starts_with("fields:source:"))
+                .count();
+
+            // Count target mapped fields
+            let target_mapped = state.field_matches.values()
+                .map(|m| &m.target_field)
+                .collect::<std::collections::HashSet<_>>()
+                .len();
+
+            // Count target ignored fields
+            let target_ignored = state.ignored_items.iter()
+                .filter(|id| id.starts_with("fields:target:"))
+                .count();
+
+            (
+                CompletionStats::new(source_total, source_mapped, source_ignored),
+                CompletionStats::new(target_total, target_mapped, target_ignored),
+            )
+        }
+        ActiveTab::Relationships => {
+            // Get total counts from metadata
+            let source_total = if let Resource::Success(ref metadata) = state.source_metadata {
+                metadata.relationships.len()
+            } else {
+                0
+            };
+            let target_total = if let Resource::Success(ref metadata) = state.target_metadata {
+                metadata.relationships.len()
+            } else {
+                0
+            };
+
+            // Count source mapped relationships
+            let source_mapped = state.relationship_matches.len();
+
+            // Count source ignored relationships
+            let source_ignored = state.ignored_items.iter()
+                .filter(|id| id.starts_with("relationships:source:"))
+                .count();
+
+            // Count target mapped relationships
+            let target_mapped = state.relationship_matches.values()
+                .map(|m| &m.target_field)
+                .collect::<std::collections::HashSet<_>>()
+                .len();
+
+            // Count target ignored relationships
+            let target_ignored = state.ignored_items.iter()
+                .filter(|id| id.starts_with("relationships:target:"))
+                .count();
+
+            (
+                CompletionStats::new(source_total, source_mapped, source_ignored),
+                CompletionStats::new(target_total, target_mapped, target_ignored),
+            )
+        }
+        ActiveTab::Entities => {
+            // Get total counts from entity lists
+            let source_total = state.source_entities.len();
+            let target_total = state.target_entities.len();
+
+            // Count source mapped entities
+            let source_mapped = state.entity_matches.len();
+
+            // Count source ignored entities
+            let source_ignored = state.ignored_items.iter()
+                .filter(|id| id.starts_with("entities:source:"))
+                .count();
+
+            // Count target mapped entities
+            let target_mapped = state.entity_matches.values()
+                .map(|m| &m.target_field)
+                .collect::<std::collections::HashSet<_>>()
+                .len();
+
+            // Count target ignored entities
+            let target_ignored = state.ignored_items.iter()
+                .filter(|id| id.starts_with("entities:target:"))
+                .count();
+
+            (
+                CompletionStats::new(source_total, source_mapped, source_ignored),
+                CompletionStats::new(target_total, target_mapped, target_ignored),
+            )
+        }
+        ActiveTab::Views | ActiveTab::Forms => {
+            // Views and Forms don't have mappings/matches
+            (CompletionStats::new(0, 0, 0), CompletionStats::new(0, 0, 0))
+        }
+    }
 }
 
 /// Calculate mapping completion percentages for source and target sides
