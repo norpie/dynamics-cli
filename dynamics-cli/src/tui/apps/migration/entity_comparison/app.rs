@@ -425,6 +425,56 @@ impl App for EntityComparisonApp {
             Subscription::keyboard(config.get_keybind("entity_comparison.export"), "Export to Excel", Msg::ExportToExcel),
         ];
 
+        // Multi-selection shortcuts (active when no modal is open and search is not focused)
+        // Only apply to source tree for now
+        let any_modal_open = state.show_back_confirmation
+            || state.show_examples_modal
+            || state.show_prefix_mappings_modal
+            || state.show_manual_mappings_modal
+            || state.show_import_modal
+            || state.show_import_results_modal
+            || state.show_ignore_modal;
+
+        if !any_modal_open && !state.search_is_focused {
+            use crate::tui::widgets::TreeEvent;
+            use crossterm::event::KeyCode;
+
+            log::debug!("✓ Registering multi-select shortcuts (search_is_focused={}, search_value='{}')",
+                       state.search_is_focused, state.search_input.value());
+
+            // Multi-select shortcuts for source side only
+            // Space: Toggle multi-select on current node
+            subs.push(Subscription::keyboard(
+                KeyCode::Char(' '),
+                "Toggle multi-select",
+                Msg::SourceTreeEvent(TreeEvent::ToggleMultiSelect)
+            ));
+
+            // Ctrl+D: Clear multi-selection
+            subs.push(Subscription::ctrl_key(
+                KeyCode::Char('d'),
+                "Clear selection",
+                Msg::SourceTreeEvent(TreeEvent::ClearMultiSelection)
+            ));
+
+            // Shift+Up: Extend selection up
+            subs.push(Subscription::shift_key(
+                KeyCode::Up,
+                "Extend selection up",
+                Msg::SourceTreeEvent(TreeEvent::ExtendSelectionUp)
+            ));
+
+            // Shift+Down: Extend selection down
+            subs.push(Subscription::shift_key(
+                KeyCode::Down,
+                "Extend selection down",
+                Msg::SourceTreeEvent(TreeEvent::ExtendSelectionDown)
+            ));
+        } else {
+            log::debug!("✗ Skipping multi-select shortcuts (any_modal_open={}, search_is_focused={}, search_value='{}')",
+                       any_modal_open, state.search_is_focused, state.search_input.value());
+        }
+
         // Search - add global `/` key unless a modal is open
         let any_modal_open = state.show_back_confirmation
             || state.show_examples_modal

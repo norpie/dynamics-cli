@@ -69,6 +69,7 @@ pub enum Msg {
     // Search messages
     ToggleSearch,              // Show/focus search (triggered by `/`)
     SearchInputEvent(crate::tui::widgets::TextInputEvent),
+    SearchInputBlur,           // Search input lost focus
     ClearSearch,               // Clear search and hide box (Esc when focused)
     SearchSelectFirstMatch,    // Enter in search box
 

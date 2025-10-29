@@ -50,7 +50,8 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
 
     // Apply search filter if there's a search query
     let search_query = state.search_input.value();
-    if !search_query.is_empty() {
+    let search_active = !search_query.is_empty();
+    if search_active {
         source_items = filter_tree_items_by_search(source_items, &search_query);
     }
 
@@ -135,7 +136,23 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
         ActiveTab::Entities => (&mut state.source_entities_tree, &mut state.target_entities_tree),
     };
 
+    // Invalidate tree cache when search or hide_matched filtering is active
+    // This ensures visible_order reflects the actual filtered items
+    if search_active || hide_matched {
+        source_tree_state.invalidate_cache();
+        target_tree_state.invalidate_cache();
+    }
+
     // Source panel with tree - renderer will call on_render with actual area.height
+    let source_panel_title = {
+        let multi_select_count = source_tree_state.total_selection_count();
+        if multi_select_count > 1 {
+            format!("Source: {} ({}%) - {} selected", source_entity_name, source_completion, multi_select_count)
+        } else {
+            format!("Source: {} ({}%)", source_entity_name, source_completion)
+        }
+    };
+
     let source_panel = Element::panel(
         Element::tree("source_tree", &source_items, source_tree_state, theme)
             .on_event(Msg::SourceTreeEvent)
@@ -143,7 +160,7 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
             .on_render(Msg::SourceViewportHeight)
             .build()
     )
-    .title(format!("Source: {} ({}%)", source_entity_name, source_completion))
+    .title(source_panel_title)
     .build();
 
     // Target panel with tree - renderer will call on_render with actual area.height
@@ -173,6 +190,7 @@ pub fn render_main_layout(state: &mut State) -> Element<Msg> {
         )
         .placeholder("Search fields... (/ to focus, Esc to clear)")
         .on_event(Msg::SearchInputEvent)
+        .on_blur(Msg::SearchInputBlur)
         .build();
 
         // Build search panel title with result counts

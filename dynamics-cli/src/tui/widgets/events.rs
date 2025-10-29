@@ -36,6 +36,16 @@ pub enum TreeEvent {
     Navigate(KeyCode),
     /// Toggle node expansion (Enter key)
     Toggle,
+    /// Toggle multi-selection on current node (Space key)
+    ToggleMultiSelect,
+    /// Select all visible nodes (Ctrl+A)
+    SelectAll,
+    /// Clear all multi-selections (Ctrl+D)
+    ClearMultiSelection,
+    /// Extend selection up (Shift+Up)
+    ExtendSelectionUp,
+    /// Extend selection down (Shift+Down)
+    ExtendSelectionDown,
 }
 
 /// Event type for Select widget

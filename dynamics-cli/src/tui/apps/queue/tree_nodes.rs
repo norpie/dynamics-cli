@@ -67,6 +67,7 @@ impl TreeItem for QueueTreeNode {
         &self,
         _depth: usize,
         _is_selected: bool,
+        _is_multi_selected: bool,
         _is_expanded: bool,
     ) -> Element<Self::Msg> {
         // Not used for table trees

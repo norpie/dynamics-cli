@@ -5,39 +5,67 @@ use super::super::app::State;
 use super::super::matching::recompute_all_matches;
 
 pub fn handle_create_manual_mapping(state: &mut State) -> Command<Msg> {
-    // Get selected items from both source and target trees
-    let source_id = state.source_tree_for_tab().selected().map(|s| s.to_string());
+    // Get all selected items from source tree (multi-selection support)
+    let source_tree = state.source_tree_for_tab();
+    let mut source_ids = source_tree.all_selected();
+
+    // If no explicit selection, use navigated item as implicit single selection
+    if source_ids.is_empty() {
+        if let Some(navigated) = source_tree.selected() {
+            source_ids.push(navigated.to_string());
+        }
+    }
+
+    // Get target selection (single selection only)
     let target_id = state.target_tree_for_tab().selected().map(|s| s.to_string());
 
-    if let (Some(source_id), Some(target_id)) = (source_id, target_id) {
-        // Handle different ID formats based on tab type
-        let (source_key, target_key) = match state.active_tab {
-            ActiveTab::Fields => {
-                // Fields tab: IDs are simple field names
-                (source_id.clone(), target_id.clone())
-            }
-            ActiveTab::Relationships => {
-                // Relationships tab: IDs have "rel_" prefix
-                let source_name = source_id.strip_prefix("rel_").unwrap_or(&source_id).to_string();
-                let target_name = target_id.strip_prefix("rel_").unwrap_or(&target_id).to_string();
-                (source_name, target_name)
-            }
-            ActiveTab::Entities => {
-                // Entities tab: IDs have "entity_" prefix
-                let source_name = source_id.strip_prefix("entity_").unwrap_or(&source_id).to_string();
-                let target_name = target_id.strip_prefix("entity_").unwrap_or(&target_id).to_string();
-                (source_name, target_name)
-            }
-            ActiveTab::Forms | ActiveTab::Views => {
-                // Forms/Views tabs: IDs are paths, support both fields and containers
-                (source_id.clone(), target_id.clone())
-            }
-        };
+    if !source_ids.is_empty() && target_id.is_some() {
+        let target_id = target_id.unwrap();
+        let mapping_count = source_ids.len();
 
-        // Add to state mappings
-        state.field_mappings.insert(source_key.clone(), target_key.clone());
+        // Process each source ID
+        for source_id in source_ids {
+            // Handle different ID formats based on tab type
+            let (source_key, target_key) = match state.active_tab {
+                ActiveTab::Fields => {
+                    // Fields tab: IDs are simple field names
+                    (source_id.clone(), target_id.clone())
+                }
+                ActiveTab::Relationships => {
+                    // Relationships tab: IDs have "rel_" prefix
+                    let source_name = source_id.strip_prefix("rel_").unwrap_or(&source_id).to_string();
+                    let target_name = target_id.strip_prefix("rel_").unwrap_or(&target_id).to_string();
+                    (source_name, target_name)
+                }
+                ActiveTab::Entities => {
+                    // Entities tab: IDs have "entity_" prefix
+                    let source_name = source_id.strip_prefix("entity_").unwrap_or(&source_id).to_string();
+                    let target_name = target_id.strip_prefix("entity_").unwrap_or(&target_id).to_string();
+                    (source_name, target_name)
+                }
+                ActiveTab::Forms | ActiveTab::Views => {
+                    // Forms/Views tabs: IDs are paths, support both fields and containers
+                    (source_id.clone(), target_id.clone())
+                }
+            };
 
-        // Recompute matches
+            // Add to state mappings
+            state.field_mappings.insert(source_key.clone(), target_key.clone());
+
+            // Save to database
+            let source_entity = state.source_entity.clone();
+            let target_entity = state.target_entity.clone();
+            let source_key_clone = source_key.clone();
+            let target_key_clone = target_key.clone();
+            tokio::spawn(async move {
+                let config = crate::global_config();
+                if let Err(e) = config.set_field_mapping(&source_entity, &target_entity, &source_key_clone, &target_key_clone).await {
+                    log::error!("Failed to save field mapping: {}", e);
+                }
+            });
+        }
+
+        // Recompute matches once after all mappings are added
         if let (Resource::Success(source), Resource::Success(target)) =
             (&state.source_metadata, &state.target_metadata)
         {
@@ -59,15 +87,12 @@ pub fn handle_create_manual_mapping(state: &mut State) -> Command<Msg> {
             state.target_entities = target_entities;
         }
 
-        // Save to database
-        let source_entity = state.source_entity.clone();
-        let target_entity = state.target_entity.clone();
-        tokio::spawn(async move {
-            let config = crate::global_config();
-            if let Err(e) = config.set_field_mapping(&source_entity, &target_entity, &source_key, &target_key).await {
-                log::error!("Failed to save field mapping: {}", e);
-            }
-        });
+        // Log success message
+        if mapping_count > 1 {
+            log::info!("Created {} mappings to target field", mapping_count);
+        } else {
+            log::info!("Created mapping");
+        }
     }
     Command::None
 }

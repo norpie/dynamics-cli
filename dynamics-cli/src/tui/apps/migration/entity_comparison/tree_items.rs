@@ -56,6 +56,7 @@ impl TreeItem for ComparisonTreeItem {
         &self,
         depth: usize,
         is_selected: bool,
+        is_multi_selected: bool,
         is_expanded: bool,
     ) -> Element<Self::Msg> {
         let theme = &crate::global_runtime_config().theme;
@@ -67,6 +68,11 @@ impl TreeItem for ComparisonTreeItem {
                 // Indent
                 if depth > 0 {
                     spans.push(Span::styled(indent, Style::default()));
+                }
+
+                // Multi-select checkmark indicator
+                if is_multi_selected {
+                    spans.push(Span::styled("✓ ", Style::default().fg(theme.accent_primary)));
                 }
 
                 // Use stored container_match_type for color (keep color even when selected)
@@ -106,17 +112,20 @@ impl TreeItem for ComparisonTreeItem {
 
                 let mut builder = Element::styled_text(Line::from(spans));
 
-                if is_selected {
+                // Background: multi-selected items get elevated color, primary selection gets surface color
+                if is_multi_selected {
+                    builder = builder.background(Style::default().bg(theme.bg_elevated));
+                } else if is_selected {
                     builder = builder.background(Style::default().bg(theme.bg_surface));
                 }
 
                 builder.build()
             }
-            Self::Field(node) => node.to_element(depth, is_selected, is_expanded),
-            Self::Relationship(node) => node.to_element(depth, is_selected, is_expanded),
-            Self::View(node) => node.to_element(depth, is_selected, is_expanded),
-            Self::Form(node) => node.to_element(depth, is_selected, is_expanded),
-            Self::Entity(node) => node.to_element(depth, is_selected, is_expanded),
+            Self::Field(node) => node.to_element(depth, is_selected, is_multi_selected, is_expanded),
+            Self::Relationship(node) => node.to_element(depth, is_selected, is_multi_selected, is_expanded),
+            Self::View(node) => node.to_element(depth, is_selected, is_multi_selected, is_expanded),
+            Self::Form(node) => node.to_element(depth, is_selected, is_multi_selected, is_expanded),
+            Self::Entity(node) => node.to_element(depth, is_selected, is_multi_selected, is_expanded),
         }
     }
 }
@@ -177,6 +186,7 @@ impl TreeItem for FieldNode {
         &self,
         depth: usize,
         is_selected: bool,
+        is_multi_selected: bool,
         _is_expanded: bool,
     ) -> Element<Self::Msg> {
         let theme = &crate::global_runtime_config().theme;
@@ -186,6 +196,11 @@ impl TreeItem for FieldNode {
         // Indent
         if depth > 0 {
             spans.push(Span::styled(indent, Style::default()));
+        }
+
+        // Multi-select checkmark indicator
+        if is_multi_selected {
+            spans.push(Span::styled("✓ ", Style::default().fg(theme.accent_primary)));
         }
 
         // Field name - colored by match state (keep color even when selected)
@@ -260,7 +275,10 @@ impl TreeItem for FieldNode {
 
         let mut builder = Element::styled_text(Line::from(spans));
 
-        if is_selected {
+        // Background: multi-selected items get elevated color, primary selection gets surface color
+        if is_multi_selected {
+            builder = builder.background(Style::default().bg(theme.bg_elevated));
+        } else if is_selected {
             builder = builder.background(Style::default().bg(theme.bg_surface));
         }
 
@@ -295,6 +313,7 @@ impl TreeItem for RelationshipNode {
         &self,
         depth: usize,
         is_selected: bool,
+        is_multi_selected: bool,
         _is_expanded: bool,
     ) -> Element<Self::Msg> {
         let theme = &crate::global_runtime_config().theme;
@@ -304,6 +323,11 @@ impl TreeItem for RelationshipNode {
         // Indent
         if depth > 0 {
             spans.push(Span::styled(indent, Style::default()));
+        }
+
+        // Multi-select checkmark indicator
+        if is_multi_selected {
+            spans.push(Span::styled("✓ ", Style::default().fg(theme.accent_primary)));
         }
 
         // Relationship name - colored by match state
@@ -366,7 +390,10 @@ impl TreeItem for RelationshipNode {
 
         let mut builder = Element::styled_text(Line::from(spans));
 
-        if is_selected {
+        // Background: multi-selected items get secondary color, primary selection gets surface color
+        if is_multi_selected {
+            builder = builder.background(Style::default().bg(theme.bg_elevated));
+        } else if is_selected {
             builder = builder.background(Style::default().bg(theme.bg_surface));
         }
 
@@ -400,24 +427,37 @@ impl TreeItem for ViewNode {
         &self,
         depth: usize,
         is_selected: bool,
+        is_multi_selected: bool,
         _is_expanded: bool,
     ) -> Element<Self::Msg> {
         let theme = &crate::global_runtime_config().theme;
         // TODO: Implement view rendering
 
         let indent = "  ".repeat(depth);
-        let text = format!("{}{}", indent, self.metadata.name);
+        let mut text = String::new();
+
+        if depth > 0 {
+            text.push_str(&indent);
+        }
+
+        if is_multi_selected {
+            text.push_str("✓ ");
+        }
+
+        text.push_str(&self.metadata.name);
 
         let mut builder = Element::styled_text(Line::from(Span::styled(
             text,
-            if is_selected {
+            if is_selected || is_multi_selected {
                 Style::default().fg(theme.accent_primary)
             } else {
                 Style::default().fg(theme.text_primary)
             },
         )));
 
-        if is_selected {
+        if is_multi_selected {
+            builder = builder.background(Style::default().bg(theme.bg_elevated));
+        } else if is_selected {
             builder = builder.background(Style::default().bg(theme.bg_surface));
         }
 
@@ -451,24 +491,37 @@ impl TreeItem for FormNode {
         &self,
         depth: usize,
         is_selected: bool,
+        is_multi_selected: bool,
         _is_expanded: bool,
     ) -> Element<Self::Msg> {
         let theme = &crate::global_runtime_config().theme;
         // TODO: Implement form rendering
 
         let indent = "  ".repeat(depth);
-        let text = format!("{}{}", indent, self.metadata.name);
+        let mut text = String::new();
+
+        if depth > 0 {
+            text.push_str(&indent);
+        }
+
+        if is_multi_selected {
+            text.push_str("✓ ");
+        }
+
+        text.push_str(&self.metadata.name);
 
         let mut builder = Element::styled_text(Line::from(Span::styled(
             text,
-            if is_selected {
+            if is_selected || is_multi_selected {
                 Style::default().fg(theme.accent_primary)
             } else {
                 Style::default().fg(theme.text_primary)
             },
         )));
 
-        if is_selected {
+        if is_multi_selected {
+            builder = builder.background(Style::default().bg(theme.bg_elevated));
+        } else if is_selected {
             builder = builder.background(Style::default().bg(theme.bg_surface));
         }
 
@@ -504,6 +557,7 @@ impl TreeItem for EntityNode {
         &self,
         depth: usize,
         is_selected: bool,
+        is_multi_selected: bool,
         _is_expanded: bool,
     ) -> Element<Self::Msg> {
         let theme = &crate::global_runtime_config().theme;
@@ -513,6 +567,11 @@ impl TreeItem for EntityNode {
         // Indent
         if depth > 0 {
             spans.push(Span::styled(indent, Style::default()));
+        }
+
+        // Multi-select checkmark indicator
+        if is_multi_selected {
+            spans.push(Span::styled("✓ ", Style::default().fg(theme.accent_primary)));
         }
 
         // Entity name - colored by match state (keep color even when selected)
@@ -564,7 +623,10 @@ impl TreeItem for EntityNode {
 
         let mut builder = Element::styled_text(Line::from(spans));
 
-        if is_selected {
+        // Background: multi-selected items get secondary color, primary selection gets surface color
+        if is_multi_selected {
+            builder = builder.background(Style::default().bg(theme.bg_elevated));
+        } else if is_selected {
             builder = builder.background(Style::default().bg(theme.bg_surface));
         }
 

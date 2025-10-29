@@ -18,12 +18,14 @@ pub trait TreeItem: Clone {
 
     /// Render this node as an Element
     /// depth: indentation level (0 = root)
-    /// is_selected: whether this node is currently selected
+    /// is_selected: whether this node is currently selected (primary/anchor)
+    /// is_multi_selected: whether this node is in the multi-selection set
     /// is_expanded: whether this node is currently expanded
     fn to_element(
         &self,
         depth: usize,
         is_selected: bool,
+        is_multi_selected: bool,
         is_expanded: bool,
     ) -> Element<Self::Msg>;
 }
@@ -67,10 +69,14 @@ pub trait TableTreeItem: TreeItem {
 pub struct TreeState {
     // Core state
     expanded: HashSet<String>,      // IDs of expanded nodes
-    selected: Option<String>,        // Selected node ID
+    selected: Option<String>,        // Selected node ID (primary/anchor)
     scroll_offset: usize,
     scroll_off: usize,               // Scrolloff distance (vim-like)
     viewport_height: Option<usize>,  // Last known viewport height from renderer
+
+    // Multi-selection support
+    multi_selected: HashSet<String>, // Additional selected node IDs (for N:1 mappings)
+    anchor_selection: Option<String>, // Anchor for range selection (Shift+Arrow)
 
     // Cached metadata for O(1) lookups (Approach 4 - Smart State)
     node_parents: HashMap<String, String>,   // child_id → parent_id
@@ -94,6 +100,8 @@ impl TreeState {
             scroll_offset: 0,
             scroll_off: 5,
             viewport_height: None,
+            multi_selected: HashSet::new(),
+            anchor_selection: None,
             node_parents: HashMap::new(),
             node_depths: HashMap::new(),
             visible_order: vec![],
@@ -248,6 +256,155 @@ impl TreeState {
         }
     }
 
+    // === Multi-selection methods ===
+
+    /// Toggle multi-selection for a specific node (Space key)
+    /// If the node is currently multi-selected, remove it. Otherwise, add it.
+    /// This does NOT affect the primary selection (anchor).
+    pub fn toggle_multi_select(&mut self, node_id: String) {
+        if self.multi_selected.contains(&node_id) {
+            self.multi_selected.remove(&node_id);
+        } else {
+            self.multi_selected.insert(node_id.clone());
+            // Set anchor for range selection
+            self.anchor_selection = Some(node_id);
+        }
+    }
+
+    /// Toggle multi-selection for the currently selected (navigated) node
+    pub fn toggle_multi_select_current(&mut self) {
+        if let Some(current) = self.selected.clone() {
+            log::debug!("Toggling multi-select for node: {}", current);
+            self.toggle_multi_select(current);
+            log::debug!("Multi-selected nodes: {:?}", self.multi_selected);
+        } else {
+            log::warn!("No node selected to toggle multi-select");
+        }
+    }
+
+    /// Select range from anchor to end_node_id (Shift+Arrow)
+    /// Adds all nodes between anchor and end to multi_selected
+    pub fn select_range(&mut self, end_node_id: String) {
+        let anchor = self.anchor_selection.clone()
+            .or_else(|| self.selected.clone());
+
+        if let Some(anchor) = anchor {
+            // Find indices in visible order
+            let start_idx = self.visible_order.iter().position(|id| id == &anchor);
+            let end_idx = self.visible_order.iter().position(|id| id == &end_node_id);
+
+            if let (Some(start), Some(end)) = (start_idx, end_idx) {
+                let (from, to) = if start <= end {
+                    (start, end)
+                } else {
+                    (end, start)
+                };
+
+                // Add all nodes in range to multi_selected
+                for idx in from..=to {
+                    self.multi_selected.insert(self.visible_order[idx].clone());
+                }
+            }
+        }
+
+        // Update anchor to end position
+        self.anchor_selection = Some(end_node_id);
+    }
+
+    /// Extend selection up (Shift+Up) - select range to previous node
+    pub fn extend_selection_up(&mut self) {
+        if let Some(current) = &self.selected.clone() {
+            if let Some(pos) = self.visible_order.iter().position(|id| id == current) {
+                if pos > 0 {
+                    let target = self.visible_order[pos - 1].clone();
+                    self.select_range(target.clone());
+                    self.selected = Some(target); // Move cursor
+
+                    // Ensure the new selection is visible
+                    if let Some(height) = self.viewport_height {
+                        self.update_scroll(height);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Extend selection down (Shift+Down) - select range to next node
+    pub fn extend_selection_down(&mut self) {
+        if let Some(current) = &self.selected.clone() {
+            if let Some(pos) = self.visible_order.iter().position(|id| id == current) {
+                if pos + 1 < self.visible_order.len() {
+                    let target = self.visible_order[pos + 1].clone();
+                    self.select_range(target.clone());
+                    self.selected = Some(target); // Move cursor
+
+                    // Ensure the new selection is visible
+                    if let Some(height) = self.viewport_height {
+                        self.update_scroll(height);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Clear all multi-selections (Ctrl+D or Esc)
+    pub fn clear_multi_selection(&mut self) {
+        self.multi_selected.clear();
+        self.anchor_selection = None;
+    }
+
+    /// Select all visible nodes (Ctrl+A)
+    pub fn select_all_visible(&mut self) {
+        self.multi_selected = self.visible_order.iter().cloned().collect();
+        if let Some(first) = self.visible_order.first() {
+            self.anchor_selection = Some(first.clone());
+        }
+    }
+
+    /// Get all selected node IDs (primary selection + multi-selected)
+    /// Returns a Vec with all unique selected nodes
+    pub fn all_selected(&self) -> Vec<String> {
+        let mut result = Vec::new();
+
+        // Add primary selection first (if not in multi_selected)
+        if let Some(primary) = &self.selected {
+            if !self.multi_selected.contains(primary) {
+                result.push(primary.clone());
+            }
+        }
+
+        // Add all multi-selected nodes
+        result.extend(self.multi_selected.iter().cloned());
+
+        result
+    }
+
+    /// Check if a node is in the multi-selection set
+    pub fn is_multi_selected(&self, node_id: &str) -> bool {
+        self.multi_selected.contains(node_id)
+    }
+
+    /// Get count of multi-selected items (excludes primary selection)
+    pub fn multi_select_count(&self) -> usize {
+        self.multi_selected.len()
+    }
+
+    /// Get total selection count (primary + multi-selected, deduplicated)
+    pub fn total_selection_count(&self) -> usize {
+        let mut count = self.multi_selected.len();
+
+        // Add 1 if primary selection exists and is not in multi_selected
+        if let Some(primary) = &self.selected {
+            if !self.multi_selected.contains(primary) {
+                count += 1;
+            }
+        }
+
+        count
+    }
+
+    // === End multi-selection methods ===
+
     /// Handle keyboard navigation (returns true if handled)
     pub fn handle_key(&mut self, key: KeyCode) -> bool {
         match key {
@@ -318,6 +475,8 @@ impl TreeState {
     pub fn handle_event(&mut self, event: crate::tui::widgets::events::TreeEvent) -> Option<String> {
         use crate::tui::widgets::events::TreeEvent;
 
+        log::debug!("TreeState::handle_event: {:?}", event);
+
         match event {
             TreeEvent::Navigate(key) => {
                 self.handle_key(key);
@@ -328,6 +487,32 @@ impl TreeState {
                 if let Some(id) = self.selected.clone() {
                     self.toggle(&id);
                 }
+                None
+            }
+            TreeEvent::ToggleMultiSelect => {
+                log::debug!("Handling ToggleMultiSelect event");
+                self.toggle_multi_select_current();
+                None
+            }
+            TreeEvent::SelectAll => {
+                log::debug!("Handling SelectAll event");
+                self.select_all_visible();
+                log::debug!("Selected {} nodes", self.multi_selected.len());
+                None
+            }
+            TreeEvent::ClearMultiSelection => {
+                log::debug!("Handling ClearMultiSelection event");
+                self.clear_multi_selection();
+                None
+            }
+            TreeEvent::ExtendSelectionUp => {
+                log::debug!("Handling ExtendSelectionUp event");
+                self.extend_selection_up();
+                None
+            }
+            TreeEvent::ExtendSelectionDown => {
+                log::debug!("Handling ExtendSelectionDown event");
+                self.extend_selection_down();
                 None
             }
         }
@@ -434,10 +619,11 @@ fn flatten_recursive<T: TreeItem>(
     let id = item.id();
     let is_expanded = state.is_expanded(&id);
     let is_selected = state.selected() == Some(&id);
+    let is_multi_selected = state.is_multi_selected(&id);
     let has_children = item.has_children();
 
     // Render node (delegates to TreeItem::to_element)
-    let element = item.to_element(depth, is_selected, is_expanded);
+    let element = item.to_element(depth, is_selected, is_multi_selected, is_expanded);
 
     result.push(FlatNode {
         id: id.clone(),

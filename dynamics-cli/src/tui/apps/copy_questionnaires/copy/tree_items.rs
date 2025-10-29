@@ -146,6 +146,7 @@ impl TreeItem for SnapshotTreeItem {
         &self,
         depth: usize,
         is_selected: bool,
+        _is_multi_selected: bool,
         is_expanded: bool,
     ) -> Element<Self::Msg> {
         use ratatui::{style::Style, text::{Line, Span}, prelude::Stylize};
