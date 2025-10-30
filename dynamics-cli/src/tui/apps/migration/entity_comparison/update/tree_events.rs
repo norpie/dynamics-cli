@@ -6,7 +6,7 @@ use super::super::tree_sync::{update_mirrored_selection, update_mirrored_navigat
 
 pub fn handle_source_tree_event(state: &mut State, event: TreeEvent) -> Command<Msg> {
     // Handle source tree navigation/interaction
-    // Note: focused_side is now updated via on_focus callback
+    // Note: focused_side is updated ONLY via on_focus callback (see view.rs tree builder)
     let tree_state = match state.active_tab {
         ActiveTab::Fields => &mut state.source_fields_tree,
         ActiveTab::Relationships => &mut state.source_relationships_tree,
@@ -55,7 +55,7 @@ pub fn handle_source_tree_event(state: &mut State, event: TreeEvent) -> Command<
 
 pub fn handle_target_tree_event(state: &mut State, event: TreeEvent) -> Command<Msg> {
     // Handle target tree navigation/interaction
-    // Note: focused_side is now updated via on_focus callback
+    // Note: focused_side is updated ONLY via on_focus callback (see view.rs tree builder)
     let tree_state = match state.active_tab {
         ActiveTab::Fields => &mut state.target_fields_tree,
         ActiveTab::Relationships => &mut state.target_relationships_tree,
@@ -94,8 +94,7 @@ pub fn handle_target_viewport_height(state: &mut State, height: usize) -> Comman
 }
 
 pub fn handle_source_node_clicked(state: &mut State, node_id: String) -> Command<Msg> {
-    // Update focused side
-    state.focused_side = super::super::Side::Source;
+    // Note: focused_side is updated automatically via on_focus callback when tree gains focus
 
     // Get the tree state for the active tab
     let tree_state = match state.active_tab {
@@ -119,8 +118,7 @@ pub fn handle_source_node_clicked(state: &mut State, node_id: String) -> Command
 }
 
 pub fn handle_target_node_clicked(state: &mut State, node_id: String) -> Command<Msg> {
-    // Update focused side
-    state.focused_side = super::super::Side::Target;
+    // Note: focused_side is updated automatically via on_focus callback when tree gains focus
 
     // Get the tree state for the active tab
     let tree_state = match state.active_tab {
